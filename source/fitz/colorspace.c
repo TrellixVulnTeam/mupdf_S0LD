@@ -155,39 +155,46 @@ void fz_cmm_fin_profile(fz_context *ctx, fz_iccprofile *profile)
 
 #define SLOWCMYK
 
+#ifdef NO_ICC
+
 const unsigned char *
 fz_lookup_icc(fz_context *ctx, const char *name, size_t *size)
 {
-#ifndef NO_ICC
+	return *size = 0, NULL;
+}
+
+#else
+
+#include "icc/gray.icc.h"
+#include "icc/rgb.icc.h"
+#include "icc/cmyk.icc.h"
+#include "icc/lab.icc.h"
+
+const unsigned char *
+fz_lookup_icc(fz_context *ctx, const char *name, size_t *size)
+{
 	if (fz_get_cmm_engine(ctx) == NULL)
 		return *size = 0, NULL;
 	if (!strcmp(name, FZ_ICC_PROFILE_GRAY)) {
-		extern const int fz_resources_icc_gray_icc_size;
-		extern const unsigned char fz_resources_icc_gray_icc[];
-		*size = fz_resources_icc_gray_icc_size;
-		return fz_resources_icc_gray_icc;
+		*size = resources_icc_gray_icc_len;
+		return resources_icc_gray_icc;
 	}
 	if (!strcmp(name, FZ_ICC_PROFILE_RGB) || !strcmp(name, FZ_ICC_PROFILE_BGR)) {
-		extern const int fz_resources_icc_rgb_icc_size;
-		extern const unsigned char fz_resources_icc_rgb_icc[];
-		*size = fz_resources_icc_rgb_icc_size;
-		return fz_resources_icc_rgb_icc;
+		*size = resources_icc_rgb_icc_len;
+		return resources_icc_rgb_icc;
 	}
 	if (!strcmp(name, FZ_ICC_PROFILE_CMYK)) {
-		extern const int fz_resources_icc_cmyk_icc_size;
-		extern const unsigned char fz_resources_icc_cmyk_icc[];
-		*size = fz_resources_icc_cmyk_icc_size;
-		return fz_resources_icc_cmyk_icc;
+		*size = resources_icc_cmyk_icc_len;
+		return resources_icc_cmyk_icc;
 	}
 	if (!strcmp(name, FZ_ICC_PROFILE_LAB)) {
-		extern const int fz_resources_icc_lab_icc_size;
-		extern const unsigned char fz_resources_icc_lab_icc[];
-		*size = fz_resources_icc_lab_icc_size;
-		return fz_resources_icc_lab_icc;
+		*size = resources_icc_lab_icc_len;
+		return resources_icc_lab_icc;
 	}
-#endif
 	return *size = 0, NULL;
 }
+
+#endif
 
 /* Same order as needed by lcms */
 static const char *fz_intent_names[] =
@@ -489,12 +496,53 @@ fz_icc_from_cal(fz_context *ctx, const fz_colorspace *cs)
 	return profile;
 }
 
+static fz_iccprofile *
+fz_get_icc_from_cal(fz_context *ctx, const fz_colorspace *cs)
+{
+	fz_cal_colorspace *cal;
+	fz_iccprofile *icc = NULL;
+
+	cal = cs->data;
+	icc = cal->profile;
+	/* Check if we have any work to do. */
+	if (icc == NULL)
+		icc = fz_icc_from_cal(ctx, cs);
+	if (icc->cmm_handle == NULL)
+	{
+		fz_cmm_init_profile(ctx, icc);
+
+		/* The CMM failed to make a profile. Use the default. */
+		if (icc->cmm_handle == NULL)
+		{
+			switch (cs->n)
+			{
+			case 1:
+				icc = fz_device_gray(ctx)->data;
+				break;
+			case 3:
+				icc = fz_device_rgb(ctx)->data;
+				break;
+			case 4:
+				icc = fz_device_cmyk(ctx)->data;
+				break;
+			default:
+				fz_throw(ctx, FZ_ERROR_GENERIC, "Poorly formed Cal color space");
+			}
+			/* To avoid repeated failures building the pdf-cal color space,
+			* assign the default profile. */
+			fz_cmm_fin_profile(ctx, icc);
+			cal->profile = icc;
+		}
+	}
+	return icc;
+}
+
 static fz_icclink *
 fz_get_icc_link(fz_context *ctx, const fz_colorspace *dst, int dst_extras, const fz_colorspace *src, int src_extras, const fz_colorspace *prf, const fz_color_params *rend, int num_bytes, int copy_spots, int *src_n)
 {
 	fz_icclink *link = NULL;
 	fz_iccprofile *src_icc = NULL;
-	fz_iccprofile *dst_icc = dst->data;
+	fz_iccprofile *dst_icc = NULL;
 	fz_iccprofile *prf_icc = NULL;
 	fz_link_key *key = NULL;
 	fz_icclink *new_link;
@@ -507,46 +555,18 @@ fz_get_icc_link(fz_context *ctx, const fz_colorspace *dst, int dst_extras, const
 	if (fz_colorspace_is_icc(ctx, src))
 		src_icc = src->data;
 	else if (fz_colorspace_is_cal(ctx, src))
-	{
-		fz_cal_colorspace *cal;
-
-		cal = src->data;
-		src_icc = cal->profile;
-		/* Check if we have any work to do. */
-		if (src_icc == NULL)
-			src_icc = fz_icc_from_cal(ctx, src);
-		if (src_icc->cmm_handle == NULL)
-		{
-			fz_cmm_init_profile(ctx, src_icc);
-
-			/* The CMM failed to make a profile. Use the default. */
-			if (src_icc->cmm_handle == NULL)
-			{
-				switch (src->n)
-				{
-				case 1:
-					src_icc = fz_device_gray(ctx)->data;
-					break;
-				case 3:
-					src_icc = fz_device_rgb(ctx)->data;
-					break;
-				case 4:
-					src_icc = fz_device_cmyk(ctx)->data;
-					break;
-				default:
-					fz_throw(ctx, FZ_ERROR_GENERIC, "Poorly formed Cal color space");
-				}
-				/* To avoid repeated failures building the pdf-cal color space,
-				 * assign the default profile. */
-				fz_cmm_fin_profile(ctx, src_icc);
-				cal->profile = src_icc;
-			}
-		}
-	}
+		src_icc = fz_get_icc_from_cal(ctx, src);
 	else
 		src_icc = get_base_icc_profile(ctx, src);
 
-	if (src_icc == NULL)
+	if (fz_colorspace_is_icc(ctx, dst))
+		dst_icc = dst->data;
+	else if (fz_colorspace_is_cal(ctx, dst))
+		dst_icc = fz_get_icc_from_cal(ctx, dst);
+	else
+		dst_icc = get_base_icc_profile(ctx, dst);
+
+	if (dst_icc == NULL || src_icc == NULL)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "Profile missing during link creation");
 
 	*src_n = src_icc->num_devcomp;
@@ -3093,10 +3113,10 @@ static void fast_any_to_alpha(fz_context *ctx, fz_pixmap *dst, fz_pixmap *src, f
 	}
 }
 
-/* Used for testing all color managed source color spaces.  If it is icc, cal or
+/* Used for testing all color managed color spaces.  If it is icc, cal or
  * has a base space that is managed */
 static const fz_colorspace *
-fz_source_colorspace_cm(fz_context *ctx, const fz_colorspace *cs)
+fz_colorspace_cm(fz_context *ctx, const fz_colorspace *cs)
 {
 	while (cs)
 	{
@@ -3152,8 +3172,8 @@ fz_pixmap_converter *fz_lookup_pixmap_converter(fz_context *ctx, fz_colorspace *
 	}
 	else
 	{
-		const fz_colorspace *ss_base = fz_source_colorspace_cm(ctx, ss);
-		if (ss_base != NULL && fz_colorspace_is_icc(ctx, ds))
+		const fz_colorspace *ss_base = fz_colorspace_cm(ctx, ss);
+		if (ss_base != NULL && fz_colorspace_cm(ctx, ds))
 		{
 			if (ss_base == ss)
 				return icc_conv_pixmap;
@@ -3417,8 +3437,8 @@ void fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, const fz_c
 	}
 	else
 	{
-		const fz_colorspace *ss_base = fz_source_colorspace_cm(ctx, ss);
-		if (ss_base != NULL && fz_colorspace_is_icc(ctx, ds))
+		const fz_colorspace *ss_base = fz_colorspace_cm(ctx, ss);
+		if (ss_base != NULL && fz_colorspace_cm(ctx, ds))
 		{
 			if (ss_base == ss)
 				cc->convert = icc_conv_color;

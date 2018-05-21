@@ -1,0 +1,434 @@
+# This is an automatically generated file. Do not edit. *\
+default: generate
+hexdump.exe: scripts\hexdump.c
+	cl \nologo scripts\hexdump.c setargv.obj
+generated\resources\fonts\droid:
+	mkdir generated\resources\fonts\droid
+generated\resources\fonts\han:
+	mkdir generated\resources\fonts\han
+generated\resources\fonts\noto:
+	mkdir generated\resources\fonts\noto
+generated\resources\fonts\sil:
+	mkdir generated\resources\fonts\sil
+generated\resources\fonts\urw:
+	mkdir generated\resources\fonts\urw
+generate: generated\resources\fonts\urw\Dingbats.cff.c
+generated\resources\fonts\urw\Dingbats.cff.c: resources\fonts\urw\Dingbats.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\Dingbats.cff.c resources\fonts\urw\Dingbats.cff
+generate: generated\resources\fonts\urw\NimbusMonoPS-Bold.cff.c
+generated\resources\fonts\urw\NimbusMonoPS-Bold.cff.c: resources\fonts\urw\NimbusMonoPS-Bold.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusMonoPS-Bold.cff.c resources\fonts\urw\NimbusMonoPS-Bold.cff
+generate: generated\resources\fonts\urw\NimbusMonoPS-BoldItalic.cff.c
+generated\resources\fonts\urw\NimbusMonoPS-BoldItalic.cff.c: resources\fonts\urw\NimbusMonoPS-BoldItalic.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusMonoPS-BoldItalic.cff.c resources\fonts\urw\NimbusMonoPS-BoldItalic.cff
+generate: generated\resources\fonts\urw\NimbusMonoPS-Italic.cff.c
+generated\resources\fonts\urw\NimbusMonoPS-Italic.cff.c: resources\fonts\urw\NimbusMonoPS-Italic.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusMonoPS-Italic.cff.c resources\fonts\urw\NimbusMonoPS-Italic.cff
+generate: generated\resources\fonts\urw\NimbusMonoPS-Regular.cff.c
+generated\resources\fonts\urw\NimbusMonoPS-Regular.cff.c: resources\fonts\urw\NimbusMonoPS-Regular.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusMonoPS-Regular.cff.c resources\fonts\urw\NimbusMonoPS-Regular.cff
+generate: generated\resources\fonts\urw\NimbusRoman-Bold.cff.c
+generated\resources\fonts\urw\NimbusRoman-Bold.cff.c: resources\fonts\urw\NimbusRoman-Bold.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusRoman-Bold.cff.c resources\fonts\urw\NimbusRoman-Bold.cff
+generate: generated\resources\fonts\urw\NimbusRoman-BoldItalic.cff.c
+generated\resources\fonts\urw\NimbusRoman-BoldItalic.cff.c: resources\fonts\urw\NimbusRoman-BoldItalic.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusRoman-BoldItalic.cff.c resources\fonts\urw\NimbusRoman-BoldItalic.cff
+generate: generated\resources\fonts\urw\NimbusRoman-Italic.cff.c
+generated\resources\fonts\urw\NimbusRoman-Italic.cff.c: resources\fonts\urw\NimbusRoman-Italic.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusRoman-Italic.cff.c resources\fonts\urw\NimbusRoman-Italic.cff
+generate: generated\resources\fonts\urw\NimbusRoman-Regular.cff.c
+generated\resources\fonts\urw\NimbusRoman-Regular.cff.c: resources\fonts\urw\NimbusRoman-Regular.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusRoman-Regular.cff.c resources\fonts\urw\NimbusRoman-Regular.cff
+generate: generated\resources\fonts\urw\NimbusSans-Bold.cff.c
+generated\resources\fonts\urw\NimbusSans-Bold.cff.c: resources\fonts\urw\NimbusSans-Bold.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusSans-Bold.cff.c resources\fonts\urw\NimbusSans-Bold.cff
+generate: generated\resources\fonts\urw\NimbusSans-BoldOblique.cff.c
+generated\resources\fonts\urw\NimbusSans-BoldOblique.cff.c: resources\fonts\urw\NimbusSans-BoldOblique.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusSans-BoldOblique.cff.c resources\fonts\urw\NimbusSans-BoldOblique.cff
+generate: generated\resources\fonts\urw\NimbusSans-Oblique.cff.c
+generated\resources\fonts\urw\NimbusSans-Oblique.cff.c: resources\fonts\urw\NimbusSans-Oblique.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusSans-Oblique.cff.c resources\fonts\urw\NimbusSans-Oblique.cff
+generate: generated\resources\fonts\urw\NimbusSans-Regular.cff.c
+generated\resources\fonts\urw\NimbusSans-Regular.cff.c: resources\fonts\urw\NimbusSans-Regular.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\NimbusSans-Regular.cff.c resources\fonts\urw\NimbusSans-Regular.cff
+generate: generated\resources\fonts\urw\StandardSymbolsPS.cff.c
+generated\resources\fonts\urw\StandardSymbolsPS.cff.c: resources\fonts\urw\StandardSymbolsPS.cff generated\resources\fonts\urw hexdump.exe
+	hexdump.exe generated\resources\fonts\urw\StandardSymbolsPS.cff.c resources\fonts\urw\StandardSymbolsPS.cff
+generate: generated\resources\fonts\han\SourceHanSerif-Regular.ttc.c
+generated\resources\fonts\han\SourceHanSerif-Regular.ttc.c: resources\fonts\han\SourceHanSerif-Regular.ttc generated\resources\fonts\han hexdump.exe
+	hexdump.exe generated\resources\fonts\han\SourceHanSerif-Regular.ttc.c resources\fonts\han\SourceHanSerif-Regular.ttc
+generate: generated\resources\fonts\droid\DroidSansFallback.ttf.c
+generated\resources\fonts\droid\DroidSansFallback.ttf.c: resources\fonts\droid\DroidSansFallback.ttf generated\resources\fonts\droid hexdump.exe
+	hexdump.exe generated\resources\fonts\droid\DroidSansFallback.ttf.c resources\fonts\droid\DroidSansFallback.ttf
+generate: generated\resources\fonts\droid\DroidSansFallbackFull.ttf.c
+generated\resources\fonts\droid\DroidSansFallbackFull.ttf.c: resources\fonts\droid\DroidSansFallbackFull.ttf generated\resources\fonts\droid hexdump.exe
+	hexdump.exe generated\resources\fonts\droid\DroidSansFallbackFull.ttf.c resources\fonts\droid\DroidSansFallbackFull.ttf
+generate: generated\resources\fonts\noto\NotoKufiArabic-Regular.ttf.c
+generated\resources\fonts\noto\NotoKufiArabic-Regular.ttf.c: resources\fonts\noto\NotoKufiArabic-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoKufiArabic-Regular.ttf.c resources\fonts\noto\NotoKufiArabic-Regular.ttf
+generate: generated\resources\fonts\noto\NotoNaskhArabic-Regular.ttf.c
+generated\resources\fonts\noto\NotoNaskhArabic-Regular.ttf.c: resources\fonts\noto\NotoNaskhArabic-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoNaskhArabic-Regular.ttf.c resources\fonts\noto\NotoNaskhArabic-Regular.ttf
+generate: generated\resources\fonts\noto\NotoNastaliqUrdu-Regular.ttf.c
+generated\resources\fonts\noto\NotoNastaliqUrdu-Regular.ttf.c: resources\fonts\noto\NotoNastaliqUrdu-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoNastaliqUrdu-Regular.ttf.c resources\fonts\noto\NotoNastaliqUrdu-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansJavanese-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansJavanese-Regular.ttf.c: resources\fonts\noto\NotoSansJavanese-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansJavanese-Regular.ttf.c resources\fonts\noto\NotoSansJavanese-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansMongolian-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansMongolian-Regular.ttf.c: resources\fonts\noto\NotoSansMongolian-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMongolian-Regular.ttf.c resources\fonts\noto\NotoSansMongolian-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansOriya-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansOriya-Regular.ttf.c: resources\fonts\noto\NotoSansOriya-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOriya-Regular.ttf.c resources\fonts\noto\NotoSansOriya-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansSyriacEastern-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansSyriacEastern-Regular.ttf.c: resources\fonts\noto\NotoSansSyriacEastern-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSyriacEastern-Regular.ttf.c resources\fonts\noto\NotoSansSyriacEastern-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansSyriacEstrangela-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansSyriacEstrangela-Regular.ttf.c: resources\fonts\noto\NotoSansSyriacEstrangela-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSyriacEstrangela-Regular.ttf.c resources\fonts\noto\NotoSansSyriacEstrangela-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansSyriacWestern-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansSyriacWestern-Regular.ttf.c: resources\fonts\noto\NotoSansSyriacWestern-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSyriacWestern-Regular.ttf.c resources\fonts\noto\NotoSansSyriacWestern-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansTaiTham-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansTaiTham-Regular.ttf.c: resources\fonts\noto\NotoSansTaiTham-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTaiTham-Regular.ttf.c resources\fonts\noto\NotoSansTaiTham-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansThaana-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansThaana-Regular.ttf.c: resources\fonts\noto\NotoSansThaana-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansThaana-Regular.ttf.c resources\fonts\noto\NotoSansThaana-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSansTibetan-Regular.ttf.c
+generated\resources\fonts\noto\NotoSansTibetan-Regular.ttf.c: resources\fonts\noto\NotoSansTibetan-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTibetan-Regular.ttf.c resources\fonts\noto\NotoSansTibetan-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSerifTelugu-Regular.ttf.c
+generated\resources\fonts\noto\NotoSerifTelugu-Regular.ttf.c: resources\fonts\noto\NotoSerifTelugu-Regular.ttf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifTelugu-Regular.ttf.c resources\fonts\noto\NotoSerifTelugu-Regular.ttf
+generate: generated\resources\fonts\noto\NotoSans-Regular.otf.c
+generated\resources\fonts\noto\NotoSans-Regular.otf.c: resources\fonts\noto\NotoSans-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSans-Regular.otf.c resources\fonts\noto\NotoSans-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansAdlam-Regular.otf.c
+generated\resources\fonts\noto\NotoSansAdlam-Regular.otf.c: resources\fonts\noto\NotoSansAdlam-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansAdlam-Regular.otf.c resources\fonts\noto\NotoSansAdlam-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansAhom-Regular.otf.c
+generated\resources\fonts\noto\NotoSansAhom-Regular.otf.c: resources\fonts\noto\NotoSansAhom-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansAhom-Regular.otf.c resources\fonts\noto\NotoSansAhom-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansAnatolianHieroglyphs-Regular.otf.c
+generated\resources\fonts\noto\NotoSansAnatolianHieroglyphs-Regular.otf.c: resources\fonts\noto\NotoSansAnatolianHieroglyphs-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansAnatolianHieroglyphs-Regular.otf.c resources\fonts\noto\NotoSansAnatolianHieroglyphs-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansArabic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansArabic-Regular.otf.c: resources\fonts\noto\NotoSansArabic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansArabic-Regular.otf.c resources\fonts\noto\NotoSansArabic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansAvestan-Regular.otf.c
+generated\resources\fonts\noto\NotoSansAvestan-Regular.otf.c: resources\fonts\noto\NotoSansAvestan-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansAvestan-Regular.otf.c resources\fonts\noto\NotoSansAvestan-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBamum-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBamum-Regular.otf.c: resources\fonts\noto\NotoSansBamum-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBamum-Regular.otf.c resources\fonts\noto\NotoSansBamum-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBassaVah-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBassaVah-Regular.otf.c: resources\fonts\noto\NotoSansBassaVah-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBassaVah-Regular.otf.c resources\fonts\noto\NotoSansBassaVah-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBatak-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBatak-Regular.otf.c: resources\fonts\noto\NotoSansBatak-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBatak-Regular.otf.c resources\fonts\noto\NotoSansBatak-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBengali-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBengali-Regular.otf.c: resources\fonts\noto\NotoSansBengali-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBengali-Regular.otf.c resources\fonts\noto\NotoSansBengali-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBhaiksuki-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBhaiksuki-Regular.otf.c: resources\fonts\noto\NotoSansBhaiksuki-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBhaiksuki-Regular.otf.c resources\fonts\noto\NotoSansBhaiksuki-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBrahmi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBrahmi-Regular.otf.c: resources\fonts\noto\NotoSansBrahmi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBrahmi-Regular.otf.c resources\fonts\noto\NotoSansBrahmi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBuginese-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBuginese-Regular.otf.c: resources\fonts\noto\NotoSansBuginese-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBuginese-Regular.otf.c resources\fonts\noto\NotoSansBuginese-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansBuhid-Regular.otf.c
+generated\resources\fonts\noto\NotoSansBuhid-Regular.otf.c: resources\fonts\noto\NotoSansBuhid-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansBuhid-Regular.otf.c resources\fonts\noto\NotoSansBuhid-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCanadianAboriginal-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCanadianAboriginal-Regular.otf.c: resources\fonts\noto\NotoSansCanadianAboriginal-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCanadianAboriginal-Regular.otf.c resources\fonts\noto\NotoSansCanadianAboriginal-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCarian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCarian-Regular.otf.c: resources\fonts\noto\NotoSansCarian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCarian-Regular.otf.c resources\fonts\noto\NotoSansCarian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansChakma-Regular.otf.c
+generated\resources\fonts\noto\NotoSansChakma-Regular.otf.c: resources\fonts\noto\NotoSansChakma-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansChakma-Regular.otf.c resources\fonts\noto\NotoSansChakma-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCham-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCham-Regular.otf.c: resources\fonts\noto\NotoSansCham-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCham-Regular.otf.c resources\fonts\noto\NotoSansCham-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCherokee-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCherokee-Regular.otf.c: resources\fonts\noto\NotoSansCherokee-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCherokee-Regular.otf.c resources\fonts\noto\NotoSansCherokee-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCoptic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCoptic-Regular.otf.c: resources\fonts\noto\NotoSansCoptic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCoptic-Regular.otf.c resources\fonts\noto\NotoSansCoptic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCuneiform-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCuneiform-Regular.otf.c: resources\fonts\noto\NotoSansCuneiform-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCuneiform-Regular.otf.c resources\fonts\noto\NotoSansCuneiform-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansCypriot-Regular.otf.c
+generated\resources\fonts\noto\NotoSansCypriot-Regular.otf.c: resources\fonts\noto\NotoSansCypriot-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansCypriot-Regular.otf.c resources\fonts\noto\NotoSansCypriot-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansDeseret-Regular.otf.c
+generated\resources\fonts\noto\NotoSansDeseret-Regular.otf.c: resources\fonts\noto\NotoSansDeseret-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansDeseret-Regular.otf.c resources\fonts\noto\NotoSansDeseret-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansDevanagari-Regular.otf.c
+generated\resources\fonts\noto\NotoSansDevanagari-Regular.otf.c: resources\fonts\noto\NotoSansDevanagari-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansDevanagari-Regular.otf.c resources\fonts\noto\NotoSansDevanagari-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansEgyptianHieroglyphs-Regular.otf.c
+generated\resources\fonts\noto\NotoSansEgyptianHieroglyphs-Regular.otf.c: resources\fonts\noto\NotoSansEgyptianHieroglyphs-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansEgyptianHieroglyphs-Regular.otf.c resources\fonts\noto\NotoSansEgyptianHieroglyphs-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansElbasan-Regular.otf.c
+generated\resources\fonts\noto\NotoSansElbasan-Regular.otf.c: resources\fonts\noto\NotoSansElbasan-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansElbasan-Regular.otf.c resources\fonts\noto\NotoSansElbasan-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansGlagolitic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansGlagolitic-Regular.otf.c: resources\fonts\noto\NotoSansGlagolitic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansGlagolitic-Regular.otf.c resources\fonts\noto\NotoSansGlagolitic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansGothic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansGothic-Regular.otf.c: resources\fonts\noto\NotoSansGothic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansGothic-Regular.otf.c resources\fonts\noto\NotoSansGothic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansHanunoo-Regular.otf.c
+generated\resources\fonts\noto\NotoSansHanunoo-Regular.otf.c: resources\fonts\noto\NotoSansHanunoo-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansHanunoo-Regular.otf.c resources\fonts\noto\NotoSansHanunoo-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansHatran-Regular.otf.c
+generated\resources\fonts\noto\NotoSansHatran-Regular.otf.c: resources\fonts\noto\NotoSansHatran-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansHatran-Regular.otf.c resources\fonts\noto\NotoSansHatran-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansImperialAramaic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansImperialAramaic-Regular.otf.c: resources\fonts\noto\NotoSansImperialAramaic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansImperialAramaic-Regular.otf.c resources\fonts\noto\NotoSansImperialAramaic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansInscriptionalPahlavi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansInscriptionalPahlavi-Regular.otf.c: resources\fonts\noto\NotoSansInscriptionalPahlavi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansInscriptionalPahlavi-Regular.otf.c resources\fonts\noto\NotoSansInscriptionalPahlavi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansInscriptionalParthian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansInscriptionalParthian-Regular.otf.c: resources\fonts\noto\NotoSansInscriptionalParthian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansInscriptionalParthian-Regular.otf.c resources\fonts\noto\NotoSansInscriptionalParthian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansKaithi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansKaithi-Regular.otf.c: resources\fonts\noto\NotoSansKaithi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansKaithi-Regular.otf.c resources\fonts\noto\NotoSansKaithi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansKayahLi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansKayahLi-Regular.otf.c: resources\fonts\noto\NotoSansKayahLi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansKayahLi-Regular.otf.c resources\fonts\noto\NotoSansKayahLi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansKharoshthi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansKharoshthi-Regular.otf.c: resources\fonts\noto\NotoSansKharoshthi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansKharoshthi-Regular.otf.c resources\fonts\noto\NotoSansKharoshthi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLepcha-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLepcha-Regular.otf.c: resources\fonts\noto\NotoSansLepcha-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLepcha-Regular.otf.c resources\fonts\noto\NotoSansLepcha-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLimbu-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLimbu-Regular.otf.c: resources\fonts\noto\NotoSansLimbu-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLimbu-Regular.otf.c resources\fonts\noto\NotoSansLimbu-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLinearA-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLinearA-Regular.otf.c: resources\fonts\noto\NotoSansLinearA-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLinearA-Regular.otf.c resources\fonts\noto\NotoSansLinearA-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLinearB-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLinearB-Regular.otf.c: resources\fonts\noto\NotoSansLinearB-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLinearB-Regular.otf.c resources\fonts\noto\NotoSansLinearB-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLisu-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLisu-Regular.otf.c: resources\fonts\noto\NotoSansLisu-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLisu-Regular.otf.c resources\fonts\noto\NotoSansLisu-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLycian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLycian-Regular.otf.c: resources\fonts\noto\NotoSansLycian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLycian-Regular.otf.c resources\fonts\noto\NotoSansLycian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansLydian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansLydian-Regular.otf.c: resources\fonts\noto\NotoSansLydian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansLydian-Regular.otf.c resources\fonts\noto\NotoSansLydian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMalayalam-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMalayalam-Regular.otf.c: resources\fonts\noto\NotoSansMalayalam-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMalayalam-Regular.otf.c resources\fonts\noto\NotoSansMalayalam-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMandaic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMandaic-Regular.otf.c: resources\fonts\noto\NotoSansMandaic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMandaic-Regular.otf.c resources\fonts\noto\NotoSansMandaic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansManichaean-Regular.otf.c
+generated\resources\fonts\noto\NotoSansManichaean-Regular.otf.c: resources\fonts\noto\NotoSansManichaean-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansManichaean-Regular.otf.c resources\fonts\noto\NotoSansManichaean-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMarchen-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMarchen-Regular.otf.c: resources\fonts\noto\NotoSansMarchen-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMarchen-Regular.otf.c resources\fonts\noto\NotoSansMarchen-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMeeteiMayek-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMeeteiMayek-Regular.otf.c: resources\fonts\noto\NotoSansMeeteiMayek-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMeeteiMayek-Regular.otf.c resources\fonts\noto\NotoSansMeeteiMayek-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMendeKikakui-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMendeKikakui-Regular.otf.c: resources\fonts\noto\NotoSansMendeKikakui-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMendeKikakui-Regular.otf.c resources\fonts\noto\NotoSansMendeKikakui-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMeroitic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMeroitic-Regular.otf.c: resources\fonts\noto\NotoSansMeroitic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMeroitic-Regular.otf.c resources\fonts\noto\NotoSansMeroitic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMiao-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMiao-Regular.otf.c: resources\fonts\noto\NotoSansMiao-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMiao-Regular.otf.c resources\fonts\noto\NotoSansMiao-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMro-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMro-Regular.otf.c: resources\fonts\noto\NotoSansMro-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMro-Regular.otf.c resources\fonts\noto\NotoSansMro-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansMultani-Regular.otf.c
+generated\resources\fonts\noto\NotoSansMultani-Regular.otf.c: resources\fonts\noto\NotoSansMultani-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansMultani-Regular.otf.c resources\fonts\noto\NotoSansMultani-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansNKo-Regular.otf.c
+generated\resources\fonts\noto\NotoSansNKo-Regular.otf.c: resources\fonts\noto\NotoSansNKo-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansNKo-Regular.otf.c resources\fonts\noto\NotoSansNKo-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansNabataean-Regular.otf.c
+generated\resources\fonts\noto\NotoSansNabataean-Regular.otf.c: resources\fonts\noto\NotoSansNabataean-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansNabataean-Regular.otf.c resources\fonts\noto\NotoSansNabataean-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansNewTaiLue-Regular.otf.c
+generated\resources\fonts\noto\NotoSansNewTaiLue-Regular.otf.c: resources\fonts\noto\NotoSansNewTaiLue-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansNewTaiLue-Regular.otf.c resources\fonts\noto\NotoSansNewTaiLue-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansNewa-Regular.otf.c
+generated\resources\fonts\noto\NotoSansNewa-Regular.otf.c: resources\fonts\noto\NotoSansNewa-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansNewa-Regular.otf.c resources\fonts\noto\NotoSansNewa-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOgham-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOgham-Regular.otf.c: resources\fonts\noto\NotoSansOgham-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOgham-Regular.otf.c resources\fonts\noto\NotoSansOgham-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOlChiki-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOlChiki-Regular.otf.c: resources\fonts\noto\NotoSansOlChiki-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOlChiki-Regular.otf.c resources\fonts\noto\NotoSansOlChiki-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldItalic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldItalic-Regular.otf.c: resources\fonts\noto\NotoSansOldItalic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldItalic-Regular.otf.c resources\fonts\noto\NotoSansOldItalic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldNorthArabian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldNorthArabian-Regular.otf.c: resources\fonts\noto\NotoSansOldNorthArabian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldNorthArabian-Regular.otf.c resources\fonts\noto\NotoSansOldNorthArabian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldPermic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldPermic-Regular.otf.c: resources\fonts\noto\NotoSansOldPermic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldPermic-Regular.otf.c resources\fonts\noto\NotoSansOldPermic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldPersian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldPersian-Regular.otf.c: resources\fonts\noto\NotoSansOldPersian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldPersian-Regular.otf.c resources\fonts\noto\NotoSansOldPersian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldSouthArabian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldSouthArabian-Regular.otf.c: resources\fonts\noto\NotoSansOldSouthArabian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldSouthArabian-Regular.otf.c resources\fonts\noto\NotoSansOldSouthArabian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOldTurkic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOldTurkic-Regular.otf.c: resources\fonts\noto\NotoSansOldTurkic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOldTurkic-Regular.otf.c resources\fonts\noto\NotoSansOldTurkic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOsage-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOsage-Regular.otf.c: resources\fonts\noto\NotoSansOsage-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOsage-Regular.otf.c resources\fonts\noto\NotoSansOsage-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansOsmanya-Regular.otf.c
+generated\resources\fonts\noto\NotoSansOsmanya-Regular.otf.c: resources\fonts\noto\NotoSansOsmanya-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansOsmanya-Regular.otf.c resources\fonts\noto\NotoSansOsmanya-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansPahawhHmong-Regular.otf.c
+generated\resources\fonts\noto\NotoSansPahawhHmong-Regular.otf.c: resources\fonts\noto\NotoSansPahawhHmong-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansPahawhHmong-Regular.otf.c resources\fonts\noto\NotoSansPahawhHmong-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansPalmyrene-Regular.otf.c
+generated\resources\fonts\noto\NotoSansPalmyrene-Regular.otf.c: resources\fonts\noto\NotoSansPalmyrene-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansPalmyrene-Regular.otf.c resources\fonts\noto\NotoSansPalmyrene-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansPauCinHau-Regular.otf.c
+generated\resources\fonts\noto\NotoSansPauCinHau-Regular.otf.c: resources\fonts\noto\NotoSansPauCinHau-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansPauCinHau-Regular.otf.c resources\fonts\noto\NotoSansPauCinHau-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansPhagsPa-Regular.otf.c
+generated\resources\fonts\noto\NotoSansPhagsPa-Regular.otf.c: resources\fonts\noto\NotoSansPhagsPa-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansPhagsPa-Regular.otf.c resources\fonts\noto\NotoSansPhagsPa-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansPhoenician-Regular.otf.c
+generated\resources\fonts\noto\NotoSansPhoenician-Regular.otf.c: resources\fonts\noto\NotoSansPhoenician-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansPhoenician-Regular.otf.c resources\fonts\noto\NotoSansPhoenician-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansRejang-Regular.otf.c
+generated\resources\fonts\noto\NotoSansRejang-Regular.otf.c: resources\fonts\noto\NotoSansRejang-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansRejang-Regular.otf.c resources\fonts\noto\NotoSansRejang-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansRunic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansRunic-Regular.otf.c: resources\fonts\noto\NotoSansRunic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansRunic-Regular.otf.c resources\fonts\noto\NotoSansRunic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSamaritan-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSamaritan-Regular.otf.c: resources\fonts\noto\NotoSansSamaritan-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSamaritan-Regular.otf.c resources\fonts\noto\NotoSansSamaritan-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSaurashtra-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSaurashtra-Regular.otf.c: resources\fonts\noto\NotoSansSaurashtra-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSaurashtra-Regular.otf.c resources\fonts\noto\NotoSansSaurashtra-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSharada-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSharada-Regular.otf.c: resources\fonts\noto\NotoSansSharada-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSharada-Regular.otf.c resources\fonts\noto\NotoSansSharada-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansShavian-Regular.otf.c
+generated\resources\fonts\noto\NotoSansShavian-Regular.otf.c: resources\fonts\noto\NotoSansShavian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansShavian-Regular.otf.c resources\fonts\noto\NotoSansShavian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSoraSompeng-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSoraSompeng-Regular.otf.c: resources\fonts\noto\NotoSansSoraSompeng-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSoraSompeng-Regular.otf.c resources\fonts\noto\NotoSansSoraSompeng-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSundanese-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSundanese-Regular.otf.c: resources\fonts\noto\NotoSansSundanese-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSundanese-Regular.otf.c resources\fonts\noto\NotoSansSundanese-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSylotiNagri-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSylotiNagri-Regular.otf.c: resources\fonts\noto\NotoSansSylotiNagri-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSylotiNagri-Regular.otf.c resources\fonts\noto\NotoSansSylotiNagri-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSymbols-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSymbols-Regular.otf.c: resources\fonts\noto\NotoSansSymbols-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSymbols-Regular.otf.c resources\fonts\noto\NotoSansSymbols-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansSymbols2-Regular.otf.c
+generated\resources\fonts\noto\NotoSansSymbols2-Regular.otf.c: resources\fonts\noto\NotoSansSymbols2-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansSymbols2-Regular.otf.c resources\fonts\noto\NotoSansSymbols2-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansTagalog-Regular.otf.c
+generated\resources\fonts\noto\NotoSansTagalog-Regular.otf.c: resources\fonts\noto\NotoSansTagalog-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTagalog-Regular.otf.c resources\fonts\noto\NotoSansTagalog-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansTagbanwa-Regular.otf.c
+generated\resources\fonts\noto\NotoSansTagbanwa-Regular.otf.c: resources\fonts\noto\NotoSansTagbanwa-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTagbanwa-Regular.otf.c resources\fonts\noto\NotoSansTagbanwa-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansTaiLe-Regular.otf.c
+generated\resources\fonts\noto\NotoSansTaiLe-Regular.otf.c: resources\fonts\noto\NotoSansTaiLe-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTaiLe-Regular.otf.c resources\fonts\noto\NotoSansTaiLe-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansTaiViet-Regular.otf.c
+generated\resources\fonts\noto\NotoSansTaiViet-Regular.otf.c: resources\fonts\noto\NotoSansTaiViet-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTaiViet-Regular.otf.c resources\fonts\noto\NotoSansTaiViet-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansTifinagh-Regular.otf.c
+generated\resources\fonts\noto\NotoSansTifinagh-Regular.otf.c: resources\fonts\noto\NotoSansTifinagh-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansTifinagh-Regular.otf.c resources\fonts\noto\NotoSansTifinagh-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansUgaritic-Regular.otf.c
+generated\resources\fonts\noto\NotoSansUgaritic-Regular.otf.c: resources\fonts\noto\NotoSansUgaritic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansUgaritic-Regular.otf.c resources\fonts\noto\NotoSansUgaritic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansVai-Regular.otf.c
+generated\resources\fonts\noto\NotoSansVai-Regular.otf.c: resources\fonts\noto\NotoSansVai-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansVai-Regular.otf.c resources\fonts\noto\NotoSansVai-Regular.otf
+generate: generated\resources\fonts\noto\NotoSansYi-Regular.otf.c
+generated\resources\fonts\noto\NotoSansYi-Regular.otf.c: resources\fonts\noto\NotoSansYi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSansYi-Regular.otf.c resources\fonts\noto\NotoSansYi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerif-Regular.otf.c
+generated\resources\fonts\noto\NotoSerif-Regular.otf.c: resources\fonts\noto\NotoSerif-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerif-Regular.otf.c resources\fonts\noto\NotoSerif-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifArmenian-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifArmenian-Regular.otf.c: resources\fonts\noto\NotoSerifArmenian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifArmenian-Regular.otf.c resources\fonts\noto\NotoSerifArmenian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifBalinese-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifBalinese-Regular.otf.c: resources\fonts\noto\NotoSerifBalinese-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifBalinese-Regular.otf.c resources\fonts\noto\NotoSerifBalinese-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifEthiopic-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifEthiopic-Regular.otf.c: resources\fonts\noto\NotoSerifEthiopic-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifEthiopic-Regular.otf.c resources\fonts\noto\NotoSerifEthiopic-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifGeorgian-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifGeorgian-Regular.otf.c: resources\fonts\noto\NotoSerifGeorgian-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifGeorgian-Regular.otf.c resources\fonts\noto\NotoSerifGeorgian-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifGujarati-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifGujarati-Regular.otf.c: resources\fonts\noto\NotoSerifGujarati-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifGujarati-Regular.otf.c resources\fonts\noto\NotoSerifGujarati-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifGurmukhi-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifGurmukhi-Regular.otf.c: resources\fonts\noto\NotoSerifGurmukhi-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifGurmukhi-Regular.otf.c resources\fonts\noto\NotoSerifGurmukhi-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifHebrew-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifHebrew-Regular.otf.c: resources\fonts\noto\NotoSerifHebrew-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifHebrew-Regular.otf.c resources\fonts\noto\NotoSerifHebrew-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifKannada-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifKannada-Regular.otf.c: resources\fonts\noto\NotoSerifKannada-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifKannada-Regular.otf.c resources\fonts\noto\NotoSerifKannada-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifKhmer-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifKhmer-Regular.otf.c: resources\fonts\noto\NotoSerifKhmer-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifKhmer-Regular.otf.c resources\fonts\noto\NotoSerifKhmer-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifLao-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifLao-Regular.otf.c: resources\fonts\noto\NotoSerifLao-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifLao-Regular.otf.c resources\fonts\noto\NotoSerifLao-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifMyanmar-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifMyanmar-Regular.otf.c: resources\fonts\noto\NotoSerifMyanmar-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifMyanmar-Regular.otf.c resources\fonts\noto\NotoSerifMyanmar-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifSinhala-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifSinhala-Regular.otf.c: resources\fonts\noto\NotoSerifSinhala-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifSinhala-Regular.otf.c resources\fonts\noto\NotoSerifSinhala-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifTamil-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifTamil-Regular.otf.c: resources\fonts\noto\NotoSerifTamil-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifTamil-Regular.otf.c resources\fonts\noto\NotoSerifTamil-Regular.otf
+generate: generated\resources\fonts\noto\NotoSerifThai-Regular.otf.c
+generated\resources\fonts\noto\NotoSerifThai-Regular.otf.c: resources\fonts\noto\NotoSerifThai-Regular.otf generated\resources\fonts\noto hexdump.exe
+	hexdump.exe generated\resources\fonts\noto\NotoSerifThai-Regular.otf.c resources\fonts\noto\NotoSerifThai-Regular.otf
+generate: generated\resources\fonts\sil\CharisSIL-B.cff.c
+generated\resources\fonts\sil\CharisSIL-B.cff.c: resources\fonts\sil\CharisSIL-B.cff generated\resources\fonts\sil hexdump.exe
+	hexdump.exe generated\resources\fonts\sil\CharisSIL-B.cff.c resources\fonts\sil\CharisSIL-B.cff
+generate: generated\resources\fonts\sil\CharisSIL-BI.cff.c
+generated\resources\fonts\sil\CharisSIL-BI.cff.c: resources\fonts\sil\CharisSIL-BI.cff generated\resources\fonts\sil hexdump.exe
+	hexdump.exe generated\resources\fonts\sil\CharisSIL-BI.cff.c resources\fonts\sil\CharisSIL-BI.cff
+generate: generated\resources\fonts\sil\CharisSIL-I.cff.c
+generated\resources\fonts\sil\CharisSIL-I.cff.c: resources\fonts\sil\CharisSIL-I.cff generated\resources\fonts\sil hexdump.exe
+	hexdump.exe generated\resources\fonts\sil\CharisSIL-I.cff.c resources\fonts\sil\CharisSIL-I.cff
+generate: generated\resources\fonts\sil\CharisSIL-R.cff.c
+generated\resources\fonts\sil\CharisSIL-R.cff.c: resources\fonts\sil\CharisSIL-R.cff generated\resources\fonts\sil hexdump.exe
+	hexdump.exe generated\resources\fonts\sil\CharisSIL-R.cff.c resources\fonts\sil\CharisSIL-R.cff

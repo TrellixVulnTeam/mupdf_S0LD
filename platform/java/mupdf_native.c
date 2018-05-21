@@ -719,11 +719,20 @@ static void lose_fids(JNIEnv *env)
 
 #ifdef HAVE_ANDROID
 
-static fz_font *load_noto(fz_context *ctx, const char *filename, int idx)
+static fz_font *load_noto(fz_context *ctx, const char *a, const char *b, const char *c, int idx)
 {
-	fz_font *font;
+	char buf[500];
+	fz_font *font = NULL;
 	fz_try(ctx)
-		font = fz_new_font_from_file(ctx, NULL, filename, idx, 0);
+	{
+		fz_snprintf(buf, sizeof buf, "/system/fonts/%s%s%s.ttf", a, b, c);
+		if (!fz_file_exists(ctx, buf))
+			fz_snprintf(buf, sizeof buf, "/system/fonts/%s%s%s.otf", a, b, c);
+		if (!fz_file_exists(ctx, buf))
+			fz_snprintf(buf, sizeof buf, "/system/fonts/%s%s%s.ttc", a, b, c);
+		if (fz_file_exists(ctx, buf))
+			font = fz_new_font_from_file(ctx, NULL, buf, idx, 0);
+	}
 	fz_catch(ctx)
 		return NULL;
 	return font;
@@ -731,25 +740,36 @@ static fz_font *load_noto(fz_context *ctx, const char *filename, int idx)
 
 static fz_font *load_noto_cjk(fz_context *ctx, int lang)
 {
-	fz_font *font = load_noto(ctx, "/system/fonts/NotoSansCJK-Regular.ttc", lang);
-	if (!font)
-		font = load_noto(ctx, "/system/fonts/DroidSansFallback.ttf", 0);
+	fz_font *font = load_noto(ctx, "NotoSerif", "CJK", "-Regular", lang);
+	if (!font) font = load_noto(ctx, "NotoSans", "CJK", "-Regular", lang);
+	if (!font) font = load_noto(ctx, "DroidSans", "Fallback", "", 0);
 	return font;
 }
 
-static fz_font *load_noto3(fz_context *ctx, const char *a, const char *b, const char *c)
+static fz_font *load_noto_arabic(fz_context *ctx)
 {
-	fz_font *font = load_noto(ctx, a, 0);
-	if (!font && b) font = load_noto(ctx, b, 0);
-	if (!font && c) font = load_noto(ctx, c, 0);
+	fz_font *font = load_noto(ctx, "Noto", "Naskh", "-Regular", 0);
+	if (!font) font = load_noto(ctx, "Noto", "NaskhArabic", "-Regular", 0);
+	if (!font) font = load_noto(ctx, "Droid", "Naskh", "-Regular", 0);
+	if (!font) font = load_noto(ctx, "NotoSerif", "Arabic", "-Regular", 0);
+	if (!font) font = load_noto(ctx, "NotoSans", "Arabic", "-Regular", 0);
+	if (!font) font = load_noto(ctx, "DroidSans", "Arabic", "-Regular", 0);
+	return font;
+}
+
+static fz_font *load_noto_try(fz_context *ctx, const char *stem)
+{
+	fz_font *font = load_noto(ctx, buf, "NotoSerif", stem, "-Regular", 0);
+	if (!font) font = load_noto(ctx, buf, "NotoSans", stem, "-Regular", 0);
+	if (!font) font = load_noto(ctx, buf, "DroidSans", stem, "-Regular", 0);
 	return font;
 }
 
 enum { JP, KR, SC, TC };
 
-#define NOTO3(NAME1, NAME2, NAME3) load_noto3(ctx, "/system/fonts/" NAME1 "-Regular.ttf", "/system/fonts/" NAME2 "-Regular.ttf", "/system/fonts/" NAME3 "-Regular.ttf")
-#define NOTO2(NAME1, NAME2) load_noto3(ctx, "/system/fonts/" NAME1 "-Regular.ttf", "/system/fonts/" NAME2 "-Regular.ttf", NULL)
-#define NOTO(NAME) load_noto3(ctx, "/system/fonts/" NAME "-Regular.ttf", NULL, NULL)
+#define NOTO3(NAME1, NAME2, NAME3) load_noto3(ctx, NAME1 "-Regular", NAME2 "-Regular", NAME3 "-Regular")
+#define NOTO2(NAME1, NAME2) load_noto3(ctx, NAME1 "-Regular", NAME2 "-Regular", NULL)
+#define NOTO(NAME) load_noto_try(ctx, NAME)
 
 fz_font *load_droid_fallback_font(fz_context *ctx, int script, int language, int serif, int bold, int italic)
 {
@@ -764,106 +784,156 @@ fz_font *load_droid_fallback_font(fz_context *ctx, int script, int language, int
 	case UCDN_SCRIPT_HANGUL: return load_noto_cjk(ctx, KR);
 	case UCDN_SCRIPT_HIRAGANA: return load_noto_cjk(ctx, JP);
 	case UCDN_SCRIPT_KATAKANA: return load_noto_cjk(ctx, JP);
-	case UCDN_SCRIPT_BOPOMOFO: return load_noto_cjk(ctx, SC);
+	case UCDN_SCRIPT_BOPOMOFO: return load_noto_cjk(ctx, TC);
 	case UCDN_SCRIPT_HAN:
 		switch (language) {
 		case FZ_LANG_ja: return load_noto_cjk(ctx, JP);
 		case FZ_LANG_ko: return load_noto_cjk(ctx, KR);
-		case FZ_LANG_zh_Hant: return load_noto_cjk(ctx, TC);
-		default:
 		case FZ_LANG_zh_Hans: return load_noto_cjk(ctx, SC);
+		default:
+		case FZ_LANG_zh_Hant: return load_noto_cjk(ctx, TC);
 		}
 
-	case UCDN_SCRIPT_LATIN: return NOTO2("NotoSans", "DroidSans");
-	case UCDN_SCRIPT_GREEK: return NOTO2("NotoSans", "DroidSans");
-	case UCDN_SCRIPT_CYRILLIC: return NOTO2("NotoSans", "DroidSans");
-	case UCDN_SCRIPT_ARABIC: return NOTO3("NotoNaskh", "NotoNaskhArabic", "DroidNaskh");
+	case UCDN_SCRIPT_LATIN:
+	case UCDN_SCRIPT_GREEK:
+	case UCDN_SCRIPT_CYRILLIC:
+		return load_noto_try(ctx, "");
+	case UCDN_SCRIPT_ARABIC:
+		return load_noto_arabic(ctx);
+	case UCDN_SCRIPT_MEROITIC_CURSIVE:
+	case UCDN_SCRIPT_MEROITIC_HIEROGLYPHS:
+		return load_noto_try(ctx, "Meroitic");
+	case UCDN_SCRIPT_NKO:
+		return load_noto_try(ctx, "NKo");
+	case UCDN_SCRIPT_SYRIAC:
+		return load_noto_try(ctx, "SyriacWestern");
 
-	case UCDN_SCRIPT_ARMENIAN: return NOTO2("NotoSansArmenian", "DroidSansArmenian");
-	case UCDN_SCRIPT_BALINESE: return NOTO("NotoSansBalinese");
-	case UCDN_SCRIPT_BAMUM: return NOTO("NotoSansBamum");
-	case UCDN_SCRIPT_BATAK: return NOTO("NotoSansBatak");
-	case UCDN_SCRIPT_BENGALI: return NOTO("NotoSansBengali");
-	case UCDN_SCRIPT_CANADIAN_ABORIGINAL: return NOTO("NotoSansCanadianAboriginal");
-	case UCDN_SCRIPT_CHAM: return NOTO("NotoSansCham");
-	case UCDN_SCRIPT_CHEROKEE: return NOTO("NotoSansCherokee");
-	case UCDN_SCRIPT_DEVANAGARI: return NOTO2("NotoSansDevanagari", "DroidSansDevanagari");
-	case UCDN_SCRIPT_ETHIOPIC: return NOTO2("NotoSansEthiopic", "DroidSansEthiopic");
-	case UCDN_SCRIPT_GEORGIAN: return NOTO2("NotoSansGeorgian", "DroidSansGeorgian");
-	case UCDN_SCRIPT_GUJARATI: return NOTO("NotoSansGujarati");
-	case UCDN_SCRIPT_GURMUKHI: return NOTO("NotoSansGurmukhi");
-	case UCDN_SCRIPT_HEBREW: return NOTO2("NotoSansHebrew", "DroidSansHebrew");
-	case UCDN_SCRIPT_JAVANESE: return NOTO("NotoSansJavanese");
-	case UCDN_SCRIPT_KANNADA: return NOTO("NotoSansKannada");
-	case UCDN_SCRIPT_KAYAH_LI: return NOTO("NotoSansKayahLi");
-	case UCDN_SCRIPT_KHMER: return NOTO("NotoSansKhmer");
-	case UCDN_SCRIPT_LAO: return NOTO("NotoSansLao");
-	case UCDN_SCRIPT_LEPCHA: return NOTO("NotoSansLepcha");
-	case UCDN_SCRIPT_LIMBU: return NOTO("NotoSansLimbu");
-	case UCDN_SCRIPT_LISU: return NOTO("NotoSansLisu");
-	case UCDN_SCRIPT_MALAYALAM: return NOTO("NotoSansMalayalam");
-	case UCDN_SCRIPT_MANDAIC: return NOTO("NotoSansMandaic");
-	case UCDN_SCRIPT_MEETEI_MAYEK: return NOTO("NotoSansMeeteiMayek");
-	case UCDN_SCRIPT_MONGOLIAN: return NOTO("NotoSansMongolian");
-	case UCDN_SCRIPT_MYANMAR: return NOTO("NotoSansMyanmar");
-	case UCDN_SCRIPT_NEW_TAI_LUE: return NOTO("NotoSansNewTaiLue");
-	case UCDN_SCRIPT_NKO: return NOTO("NotoSansNKo");
-	case UCDN_SCRIPT_OL_CHIKI: return NOTO("NotoSansOlChiki");
-	case UCDN_SCRIPT_ORIYA: return NOTO("NotoSansOriya");
-	case UCDN_SCRIPT_SAURASHTRA: return NOTO("NotoSansSaurashtra");
-	case UCDN_SCRIPT_SINHALA: return NOTO("NotoSansSinhala");
-	case UCDN_SCRIPT_SUNDANESE: return NOTO("NotoSansSundanese");
-	case UCDN_SCRIPT_SYLOTI_NAGRI: return NOTO("NotoSansSylotiNagri");
-	case UCDN_SCRIPT_SYRIAC: return NOTO("NotoSansSyriacEastern");
-	case UCDN_SCRIPT_TAI_LE: return NOTO("NotoSansTaiLe");
-	case UCDN_SCRIPT_TAI_THAM: return NOTO("NotoSansTaiTham");
-	case UCDN_SCRIPT_TAI_VIET: return NOTO("NotoSansTaiViet");
-	case UCDN_SCRIPT_TAMIL: return NOTO2("NotoSansTamil", "DroidSansTamil");
-	case UCDN_SCRIPT_TELUGU: return NOTO("NotoSansTelugu");
-	case UCDN_SCRIPT_THAANA: return NOTO("NotoSansThaana");
-	case UCDN_SCRIPT_THAI: return NOTO2("NotoSansThai", "DroidSansThai");
-	case UCDN_SCRIPT_TIBETAN: return NOTO("NotoSansTibetan");
-	case UCDN_SCRIPT_TIFINAGH: return NOTO("NotoSansTifinagh");
-	case UCDN_SCRIPT_VAI: return NOTO("NotoSansVai");
-	case UCDN_SCRIPT_YI: return NOTO("NotoSansYi");
+	case UCDN_SCRIPT_ARMENIAN: return load_noto_try(ctx, "Armenian");
+	case UCDN_SCRIPT_HEBREW: return load_noto_try(ctx, "Hebrew");
+	case UCDN_SCRIPT_THAANA: return load_noto_try(ctx, "Thaana");
+	case UCDN_SCRIPT_DEVANAGARI: return load_noto_try(ctx, "Devanagari");
+	case UCDN_SCRIPT_BENGALI: return load_noto_try(ctx, "Bengali");
+	case UCDN_SCRIPT_GURMUKHI: return load_noto_try(ctx, "Gurmukhi");
+	case UCDN_SCRIPT_GUJARATI: return load_noto_try(ctx, "Gujarati");
+	case UCDN_SCRIPT_ORIYA: return load_noto_try(ctx, "Oriya");
+	case UCDN_SCRIPT_TAMIL: return load_noto_try(ctx, "Tamil");
+	case UCDN_SCRIPT_TELUGU: return load_noto_try(ctx, "Telugu");
+	case UCDN_SCRIPT_KANNADA: return load_noto_try(ctx, "Kannada");
+	case UCDN_SCRIPT_MALAYALAM: return load_noto_try(ctx, "Malayalam");
+	case UCDN_SCRIPT_SINHALA: return load_noto_try(ctx, "Sinhala");
+	case UCDN_SCRIPT_THAI: return load_noto_try(ctx, "Thai");
+	case UCDN_SCRIPT_LAO: return load_noto_try(ctx, "Lao");
+	case UCDN_SCRIPT_TIBETAN: return load_noto_try(ctx, "Tibetan");
+	case UCDN_SCRIPT_MYANMAR: return load_noto_try(ctx, "Myanmar");
+	case UCDN_SCRIPT_GEORGIAN: return load_noto_try(ctx, "Georgian");
+	case UCDN_SCRIPT_ETHIOPIC: return load_noto_try(ctx, "Ethiopic");
+	case UCDN_SCRIPT_CHEROKEE: return load_noto_try(ctx, "Cherokee");
+	case UCDN_SCRIPT_CANADIAN_ABORIGINAL: return load_noto_try(ctx, "CanadianAboriginal");
+	case UCDN_SCRIPT_OGHAM: return load_noto_try(ctx, "Ogham");
+	case UCDN_SCRIPT_RUNIC: return load_noto_try(ctx, "Runic");
+	case UCDN_SCRIPT_KHMER: return load_noto_try(ctx, "Khmer");
+	case UCDN_SCRIPT_MONGOLIAN: return load_noto_try(ctx, "Mongolian");
+	case UCDN_SCRIPT_YI: return load_noto_try(ctx, "Yi");
+	case UCDN_SCRIPT_OLD_ITALIC: return load_noto_try(ctx, "OldItalic");
+	case UCDN_SCRIPT_GOTHIC: return load_noto_try(ctx, "Gothic");
+	case UCDN_SCRIPT_DESERET: return load_noto_try(ctx, "Deseret");
+	case UCDN_SCRIPT_TAGALOG: return load_noto_try(ctx, "Tagalog");
+	case UCDN_SCRIPT_HANUNOO: return load_noto_try(ctx, "Hanunoo");
+	case UCDN_SCRIPT_BUHID: return load_noto_try(ctx, "Buhid");
+	case UCDN_SCRIPT_TAGBANWA: return load_noto_try(ctx, "Tagbanwa");
+	case UCDN_SCRIPT_LIMBU: return load_noto_try(ctx, "Limbu");
+	case UCDN_SCRIPT_TAI_LE: return load_noto_try(ctx, "TaiLe");
+	case UCDN_SCRIPT_LINEAR_B: return load_noto_try(ctx, "LinearB");
+	case UCDN_SCRIPT_UGARITIC: return load_noto_try(ctx, "Ugaritic");
+	case UCDN_SCRIPT_SHAVIAN: return load_noto_try(ctx, "Shavian");
+	case UCDN_SCRIPT_OSMANYA: return load_noto_try(ctx, "Osmanya");
+	case UCDN_SCRIPT_CYPRIOT: return load_noto_try(ctx, "Cypriot");
+	case UCDN_SCRIPT_BUGINESE: return load_noto_try(ctx, "Buginese");
+	case UCDN_SCRIPT_COPTIC: return load_noto_try(ctx, "Coptic");
+	case UCDN_SCRIPT_NEW_TAI_LUE: return load_noto_try(ctx, "NewTaiLue");
+	case UCDN_SCRIPT_GLAGOLITIC: return load_noto_try(ctx, "Glagolitic");
+	case UCDN_SCRIPT_TIFINAGH: return load_noto_try(ctx, "Tifinagh");
+	case UCDN_SCRIPT_SYLOTI_NAGRI: return load_noto_try(ctx, "SylotiNagri");
+	case UCDN_SCRIPT_OLD_PERSIAN: return load_noto_try(ctx, "OldPersian");
+	case UCDN_SCRIPT_KHAROSHTHI: return load_noto_try(ctx, "Kharoshthi");
+	case UCDN_SCRIPT_BALINESE: return load_noto_try(ctx, "Balinese");
+	case UCDN_SCRIPT_CUNEIFORM: return load_noto_try(ctx, "Cuneiform");
+	case UCDN_SCRIPT_PHOENICIAN: return load_noto_try(ctx, "Phoenician");
+	case UCDN_SCRIPT_PHAGS_PA: return load_noto_try(ctx, "PhagsPa");
+	case UCDN_SCRIPT_SUNDANESE: return load_noto_try(ctx, "Sundanese");
+	case UCDN_SCRIPT_LEPCHA: return load_noto_try(ctx, "Lepcha");
+	case UCDN_SCRIPT_OL_CHIKI: return load_noto_try(ctx, "OlChiki");
+	case UCDN_SCRIPT_VAI: return load_noto_try(ctx, "Vai");
+	case UCDN_SCRIPT_SAURASHTRA: return load_noto_try(ctx, "Saurashtra");
+	case UCDN_SCRIPT_KAYAH_LI: return load_noto_try(ctx, "KayahLi");
+	case UCDN_SCRIPT_REJANG: return load_noto_try(ctx, "Rejang");
+	case UCDN_SCRIPT_LYCIAN: return load_noto_try(ctx, "Lycian");
+	case UCDN_SCRIPT_CARIAN: return load_noto_try(ctx, "Carian");
+	case UCDN_SCRIPT_LYDIAN: return load_noto_try(ctx, "Lydian");
+	case UCDN_SCRIPT_CHAM: return load_noto_try(ctx, "Cham");
+	case UCDN_SCRIPT_TAI_THAM: return load_noto_try(ctx, "TaiTham");
+	case UCDN_SCRIPT_TAI_VIET: return load_noto_try(ctx, "TaiViet");
+	case UCDN_SCRIPT_AVESTAN: return load_noto_try(ctx, "Avestan");
+	case UCDN_SCRIPT_EGYPTIAN_HIEROGLYPHS: return load_noto_try(ctx, "EgyptianHieroglyphs");
+	case UCDN_SCRIPT_SAMARITAN: return load_noto_try(ctx, "Samaritan");
+	case UCDN_SCRIPT_LISU: return load_noto_try(ctx, "Lisu");
+	case UCDN_SCRIPT_BAMUM: return load_noto_try(ctx, "Bamum");
+	case UCDN_SCRIPT_JAVANESE: return load_noto_try(ctx, "Javanese");
+	case UCDN_SCRIPT_MEETEI_MAYEK: return load_noto_try(ctx, "MeeteiMayek");
+	case UCDN_SCRIPT_IMPERIAL_ARAMAIC: return load_noto_try(ctx, "ImperialAramaic");
+	case UCDN_SCRIPT_OLD_SOUTH_ARABIAN: return load_noto_try(ctx, "OldSouthArabian");
+	case UCDN_SCRIPT_INSCRIPTIONAL_PARTHIAN: return load_noto_try(ctx, "InscriptionalParthian");
+	case UCDN_SCRIPT_INSCRIPTIONAL_PAHLAVI: return load_noto_try(ctx, "InscriptionalPahlavi");
+	case UCDN_SCRIPT_OLD_TURKIC: return load_noto_try(ctx, "OldTurkic");
+	case UCDN_SCRIPT_KAITHI: return load_noto_try(ctx, "Kaithi");
+	case UCDN_SCRIPT_BATAK: return load_noto_try(ctx, "Batak");
+	case UCDN_SCRIPT_BRAHMI: return load_noto_try(ctx, "Brahmi");
+	case UCDN_SCRIPT_MANDAIC: return load_noto_try(ctx, "Mandaic");
+	case UCDN_SCRIPT_CHAKMA: return load_noto_try(ctx, "Chakma");
+	case UCDN_SCRIPT_MIAO: return load_noto_try(ctx, "Miao");
+	case UCDN_SCRIPT_SHARADA: return load_noto_try(ctx, "Sharada");
+	case UCDN_SCRIPT_SORA_SOMPENG: return load_noto_try(ctx, "SoraSompeng");
+	case UCDN_SCRIPT_TAKRI: return load_noto_try(ctx, "Takri");
+	case UCDN_SCRIPT_BASSA_VAH: return load_noto_try(ctx, "BassaVah");
+	case UCDN_SCRIPT_CAUCASIAN_ALBANIAN: return load_noto_try(ctx, "CaucasianAlbanian");
+	case UCDN_SCRIPT_DUPLOYAN: return load_noto_try(ctx, "Duployan");
+	case UCDN_SCRIPT_ELBASAN: return load_noto_try(ctx, "Elbasan");
+	case UCDN_SCRIPT_GRANTHA: return load_noto_try(ctx, "Grantha");
+	case UCDN_SCRIPT_KHOJKI: return load_noto_try(ctx, "Khojki");
+	case UCDN_SCRIPT_KHUDAWADI: return load_noto_try(ctx, "Khudawadi");
+	case UCDN_SCRIPT_LINEAR_A: return load_noto_try(ctx, "LinearA");
+	case UCDN_SCRIPT_MAHAJANI: return load_noto_try(ctx, "Mahajani");
+	case UCDN_SCRIPT_MANICHAEAN: return load_noto_try(ctx, "Manichaean");
+	case UCDN_SCRIPT_MENDE_KIKAKUI: return load_noto_try(ctx, "MendeKikakui");
+	case UCDN_SCRIPT_MODI: return load_noto_try(ctx, "Modi");
+	case UCDN_SCRIPT_MRO: return load_noto_try(ctx, "Mro");
+	case UCDN_SCRIPT_NABATAEAN: return load_noto_try(ctx, "Nabataean");
+	case UCDN_SCRIPT_OLD_NORTH_ARABIAN: return load_noto_try(ctx, "OldNorthArabian");
+	case UCDN_SCRIPT_OLD_PERMIC: return load_noto_try(ctx, "OldPermic");
+	case UCDN_SCRIPT_PAHAWH_HMONG: return load_noto_try(ctx, "PahawhHmong");
+	case UCDN_SCRIPT_PALMYRENE: return load_noto_try(ctx, "Palmyrene");
+	case UCDN_SCRIPT_PAU_CIN_HAU: return load_noto_try(ctx, "PauCinHau");
+	case UCDN_SCRIPT_PSALTER_PAHLAVI: return load_noto_try(ctx, "PsalterPahlavi");
+	case UCDN_SCRIPT_SIDDHAM: return load_noto_try(ctx, "Siddham");
+	case UCDN_SCRIPT_TIRHUTA: return load_noto_try(ctx, "Tirhuta");
+	case UCDN_SCRIPT_WARANG_CITI: return load_noto_try(ctx, "WarangCiti");
+	case UCDN_SCRIPT_AHOM: return load_noto_try(ctx, "Ahom");
+	case UCDN_SCRIPT_ANATOLIAN_HIEROGLYPHS: return load_noto_try(ctx, "AnatolianHieroglyphs");
+	case UCDN_SCRIPT_HATRAN: return load_noto_try(ctx, "Hatran");
+	case UCDN_SCRIPT_MULTANI: return load_noto_try(ctx, "Multani");
+	case UCDN_SCRIPT_OLD_HUNGARIAN: return load_noto_try(ctx, "OldHungarian");
+	case UCDN_SCRIPT_SIGNWRITING: return load_noto_try(ctx, "Signwriting");
+	case UCDN_SCRIPT_ADLAM: return load_noto_try(ctx, "Adlam");
+	case UCDN_SCRIPT_BHAIKSUKI: return load_noto_try(ctx, "Bhaiksuki");
+	case UCDN_SCRIPT_MARCHEN: return load_noto_try(ctx, "Marchen");
+	case UCDN_SCRIPT_NEWA: return load_noto_try(ctx, "Newa");
+	case UCDN_SCRIPT_OSAGE: return load_noto_try(ctx, "Osage");
+	case UCDN_SCRIPT_TANGUT: return load_noto_try(ctx, "Tangut");
+	case UCDN_SCRIPT_MASARAM_GONDI: return load_noto_try(ctx, "MasaramGondi");
+	case UCDN_SCRIPT_NUSHU: return load_noto_try(ctx, "Nushu");
+	case UCDN_SCRIPT_SOYOMBO: return load_noto_try(ctx, "Soyombo");
+	case UCDN_SCRIPT_ZANABAZAR_SQUARE: return load_noto_try(ctx, "ZanabazarSquare");
 
-	/* Historic */
-	case UCDN_SCRIPT_AVESTAN: return NOTO("NotoSansAvestan");
-	case UCDN_SCRIPT_BRAHMI: return NOTO("NotoSansBrahmi");
-	case UCDN_SCRIPT_BUGINESE: return NOTO("NotoSansBuginese");
-	case UCDN_SCRIPT_BUHID: return NOTO("NotoSansBuhid");
-	case UCDN_SCRIPT_CARIAN: return NOTO("NotoSansCarian");
-	case UCDN_SCRIPT_COPTIC: return NOTO("NotoSansCoptic");
-	case UCDN_SCRIPT_CUNEIFORM: return NOTO("NotoSansCuneiform");
-	case UCDN_SCRIPT_CYPRIOT: return NOTO("NotoSansCypriot");
-	case UCDN_SCRIPT_DESERET: return NOTO("NotoSansDeseret");
-	case UCDN_SCRIPT_EGYPTIAN_HIEROGLYPHS: return NOTO("NotoSansEgyptianHieroglyphs");
-	case UCDN_SCRIPT_GLAGOLITIC: return NOTO("NotoSansGlagolitic");
-	case UCDN_SCRIPT_GOTHIC: return NOTO("NotoSansGothic");
-	case UCDN_SCRIPT_HANUNOO: return NOTO("NotoSansHanunoo");
-	case UCDN_SCRIPT_IMPERIAL_ARAMAIC: return NOTO("NotoSansImperialAramaic");
-	case UCDN_SCRIPT_INSCRIPTIONAL_PAHLAVI: return NOTO("NotoSansInscriptionalPahlavi");
-	case UCDN_SCRIPT_INSCRIPTIONAL_PARTHIAN: return NOTO("NotoSansInscriptionalParthian");
-	case UCDN_SCRIPT_KAITHI: return NOTO("NotoSansKaithi");
-	case UCDN_SCRIPT_KHAROSHTHI: return NOTO("NotoSansKharoshthi");
-	case UCDN_SCRIPT_LINEAR_B: return NOTO("NotoSansLinearB");
-	case UCDN_SCRIPT_LYCIAN: return NOTO("NotoSansLycian");
-	case UCDN_SCRIPT_LYDIAN: return NOTO("NotoSansLydian");
-	case UCDN_SCRIPT_OGHAM: return NOTO("NotoSansOgham");
-	case UCDN_SCRIPT_OLD_ITALIC: return NOTO("NotoSansOldItalic");
-	case UCDN_SCRIPT_OLD_PERSIAN: return NOTO("NotoSansOldPersian");
-	case UCDN_SCRIPT_OLD_SOUTH_ARABIAN: return NOTO("NotoSansOldSouthArabian");
-	case UCDN_SCRIPT_OLD_TURKIC: return NOTO("NotoSansOldTurkic");
-	case UCDN_SCRIPT_OSMANYA: return NOTO("NotoSansOsmanya");
-	case UCDN_SCRIPT_PHAGS_PA: return NOTO("NotoSansPhagsPa");
-	case UCDN_SCRIPT_PHOENICIAN: return NOTO("NotoSansPhoenician");
-	case UCDN_SCRIPT_REJANG: return NOTO("NotoSansRejang");
-	case UCDN_SCRIPT_RUNIC: return NOTO("NotoSansRunic");
-	case UCDN_SCRIPT_SAMARITAN: return NOTO("NotoSansSamaritan");
-	case UCDN_SCRIPT_SHAVIAN: return NOTO("NotoSansShavian");
-	case UCDN_SCRIPT_TAGALOG: return NOTO("NotoSansTagalog");
-	case UCDN_SCRIPT_TAGBANWA: return NOTO("NotoSansTagbanwa");
-	case UCDN_SCRIPT_UGARITIC: return NOTO("NotoSansUgaritic");
 	}
 	return NULL;
 }
@@ -6596,13 +6666,7 @@ FUN(PDFDocument_newNull)(JNIEnv *env, jobject self)
 
 	if (!ctx || !pdf) return NULL;
 
-	fz_try(ctx)
-		obj = pdf_new_null(ctx, pdf);
-	fz_catch(ctx)
-	{
-		jni_rethrow(env, ctx);
-		return NULL;
-	}
+	obj = PDF_NULL;
 
 	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj), self);
 	if (!jobj)
@@ -6620,13 +6684,7 @@ FUN(PDFDocument_newBoolean)(JNIEnv *env, jobject self, jboolean b)
 
 	if (!ctx || !pdf) return NULL;
 
-	fz_try(ctx)
-		obj = pdf_new_bool(ctx, pdf, b);
-	fz_catch(ctx)
-	{
-		jni_rethrow(env, ctx);
-		return NULL;
-	}
+	obj = b ? PDF_TRUE : PDF_FALSE;
 
 	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj), self);
 	if (!jobj)
@@ -6645,7 +6703,7 @@ FUN(PDFDocument_newInteger)(JNIEnv *env, jobject self, jint i)
 	if (!ctx || !pdf) return NULL;
 
 	fz_try(ctx)
-		obj = pdf_new_int(ctx, pdf, i);
+		obj = pdf_new_int(ctx, i);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -6669,7 +6727,7 @@ FUN(PDFDocument_newReal)(JNIEnv *env, jobject self, jfloat f)
 	if (!ctx || !pdf) return NULL;
 
 	fz_try(ctx)
-		obj = pdf_new_real(ctx, pdf, f);
+		obj = pdf_new_real(ctx, f);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -6698,7 +6756,7 @@ FUN(PDFDocument_newString)(JNIEnv *env, jobject self, jstring jstring)
 	if (!s) return NULL;
 
 	fz_try(ctx)
-		obj = pdf_new_text_string(ctx, pdf, s);
+		obj = pdf_new_text_string(ctx, s);
 	fz_always(ctx)
 		(*env)->ReleaseStringUTFChars(env, jstring, s);
 	fz_catch(ctx)
@@ -6743,7 +6801,7 @@ FUN(PDFDocument_newByteString)(JNIEnv *env, jobject self, jobject jbs)
 	}
 
 	fz_try(ctx)
-		obj = pdf_new_string(ctx, pdf, (char *) bs, bslen);
+		obj = pdf_new_string(ctx, (char *) bs, bslen);
 	fz_always(ctx)
 		fz_free(ctx, bs);
 	fz_catch(ctx)
@@ -6774,7 +6832,7 @@ FUN(PDFDocument_newName)(JNIEnv *env, jobject self, jstring jname)
 	if (!name) return NULL;
 
 	fz_try(ctx)
-		obj = pdf_new_name(ctx, pdf, name);
+		obj = pdf_new_name(ctx, name);
 	fz_always(ctx)
 		(*env)->ReleaseStringUTFChars(env, jname, name);
 	fz_catch(ctx)
@@ -7413,8 +7471,7 @@ FUN(PDFObject_newNull)(JNIEnv *env, jclass cls)
 
 	if (!ctx) return 0;
 
-	/* Not nice to pass doc as NULL, but it is unused */
-	return jlong_cast(pdf_new_null(ctx, NULL));
+	return jlong_cast(PDF_NULL);
 }
 
 JNIEXPORT jint JNICALL
@@ -7938,18 +7995,11 @@ FUN(PDFObject_putArrayBoolean)(JNIEnv *env, jobject self, jint index, jboolean b
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		val = pdf_new_bool(ctx, pdf, b);
-		pdf_array_put(ctx, arr, index, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_array_put(ctx, arr, index, b ? PDF_TRUE : PDF_FALSE);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -7959,18 +8009,11 @@ FUN(PDFObject_putArrayInteger)(JNIEnv *env, jobject self, jint index, jint i)
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		val = pdf_new_int(ctx, pdf, i);
-		pdf_array_put(ctx, arr, index, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_array_put_drop(ctx, arr, index, pdf_new_int(ctx, i));
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -7980,18 +8023,11 @@ FUN(PDFObject_putArrayFloat)(JNIEnv *env, jobject self, jint index, jfloat f)
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		val = pdf_new_real(ctx, pdf, f);
-		pdf_array_put(ctx, arr, index, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_array_put_drop(ctx, arr, index, pdf_new_real(ctx, f));
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8002,7 +8038,6 @@ FUN(PDFObject_putArrayString)(JNIEnv *env, jobject self, jint index, jstring jst
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
 	const char *str = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !arr) return;
 	if (jstr)
@@ -8013,13 +8048,13 @@ FUN(PDFObject_putArrayString)(JNIEnv *env, jobject self, jint index, jstring jst
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		val = str ? pdf_new_string(ctx, pdf, str, strlen(str)) : NULL;
-		pdf_array_put(ctx, arr, index, val);
+		if (str)
+			pdf_array_put_drop(ctx, arr, index, pdf_new_string(ctx, str, strlen(str)));
+		else
+			pdf_array_put(ctx, arr, index, PDF_NULL);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		if (str)
 			(*env)->ReleaseStringUTFChars(env, jstr, str);
 	}
@@ -8049,7 +8084,6 @@ FUN(PDFObject_putDictionaryStringBoolean)(JNIEnv *env, jobject self, jstring jna
 	pdf_obj *dict = from_PDFObject(env, self);
 	const char *name = NULL;
 	pdf_obj *key = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jname)
@@ -8060,14 +8094,11 @@ FUN(PDFObject_putDictionaryStringBoolean)(JNIEnv *env, jobject self, jstring jna
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		key = name ? pdf_new_name(ctx, pdf, name) : NULL;
-		val = pdf_new_bool(ctx, pdf, b);
-		pdf_dict_put(ctx, dict, key, val);
+		key = name ? pdf_new_name(ctx, name) : NULL;
+		pdf_dict_put(ctx, dict, key, b ? PDF_TRUE : PDF_FALSE);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		pdf_drop_obj(ctx, key);
 		if (name)
 			(*env)->ReleaseStringUTFChars(env, jname, name);
@@ -8083,7 +8114,6 @@ FUN(PDFObject_putDictionaryStringInteger)(JNIEnv *env, jobject self, jstring jna
 	pdf_obj *dict = from_PDFObject(env, self);
 	const char *name = NULL;
 	pdf_obj *key = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jname)
@@ -8094,14 +8124,11 @@ FUN(PDFObject_putDictionaryStringInteger)(JNIEnv *env, jobject self, jstring jna
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		key = name ? pdf_new_name(ctx, pdf, name) : NULL;
-		val = pdf_new_int(ctx, pdf, i);
-		pdf_dict_put(ctx, dict, key, val);
+		key = name ? pdf_new_name(ctx, name) : NULL;
+		pdf_dict_put_int(ctx, dict, key, i);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		pdf_drop_obj(ctx, key);
 		if (name)
 			(*env)->ReleaseStringUTFChars(env, jname, name);
@@ -8117,7 +8144,6 @@ FUN(PDFObject_putDictionaryStringFloat)(JNIEnv *env, jobject self, jstring jname
 	pdf_obj *dict = from_PDFObject(env, self);
 	const char *name = NULL;
 	pdf_obj *key = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jname)
@@ -8128,14 +8154,11 @@ FUN(PDFObject_putDictionaryStringFloat)(JNIEnv *env, jobject self, jstring jname
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		key = name ? pdf_new_name(ctx, pdf, name) : NULL;
-		val = pdf_new_real(ctx, pdf, f);
-		pdf_dict_put(ctx, dict, key, val);
+		key = name ? pdf_new_name(ctx, name) : NULL;
+		pdf_dict_put_real(ctx, dict, key, f);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		pdf_drop_obj(ctx, key);
 		if (name)
 			(*env)->ReleaseStringUTFChars(env, jname, name);
@@ -8149,11 +8172,9 @@ FUN(PDFObject_putDictionaryStringString)(JNIEnv *env, jobject self, jstring jnam
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
-	pdf_document *pdf = pdf_get_bound_document(ctx, dict);
 	const char *name = NULL;
 	const char *str = NULL;
 	pdf_obj *key = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jname)
@@ -8173,13 +8194,14 @@ FUN(PDFObject_putDictionaryStringString)(JNIEnv *env, jobject self, jstring jnam
 
 	fz_try(ctx)
 	{
-		key = name ? pdf_new_name(ctx, pdf, name) : NULL;
-		val = val ? pdf_new_string(ctx, pdf, str, strlen(str)) : NULL;
-		pdf_dict_put(ctx, dict, key, val);
+		key = name ? pdf_new_name(ctx, name) : NULL;
+		if (str)
+			pdf_dict_put_string(ctx, dict, key, str, strlen(str));
+		else
+			pdf_dict_put(ctx, dict, key, PDF_NULL);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		pdf_drop_obj(ctx, key);
 		if (str)
 			(*env)->ReleaseStringUTFChars(env, jstr, str);
@@ -8195,7 +8217,6 @@ FUN(PDFObject_putDictionaryStringPDFObject)(JNIEnv *env, jobject self, jstring j
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
-	pdf_document *pdf = pdf_get_bound_document(ctx, dict);
 	pdf_obj *val = from_PDFObject(env, jobj);
 	const char *name = NULL;
 	pdf_obj *key = NULL;
@@ -8209,7 +8230,7 @@ FUN(PDFObject_putDictionaryStringPDFObject)(JNIEnv *env, jobject self, jstring j
 
 	fz_try(ctx)
 	{
-		key = name ? pdf_new_name(ctx, pdf, name) : NULL;
+		key = name ? pdf_new_name(ctx, name) : NULL;
 		pdf_dict_put(ctx, dict, key, val);
 	}
 	fz_always(ctx)
@@ -8228,18 +8249,11 @@ FUN(PDFObject_putDictionaryPDFObjectBoolean)(JNIEnv *env, jobject self, jobject 
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
 	pdf_obj *name = from_PDFObject(env, jname);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		val = pdf_new_bool(ctx, pdf, b);
-		pdf_dict_put(ctx, dict, name, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_dict_put(ctx, dict, name, b ? PDF_TRUE : PDF_FALSE);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8250,18 +8264,11 @@ FUN(PDFObject_putDictionaryPDFObjectInteger)(JNIEnv *env, jobject self, jobject 
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
 	pdf_obj *name = from_PDFObject(env, jname);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		val = pdf_new_int(ctx, pdf, i);
-		pdf_dict_put(ctx, dict, name, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_dict_put_int(ctx, dict, name, i);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8272,18 +8279,11 @@ FUN(PDFObject_putDictionaryPDFObjectFloat)(JNIEnv *env, jobject self, jobject jn
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
 	pdf_obj *name = from_PDFObject(env, jname);
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		val = pdf_new_real(ctx, pdf, f);
-		pdf_dict_put(ctx, dict, name, val);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, val);
+		pdf_dict_put_real(ctx, dict, name, f);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8295,7 +8295,6 @@ FUN(PDFObject_putDictionaryPDFObjectString)(JNIEnv *env, jobject self, jobject j
 	pdf_obj *dict = from_PDFObject(env, self);
 	pdf_obj *name = from_PDFObject(env, jname);
 	const char *str = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jstr)
@@ -8306,13 +8305,13 @@ FUN(PDFObject_putDictionaryPDFObjectString)(JNIEnv *env, jobject self, jobject j
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		val = str ? pdf_new_string(ctx, pdf, str, strlen(str)) : NULL;
-		pdf_dict_put(ctx, dict, name, val);
+		if (str)
+			pdf_dict_put_string(ctx, dict, name, str, strlen(str));
+		else
+			pdf_dict_put(ctx, dict, name, PDF_NULL);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		if (str)
 			(*env)->ReleaseStringUTFChars(env, jstr, str);
 	}
@@ -8356,7 +8355,6 @@ FUN(PDFObject_deleteDictionaryString)(JNIEnv *env, jobject self, jstring jname)
 	fz_context *ctx = get_context(env);
 	pdf_obj *dict = from_PDFObject(env, self);
 	const char *name = NULL;
-	pdf_obj *val = NULL;
 
 	if (!ctx || !dict) return;
 	if (jname)
@@ -8367,13 +8365,10 @@ FUN(PDFObject_deleteDictionaryString)(JNIEnv *env, jobject self, jstring jname)
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, dict);
-		val = name ? pdf_new_name(ctx, pdf, name) : NULL;
-		pdf_dict_del(ctx, dict, val);
+		pdf_dict_dels(ctx, dict, name);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, val);
 		if (name)
 			(*env)->ReleaseStringUTFChars(env, jname, name);
 	}
@@ -8579,18 +8574,11 @@ FUN(PDFObject_pushBoolean)(JNIEnv *env, jobject self, jboolean b)
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *item = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		item = pdf_new_bool(ctx, pdf, b);
-		pdf_array_push(ctx, arr, item);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, item);
+		pdf_array_push_bool(ctx, arr, b);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8600,18 +8588,11 @@ FUN(PDFObject_pushInteger)(JNIEnv *env, jobject self, jint i)
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *item = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		item = pdf_new_int(ctx, pdf, i);
-		pdf_array_push(ctx, arr, item);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, item);
+		pdf_array_push_int(ctx, arr, i);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8621,18 +8602,11 @@ FUN(PDFObject_pushFloat)(JNIEnv *env, jobject self, jfloat f)
 {
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
-	pdf_obj *item = NULL;
 
 	if (!ctx || !arr) return;
 
 	fz_try(ctx)
-	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		item = pdf_new_real(ctx, pdf, f);
-		pdf_array_push(ctx, arr, item);
-	}
-	fz_always(ctx)
-		pdf_drop_obj(ctx, item);
+		pdf_array_push_real(ctx, arr, f);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
 }
@@ -8643,7 +8617,6 @@ FUN(PDFObject_pushString)(JNIEnv *env, jobject self, jstring jstr)
 	fz_context *ctx = get_context(env);
 	pdf_obj *arr = from_PDFObject(env, self);
 	const char *str = NULL;
-	pdf_obj *item = NULL;
 
 	if (!ctx || !arr) return;
 	if (jstr)
@@ -8654,13 +8627,13 @@ FUN(PDFObject_pushString)(JNIEnv *env, jobject self, jstring jstr)
 
 	fz_try(ctx)
 	{
-		pdf_document *pdf = pdf_get_bound_document(ctx, arr);
-		item = str ? pdf_new_string(ctx, pdf, str, strlen(str)) : NULL;
-		pdf_array_push(ctx, arr, item);
+		if (str)
+			pdf_array_push_string(ctx, arr, str, strlen(str));
+		else
+			pdf_array_push(ctx, arr, PDF_NULL);
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, item);
 		if (str)
 			(*env)->ReleaseStringUTFChars(env, jstr, str);
 	}
@@ -9257,7 +9230,7 @@ FUN(PDFAnnotation_updateAppearance)(JNIEnv *env, jobject self)
 
 	fz_try(ctx)
 	{
-		pdf_dict_del(ctx, annot->obj, PDF_NAME_AP); /* nuke old AP */
+		pdf_dict_del(ctx, annot->obj, PDF_NAME(AP)); /* nuke old AP */
 		pdf_update_appearance(ctx, annot);
 		pdf_update_annot(ctx, annot); /* ensure new AP is put into annot */
 	}

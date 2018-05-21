@@ -2013,10 +2013,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\source\pdf\pdf-cmap-table.c"
-				>
-			</File>
-			<File
 				RelativePath="..\..\source\pdf\pdf-cmap.c"
 				>
 			</File>
@@ -2082,10 +2078,6 @@
 			</File>
 			<File
 				RelativePath="..\..\source\pdf\pdf-interpret.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\source\pdf\pdf-js-util.js"
 				>
 			</File>
 			<File
@@ -2568,26 +2560,6 @@
 		<Filter
 			Name="generated"
 			>
-			<File
-				RelativePath="..\..\generated\pdf-cmap-cjk.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\generated\pdf-cmap-extra.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\generated\pdf-cmap-utf32.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\generated\pdf-cmap-utf8.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\generated\pdf-js-util.c"
-				>
-			</File>
 		</Filter>
 	</Files>
 	<Globals>

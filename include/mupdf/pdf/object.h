@@ -15,13 +15,11 @@ typedef struct pdf_crypt_s pdf_crypt;
 
 typedef struct pdf_obj_s pdf_obj;
 
-pdf_obj *pdf_new_null(fz_context *ctx, pdf_document *doc);
-pdf_obj *pdf_new_bool(fz_context *ctx, pdf_document *doc, int b);
-pdf_obj *pdf_new_int(fz_context *ctx, pdf_document *doc, int64_t i);
-pdf_obj *pdf_new_real(fz_context *ctx, pdf_document *doc, float f);
-pdf_obj *pdf_new_name(fz_context *ctx, pdf_document *doc, const char *str);
-pdf_obj *pdf_new_string(fz_context *ctx, pdf_document *doc, const char *str, size_t len);
-pdf_obj *pdf_new_text_string(fz_context *ctx, pdf_document *doc, const char *s);
+pdf_obj *pdf_new_int(fz_context *ctx, int64_t i);
+pdf_obj *pdf_new_real(fz_context *ctx, float f);
+pdf_obj *pdf_new_name(fz_context *ctx, const char *str);
+pdf_obj *pdf_new_string(fz_context *ctx, const char *str, size_t len);
+pdf_obj *pdf_new_text_string(fz_context *ctx, const char *s);
 pdf_obj *pdf_new_indirect(fz_context *ctx, pdf_document *doc, int num, int gen);
 pdf_obj *pdf_new_array(fz_context *ctx, pdf_document *doc, int initialcap);
 pdf_obj *pdf_new_dict(fz_context *ctx, pdf_document *doc, int initialcap);
@@ -30,8 +28,6 @@ pdf_obj *pdf_new_matrix(fz_context *ctx, pdf_document *doc, const fz_matrix *mtx
 pdf_obj *pdf_copy_array(fz_context *ctx, pdf_obj *array);
 pdf_obj *pdf_copy_dict(fz_context *ctx, pdf_obj *dict);
 pdf_obj *pdf_deep_copy_obj(fz_context *ctx, pdf_obj *obj);
-
-pdf_obj *pdf_new_obj_from_str(fz_context *ctx, pdf_document *doc, const char *src);
 
 pdf_obj *pdf_keep_obj(fz_context *ctx, pdf_obj *obj);
 void pdf_drop_obj(fz_context *ctx, pdf_obj *obj);
@@ -52,15 +48,7 @@ int pdf_is_stream(fz_context *ctx, pdf_obj *obj);
 pdf_obj *pdf_resolve_obj(fz_context *ctx, pdf_obj *a);
 int pdf_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b);
 int pdf_objcmp_resolve(fz_context *ctx, pdf_obj *a, pdf_obj *b);
-
-static inline int pdf_name_eq(fz_context *ctx, pdf_obj *a, pdf_obj *b)
-{
-	if (a == b)
-		return 1;
-	if (a < PDF_OBJ_NAME__LIMIT && b < PDF_OBJ_NAME__LIMIT)
-		return 0;
-	return !pdf_objcmp_resolve(ctx, a, b);
-}
+int pdf_name_eq(fz_context *ctx, pdf_obj *a, pdf_obj *b);
 
 /* obj marking and unmarking functions - to avoid infinite recursions. */
 int pdf_obj_marked(fz_context *ctx, pdf_obj *obj);
@@ -173,7 +161,7 @@ char *pdf_to_utf8(fz_context *ctx, pdf_obj *src);
 char *pdf_load_stream_as_utf8(fz_context *ctx, pdf_obj *src);
 char *pdf_load_stream_or_string_as_utf8(fz_context *ctx, pdf_obj *src);
 unsigned short *pdf_to_ucs2(fz_context *ctx, pdf_obj *src);
-pdf_obj *pdf_to_utf8_name(fz_context *ctx, pdf_document *doc, pdf_obj *src);
+pdf_obj *pdf_to_utf8_name(fz_context *ctx, pdf_obj *src);
 char *pdf_from_ucs2(fz_context *ctx, unsigned short *str);
 void pdf_to_ucs2_buf(fz_context *ctx, unsigned short *buffer, pdf_obj *src);
 
@@ -184,5 +172,24 @@ pdf_document *pdf_get_indirect_document(fz_context *ctx, pdf_obj *obj);
 pdf_document *pdf_get_bound_document(fz_context *ctx, pdf_obj *obj);
 void pdf_set_str_len(fz_context *ctx, pdf_obj *obj, int newlen);
 void pdf_set_int(fz_context *ctx, pdf_obj *obj, int64_t i);
+
+/* Voodoo to create PDF_NAME(Foo) macros from name-table.h */
+
+#define PDF_NAME(X) ((pdf_obj*)(intptr_t)PDF_ENUM_NAME_##X)
+
+#define PDF_MAKE_NAME(STRING,NAME) PDF_ENUM_NAME_##NAME,
+enum {
+	PDF_ENUM_NULL,
+	PDF_ENUM_TRUE,
+	PDF_ENUM_FALSE,
+#include "mupdf/pdf/name-table.h"
+	PDF_ENUM_LIMIT,
+};
+#undef PDF_MAKE_NAME
+
+#define PDF_NULL ((pdf_obj*)(intptr_t)PDF_ENUM_NULL)
+#define PDF_TRUE ((pdf_obj*)(intptr_t)PDF_ENUM_TRUE)
+#define PDF_FALSE ((pdf_obj*)(intptr_t)PDF_ENUM_FALSE)
+#define PDF_LIMIT ((pdf_obj*)(intptr_t)PDF_ENUM_LIMIT)
 
 #endif

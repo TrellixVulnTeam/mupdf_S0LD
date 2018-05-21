@@ -374,6 +374,7 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int language, int se
 	fz_font **fontp;
 	const unsigned char *data;
 	int index;
+	int subfont;
 	int size;
 
 	if (script < 0 || script > nelem(ctx->font->fallback))
@@ -388,8 +389,8 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int language, int se
 		{
 		case FZ_LANG_ja: index = UCDN_LAST_SCRIPT + 1; break;
 		case FZ_LANG_ko: index = UCDN_LAST_SCRIPT + 2; break;
-		case FZ_LANG_zh_Hant: index = UCDN_LAST_SCRIPT + 3; break;
-		case FZ_LANG_zh_Hans: index = UCDN_LAST_SCRIPT + 4; break;
+		case FZ_LANG_zh_Hans: index = UCDN_LAST_SCRIPT + 3; break;
+		case FZ_LANG_zh_Hant: index = UCDN_LAST_SCRIPT + 4; break;
 		}
 	}
 	if (script == UCDN_SCRIPT_ARABIC)
@@ -408,9 +409,9 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int language, int se
 		*fontp = fz_load_system_fallback_font(ctx, script, language, serif, bold, italic);
 		if (!*fontp)
 		{
-			data = fz_lookup_noto_font(ctx, script, language, serif, &size);
+			data = fz_lookup_noto_font(ctx, script, language, serif, &size, &subfont);
 			if (data)
-				*fontp = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
+				*fontp = fz_new_font_from_memory(ctx, NULL, data, size, subfont, 0);
 		}
 	}
 
@@ -646,11 +647,11 @@ fz_new_base14_font(fz_context *ctx, const char *name)
 }
 
 fz_font *
-fz_new_cjk_font(fz_context *ctx, int ordering, int serif, int wmode)
+fz_new_cjk_font(fz_context *ctx, int ordering, int serif)
 {
 	const unsigned char *data;
 	int size, index;
-	data = fz_lookup_cjk_font(ctx, ordering, serif, wmode, &size, &index);
+	data = fz_lookup_cjk_font(ctx, ordering, serif, &size, &index);
 	if (!data)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find builtin CJK font");
 	return fz_new_font_from_memory(ctx, NULL, data, size, index, 0);
@@ -1643,6 +1644,40 @@ fz_encode_character_with_fallback(fz_context *ctx, fz_font *user_font, int unico
 		if (gid > 0)
 			return *out_font = font, gid;
 	}
+
+#ifndef TOFU_CJK_LANG
+	if (script == UCDN_SCRIPT_HAN)
+	{
+		font = fz_load_fallback_font(ctx, script, FZ_LANG_zh_Hant, user_font->flags.is_serif, user_font->flags.is_bold, user_font->flags.is_italic);
+		if (font)
+		{
+			gid = fz_encode_character(ctx, font, unicode);
+			if (gid > 0)
+				return *out_font = font, gid;
+		}
+		font = fz_load_fallback_font(ctx, script, FZ_LANG_ja, user_font->flags.is_serif, user_font->flags.is_bold, user_font->flags.is_italic);
+		if (font)
+		{
+			gid = fz_encode_character(ctx, font, unicode);
+			if (gid > 0)
+				return *out_font = font, gid;
+		}
+		font = fz_load_fallback_font(ctx, script, FZ_LANG_ko, user_font->flags.is_serif, user_font->flags.is_bold, user_font->flags.is_italic);
+		if (font)
+		{
+			gid = fz_encode_character(ctx, font, unicode);
+			if (gid > 0)
+				return *out_font = font, gid;
+		}
+		font = fz_load_fallback_font(ctx, script, FZ_LANG_zh_Hans, user_font->flags.is_serif, user_font->flags.is_bold, user_font->flags.is_italic);
+		if (font)
+		{
+			gid = fz_encode_character(ctx, font, unicode);
+			if (gid > 0)
+				return *out_font = font, gid;
+		}
+	}
+#endif
 
 	font = fz_load_fallback_symbol_font(ctx);
 	if (font)
