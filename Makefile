@@ -10,6 +10,10 @@ ifndef OUT
   OUT := build/$(build)
 endif
 
+ifndef GENERATED
+  GENERATED := build/generated
+endif
+
 default: all
 
 # --- Configuration ---
@@ -80,7 +84,7 @@ $(OUT)/source/helpers/pkcs7/%.o : source/helpers/pkcs7/%.c
 $(OUT)/source/tools/%.o : source/tools/%.c
 	$(CC_CMD) -Wall $(THIRD_CFLAGS) $(THREADING_CFLAGS)
 
-$(OUT)/generated/%.o : generated/%.c
+$(OUT)/generated/%.o : $(GENERATED)/%.c
 	$(CC_CMD) -O0
 
 $(OUT)/platform/x11/%.o : platform/x11/%.c
@@ -139,12 +143,12 @@ FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.otf))
 FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.ttf))
 FONT_BIN += $(sort $(wildcard resources/fonts/sil/*.cff))
 
-FONT_GEN := $(FONT_BIN:%=generated/%.c)
+FONT_GEN := $(FONT_BIN:%=$(GENERATED)/%.c)
 
-generated/%.cff.c : %.cff $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.otf.c : %.otf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.ttf.c : %.ttf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.ttc.c : %.ttc $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+$(GENERATED)/%.cff.c : %.cff $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+$(GENERATED)/%.otf.c : %.otf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+$(GENERATED)/%.ttf.c : %.ttf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+$(GENERATED)/%.ttc.c : %.ttc $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
 
 ifeq ($(OS),Linux)
   MUPDF_OBJ += $(FONT_BIN:%=$(OUT)/%.o)
@@ -153,7 +157,7 @@ ifeq ($(OS),Linux)
   $(OUT)/%.ttf.o : %.ttf ; $(OBJCOPY_CMD)
   $(OUT)/%.ttc.o : %.ttc ; $(OBJCOPY_CMD)
 else
-  MUPDF_OBJ += $(FONT_GEN:%.c=$(OUT)/%.o)
+  MUPDF_OBJ += $(FONT_GEN:$(GENERATED)/%.c=$(OUT)/generated/%.o)
 endif
 
 generate: $(FONT_GEN)
@@ -382,7 +386,7 @@ all: libs apps
 clean:
 	rm -rf $(OUT)
 nuke:
-	rm -rf build/* generated
+	rm -rf build/*
 
 release:
 	$(MAKE) build=release
