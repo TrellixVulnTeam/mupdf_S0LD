@@ -75,6 +75,7 @@ SYS_ZLIB_LIBS := -lz
 ifeq ($(OS),MINGW)
   WINDRES := windres
   HAVE_WIN32 := yes
+  HAVE_GLUT := yes
 
 else ifeq ($(OS),MACOS)
   HAVE_GLUT := yes
@@ -190,6 +191,7 @@ LD = i686-w64-mingw32-gcc
 AR = i686-w64-mingw32-ar
 WINDRES = i686-w64-mingw32-windres
 HAVE_WIN32=yes
+HAVE_GLUT := yes
 endif
 
 ifeq "$(OS)" "w64_amd64-cross-mingw32"
@@ -199,6 +201,7 @@ LD = x86_64-w64-mingw32-gcc
 AR = x86_64-w64-mingw32-ar
 WINDRES = x86-64-mingw32-windres
 HAVE_WIN32=yes
+HAVE_GLUT := yes
 endif
 
 ifeq "$(OS)" "pnacl-cross"

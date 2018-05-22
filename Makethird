@@ -346,13 +346,23 @@ ifeq ($(USE_SYSTEM_GLUT),yes)
 else
 
 GLUT_SRC += $(sort $(wildcard thirdparty/freeglut/src/fg_*.c))
+ifeq ($(HAVE_WIN32),yes)
+GLUT_SRC += $(sort $(wildcard thirdparty/freeglut/src/mswin/*.c))
+GLUT_SRC += thirdparty/freeglut/src/util/xparsegeometry_repl.c
+else
 GLUT_SRC += $(sort $(wildcard thirdparty/freeglut/src/x11/*.c))
+endif # HAVE_WIN32
 
 GLUT_OBJ := $(GLUT_SRC:%.c=$(OUT)/%.o)
 
 LOCAL_GLUT_CFLAGS += -Ithirdparty/freeglut/include
 LOCAL_GLUT_CFLAGS += -Ithirdparty/freeglut/src
-LOCAL_GLUT_CFLAGS += -DHAVE_UNISTD_H -DHAVE_STDINT_H -DHAVE_X11_EXTENSIONS_XRANDR_H
+LOCAL_GLUT_CFLAGS += -DHAVE_UNISTD_H -DHAVE_STDINT_H
+ifeq ($(HAVE_WIN32),yes)
+LOCAL_GLUT_CFLAGS += -DFREEGLUT_STATIC -DNEED_XPARSEGEOMETRY_IMPL
+else
+LOCAL_GLUT_CFLAGS += -DHAVE_X11_EXTENSIONS_XRANDR_H
+endif # HAVE_WIN32
 
 GLUT_LIB := $(OUT)/libfreeglut.a
 
@@ -362,7 +372,12 @@ $(OUT)/thirdparty/freeglut/%.o: thirdparty/freeglut/%.c
 	$(CC_CMD) $(LOCAL_GLUT_CFLAGS)
 
 GLUT_CFLAGS := -Ithirdparty/freeglut/include
+ifeq ($(HAVE_WIN32),yes)
+GLUT_CFLAGS += -DFREEGLUT_STATIC
+GLUT_LIBS := -lopengl32 -mwindows -lwinmm
+else
 GLUT_LIBS := -lGL -lX11 -lXrandr
+endif # HAVE_WIN32
 
 endif
 
