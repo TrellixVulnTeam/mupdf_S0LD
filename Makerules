@@ -73,6 +73,7 @@ SYS_OPENJPEG_LIBS := -lopenjp2
 SYS_ZLIB_LIBS := -lz
 
 ifeq ($(OS),MINGW)
+  CC = gcc
   WINDRES := windres
   HAVE_WIN32 := yes
   HAVE_GLUT := yes
