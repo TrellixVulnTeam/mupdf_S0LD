@@ -1919,10 +1919,10 @@ JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_PDFDocument_addSimpleFont
 /*
  * Class:     com_artifex_mupdf_fitz_PDFDocument
  * Method:    addCJKFont
- * Signature: (Lcom/artifex/mupdf/fitz/Font;I)Lcom/artifex/mupdf/fitz/PDFObject;
+ * Signature: (Lcom/artifex/mupdf/fitz/Font;IIZ)Lcom/artifex/mupdf/fitz/PDFObject;
  */
 JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_PDFDocument_addCJKFont
-  (JNIEnv *, jobject, jobject, jint);
+  (JNIEnv *, jobject, jobject, jint, jint, jboolean);
 
 /*
  * Class:     com_artifex_mupdf_fitz_PDFDocument
@@ -3273,14 +3273,6 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_Text_finalize
  */
 JNIEXPORT jlong JNICALL Java_com_artifex_mupdf_fitz_Text_newNative
   (JNIEnv *, jobject);
-
-/*
- * Class:     com_artifex_mupdf_fitz_Text
- * Method:    cloneNative
- * Signature: (Lcom/artifex/mupdf/fitz/Text;)J
- */
-JNIEXPORT jlong JNICALL Java_com_artifex_mupdf_fitz_Text_cloneNative
-  (JNIEnv *, jobject, jobject);
 
 /*
  * Class:     com_artifex_mupdf_fitz_Text

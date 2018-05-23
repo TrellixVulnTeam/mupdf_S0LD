@@ -759,9 +759,9 @@ static fz_font *load_noto_arabic(fz_context *ctx)
 
 static fz_font *load_noto_try(fz_context *ctx, const char *stem)
 {
-	fz_font *font = load_noto(ctx, buf, "NotoSerif", stem, "-Regular", 0);
-	if (!font) font = load_noto(ctx, buf, "NotoSans", stem, "-Regular", 0);
-	if (!font) font = load_noto(ctx, buf, "DroidSans", stem, "-Regular", 0);
+	fz_font *font = load_noto(ctx, "NotoSerif", stem, "-Regular", 0);
+	if (!font) font = load_noto(ctx, "NotoSans", stem, "-Regular", 0);
+	if (!font) font = load_noto(ctx, "DroidSans", stem, "-Regular", 0);
 	return font;
 }
 
@@ -4359,26 +4359,6 @@ FUN(Text_finalize)(JNIEnv *env, jobject self)
 }
 
 JNIEXPORT jlong JNICALL
-FUN(Text_clone)(JNIEnv *env, jobject self)
-{
-	fz_context *ctx = get_context(env);
-	fz_text *old_text = from_Text(env, self);
-	fz_text *new_text = NULL;
-
-	if (!ctx || !old_text) return 0;
-
-	fz_try(ctx)
-		new_text = fz_clone_text(ctx, old_text);
-	fz_catch(ctx)
-	{
-		jni_rethrow(env, ctx);
-		return 0;
-	}
-
-	return jlong_cast(new_text);
-}
-
-JNIEXPORT jlong JNICALL
 FUN(Text_newNative)(JNIEnv *env, jobject self)
 {
 	fz_context *ctx = get_context(env);
@@ -4388,27 +4368,6 @@ FUN(Text_newNative)(JNIEnv *env, jobject self)
 
 	fz_try(ctx)
 		text = fz_new_text(ctx);
-	fz_catch(ctx)
-	{
-		jni_rethrow(env, ctx);
-		return 0;
-	}
-
-	return jlong_cast(text);
-}
-
-JNIEXPORT jlong JNICALL
-FUN(Text_cloneNative)(JNIEnv *env, jobject self, jobject jold)
-{
-	fz_context *ctx = get_context(env);
-	fz_text *old = from_Text(env, jold);
-	fz_text *text = NULL;
-
-	if (!ctx) return 0;
-	if (!old) { jni_throw_arg(env, "old must not be null"); return 0; }
-
-	fz_try(ctx)
-		text = fz_clone_text(ctx, old);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -7266,7 +7225,7 @@ FUN(PDFDocument_addFont)(JNIEnv *env, jobject self, jobject jfont)
 }
 
 JNIEXPORT jobject JNICALL
-FUN(PDFDocument_addCJKFont)(JNIEnv *env, jobject self, jobject jfont, jint ordering)
+FUN(PDFDocument_addCJKFont)(JNIEnv *env, jobject self, jobject jfont, jint ordering, jint wmode, jboolean serif)
 {
 	fz_context *ctx = get_context(env);
 	pdf_document *pdf = from_PDFDocument(env, self);
@@ -7277,7 +7236,7 @@ FUN(PDFDocument_addCJKFont)(JNIEnv *env, jobject self, jobject jfont, jint order
 	if (!font) { jni_throw_arg(env, "font must not be null"); return NULL; }
 
 	fz_try(ctx)
-		ind = pdf_add_cjk_font(ctx, pdf, font, ordering);
+		ind = pdf_add_cjk_font(ctx, pdf, font, ordering, wmode, serif);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);

@@ -42,6 +42,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="0"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
@@ -236,6 +237,10 @@
 					<Filter
 						Name="noto"
 						>
+						<File
+							RelativePath="..\..\generated\resources\fonts\noto\NotoEmoji-Regular.ttf.c"
+							>
+						</File>
 						<File
 							RelativePath="..\..\generated\resources\fonts\noto\NotoKufiArabic-Regular.ttf.c"
 							>
