@@ -258,7 +258,7 @@ pdf_annot_type(fz_context *ctx, pdf_annot *annot)
 int
 pdf_annot_flags(fz_context *ctx, pdf_annot *annot)
 {
-	return pdf_to_int(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(F)));
+	return pdf_dict_get_int(ctx, annot->obj, PDF_NAME(F));
 }
 
 void
@@ -320,7 +320,7 @@ int
 pdf_annot_is_open(fz_context *ctx, pdf_annot *annot)
 {
 	check_allowed_subtypes(ctx, annot, PDF_NAME(Open), open_subtypes);
-	return pdf_to_bool(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(Open)));
+	return pdf_dict_get_bool(ctx, annot->obj, PDF_NAME(Open));
 }
 
 void
@@ -533,7 +533,7 @@ pdf_set_annot_border(fz_context *ctx, pdf_annot *annot, float w)
 int
 pdf_annot_quadding(fz_context *ctx, pdf_annot *annot)
 {
-	int q = pdf_to_int(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(Q)));
+	int q = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(Q));
 	return (q < 0 || q > 2) ? 0 : q;
 }
 
@@ -584,16 +584,16 @@ static void pdf_annot_color_imp(fz_context *ctx, pdf_annot *annot, pdf_obj *key,
 		if (n)
 			*n = 1;
 		if (color)
-			color[0] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 0));
+			color[0] = pdf_array_get_real(ctx, arr, 0);
 		break;
 	case 3:
 		if (n)
 			*n = 3;
 		if (color)
 		{
-			color[0] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 0));
-			color[1] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 1));
-			color[2] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 2));
+			color[0] = pdf_array_get_real(ctx, arr, 0);
+			color[1] = pdf_array_get_real(ctx, arr, 1);
+			color[2] = pdf_array_get_real(ctx, arr, 2);
 		}
 		break;
 	case 4:
@@ -602,10 +602,10 @@ static void pdf_annot_color_imp(fz_context *ctx, pdf_annot *annot, pdf_obj *key,
 			*n = 4;
 		if (color)
 		{
-			color[0] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 0));
-			color[1] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 1));
-			color[2] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 2));
-			color[3] = pdf_to_real(ctx, pdf_array_get(ctx, arr, 3));
+			color[0] = pdf_array_get_real(ctx, arr, 0);
+			color[1] = pdf_array_get_real(ctx, arr, 1);
+			color[2] = pdf_array_get_real(ctx, arr, 2);
+			color[3] = pdf_array_get_real(ctx, arr, 3);
 		}
 		break;
 	}
@@ -715,10 +715,10 @@ pdf_annot_line(fz_context *ctx, pdf_annot *annot, fz_point *a, fz_point *b)
 	pdf_page_transform(ctx, annot->page, NULL, &page_ctm);
 
 	line = pdf_dict_get(ctx, annot->obj, PDF_NAME(L));
-	a->x = pdf_to_real(ctx, pdf_array_get(ctx, line, 0));
-	a->y = pdf_to_real(ctx, pdf_array_get(ctx, line, 1));
-	b->x = pdf_to_real(ctx, pdf_array_get(ctx, line, 2));
-	b->y = pdf_to_real(ctx, pdf_array_get(ctx, line, 3));
+	a->x = pdf_array_get_real(ctx, line, 0);
+	a->y = pdf_array_get_real(ctx, line, 1);
+	b->x = pdf_array_get_real(ctx, line, 2);
+	b->y = pdf_array_get_real(ctx, line, 3);
 	fz_transform_point(a, &page_ctm);
 	fz_transform_point(b, &page_ctm);
 }
@@ -781,8 +781,8 @@ pdf_annot_vertex(fz_context *ctx, pdf_annot *annot, int i)
 
 	pdf_page_transform(ctx, annot->page, NULL, &page_ctm);
 
-	point.x = pdf_to_real(ctx, pdf_array_get(ctx, vertices, i * 2));
-	point.y = pdf_to_real(ctx, pdf_array_get(ctx, vertices, i * 2 + 1));
+	point.x = pdf_array_get_real(ctx, vertices, i * 2);
+	point.y = pdf_array_get_real(ctx, vertices, i * 2 + 1);
 	fz_transform_point(&point, &page_ctm);
 
 	return point;
@@ -903,8 +903,8 @@ pdf_annot_quad_point(fz_context *ctx, pdf_annot *annot, int idx, float v[8])
 	for (i = 0; i < 8; i += 2)
 	{
 		fz_point point;
-		point.x = pdf_to_real(ctx, pdf_array_get(ctx, quad_points, idx * 8 + i + 0));
-		point.y = pdf_to_real(ctx, pdf_array_get(ctx, quad_points, idx * 8 + i + 1));
+		point.x = pdf_array_get_real(ctx, quad_points, idx * 8 + i + 0);
+		point.y = pdf_array_get_real(ctx, quad_points, idx * 8 + i + 1);
 		fz_transform_point(&point, &page_ctm);
 		v[i+0] = point.x;
 		v[i+1] = point.y;
@@ -1033,8 +1033,8 @@ pdf_annot_ink_list_stroke_vertex(fz_context *ctx, pdf_annot *annot, int i, int k
 
 	pdf_page_transform(ctx, annot->page, NULL, &page_ctm);
 
-	point.x = pdf_to_real(ctx, pdf_array_get(ctx, stroke, k * 2 + 0));
-	point.y = pdf_to_real(ctx, pdf_array_get(ctx, stroke, k * 2 + 1));
+	point.x = pdf_array_get_real(ctx, stroke, k * 2 + 0);
+	point.y = pdf_array_get_real(ctx, stroke, k * 2 + 1);
 	fz_transform_point(&point, &page_ctm);
 
 	return point;
@@ -1141,7 +1141,7 @@ pdf_set_text_annot_position(fz_context *ctx, pdf_annot *annot, fz_point pt)
 
 	pdf_dict_put_rect(ctx, annot->obj, PDF_NAME(Rect), &rect);
 
-	flags = pdf_to_int(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(F)));
+	flags = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(F));
 	flags |= (PDF_ANNOT_IS_NO_ZOOM|PDF_ANNOT_IS_NO_ROTATE);
 	pdf_dict_put_int(ctx, annot->obj, PDF_NAME(F), flags);
 }

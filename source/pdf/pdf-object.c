@@ -402,9 +402,11 @@ pdf_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b)
 	if (a == b)
 		return 0;
 
+	/* a or b is null, true, or false */
 	if (a <= PDF_FALSE || b <= PDF_FALSE)
 		return 1;
 
+	/* a is a constant name */
 	if (a < PDF_LIMIT)
 	{
 		if (b < PDF_LIMIT)
@@ -414,6 +416,7 @@ pdf_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b)
 		return strcmp(PDF_NAME_LIST[(intptr_t)a], NAME(b)->n);
 	}
 
+	/* b is a constant name */
 	if (b < PDF_LIMIT)
 	{
 		if (a->kind != PDF_NAME)
@@ -421,6 +424,7 @@ pdf_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b)
 		return strcmp(NAME(a)->n, PDF_NAME_LIST[(intptr_t)b]);
 	}
 
+	/* both a and b are allocated objects */
 	if (a->kind != b->kind)
 		return 1;
 
@@ -2216,4 +2220,42 @@ pdf_obj *pdf_array_push_dict(fz_context *ctx, pdf_obj *array, int initial)
 	pdf_obj *obj = pdf_new_dict(ctx, pdf_get_bound_document(ctx, array), initial);
 	pdf_array_push_drop(ctx, array, obj);
 	return obj;
+}
+
+int pdf_dict_get_bool(fz_context *ctx, pdf_obj *dict, pdf_obj *key)
+{
+	return pdf_to_bool(ctx, pdf_dict_get(ctx, dict, key));
+}
+
+int pdf_dict_get_int(fz_context *ctx, pdf_obj *dict, pdf_obj *key)
+{
+	return pdf_to_int(ctx, pdf_dict_get(ctx, dict, key));
+}
+
+float pdf_dict_get_real(fz_context *ctx, pdf_obj *dict, pdf_obj *key)
+{
+	return pdf_to_real(ctx, pdf_dict_get(ctx, dict, key));
+}
+
+const char *pdf_dict_get_string(fz_context *ctx, pdf_obj *dict, pdf_obj *key, size_t *sizep)
+{
+	pdf_obj *val = pdf_dict_get(ctx, dict, key);
+	if (sizep)
+		*sizep = pdf_to_str_len(ctx, val);
+	return pdf_to_str_buf(ctx, val);
+}
+
+int pdf_array_get_bool(fz_context *ctx, pdf_obj *array, int index)
+{
+	return pdf_to_bool(ctx, pdf_array_get(ctx, array, index));
+}
+
+int pdf_array_get_int(fz_context *ctx, pdf_obj *array, int index)
+{
+	return pdf_to_int(ctx, pdf_array_get(ctx, array, index));
+}
+
+float pdf_array_get_real(fz_context *ctx, pdf_obj *array, int index)
+{
+	return pdf_to_real(ctx, pdf_array_get(ctx, array, index));
 }
