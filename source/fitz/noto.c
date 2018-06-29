@@ -45,7 +45,7 @@
 #define TOFU_EMOJI
 #endif
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #define RETURN(FORGE,NAME) \
 	do { \
 	extern unsigned char _binary_resources_fonts_##NAME[]; \
