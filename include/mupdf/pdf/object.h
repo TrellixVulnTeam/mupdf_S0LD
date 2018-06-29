@@ -105,6 +105,7 @@ pdf_obj *pdf_dict_getl(fz_context *ctx, pdf_obj *dict, ...);
 pdf_obj *pdf_dict_geta(fz_context *ctx, pdf_obj *dict, pdf_obj *key, pdf_obj *abbrev);
 pdf_obj *pdf_dict_gets(fz_context *ctx, pdf_obj *dict, const char *key);
 pdf_obj *pdf_dict_getsa(fz_context *ctx, pdf_obj *dict, const char *key, const char *abbrev);
+pdf_obj *pdf_dict_get_inheritable(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 void pdf_dict_put(fz_context *ctx, pdf_obj *dict, pdf_obj *key, pdf_obj *val);
 void pdf_dict_put_drop(fz_context *ctx, pdf_obj *dict, pdf_obj *key, pdf_obj *val);
 void pdf_dict_get_put_drop(fz_context *ctx, pdf_obj *dict, pdf_obj *key, pdf_obj *val, pdf_obj **old_val);
@@ -132,6 +133,7 @@ pdf_obj *pdf_dict_put_dict(fz_context *ctx, pdf_obj *dict, pdf_obj *key, int ini
 int pdf_dict_get_bool(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 int pdf_dict_get_int(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 float pdf_dict_get_real(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
+const char *pdf_dict_get_name(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 const char *pdf_dict_get_string(fz_context *ctx, pdf_obj *dict, pdf_obj *key, size_t *sizep);
 
 void pdf_array_push_bool(fz_context *ctx, pdf_obj *array, int x);
