@@ -314,10 +314,9 @@ static void do_annotate_author(void)
 {
 	if (pdf_annot_has_author(ctx, selected_annot))
 	{
-		char *author = pdf_copy_annot_author(ctx, selected_annot);
-		if (author && strlen(author) > 0)
+		const char *author = pdf_get_annot_author(ctx, selected_annot);
+		if (strlen(author) > 0)
 			ui_label("Author: %s", author);
-		fz_free(ctx, author);
 	}
 }
 
@@ -344,19 +343,70 @@ static void do_annotate_contents(void)
 {
 	static pdf_annot *last_annot = NULL;
 	static struct input input;
-	char *contents;
+	const char *contents;
 
 	if (selected_annot != last_annot)
 	{
 		last_annot = selected_annot;
-		contents = pdf_copy_annot_contents(ctx, selected_annot);
+		contents = pdf_get_annot_contents(ctx, selected_annot);
 		ui_input_init(&input, contents);
-		fz_free(ctx, contents);
 	}
 
 	ui_label("Contents:");
-	if (ui_input(&input, 0) >= UI_INPUT_EDIT)
+	if (ui_input(&input, 0, 5) >= UI_INPUT_EDIT)
 		pdf_set_annot_contents(ctx, selected_annot, input.text);
+}
+
+static void do_widget_value()
+{
+	int ff, type;
+	char *value;
+
+	ff = pdf_get_field_flags(ctx, selected_annot->page->doc, selected_annot->obj);
+	type = pdf_field_type(ctx, selected_annot->page->doc, selected_annot->obj);
+
+	if (type == PDF_WIDGET_TYPE_TEXT)
+	{
+		static pdf_annot *last_annot = NULL;
+		static struct input input;
+		ui_label("Value:");
+		if (selected_annot != last_annot)
+		{
+			last_annot = selected_annot;
+			value = pdf_field_value(ctx, selected_annot->page->doc, selected_annot->obj);
+			ui_input_init(&input, value);
+			fz_free(ctx, value);
+		}
+		if (ui_input(&input, 0, (ff & Ff_Multiline) ? 5 : 1) >= UI_INPUT_EDIT)
+		{
+			pdf_field_set_value(ctx, selected_annot->page->doc, selected_annot->obj, input.text);
+			pdf_dirty_annot(ctx, selected_annot);
+		}
+	}
+	else if (type == PDF_WIDGET_TYPE_COMBOBOX || type == PDF_WIDGET_TYPE_LISTBOX)
+	{
+		const char **options;
+		int n, choice;
+		ui_label("Value:");
+		n = pdf_choice_widget_options(ctx, selected_annot->page->doc, selected_annot, 0, NULL);
+		options = fz_malloc_array(ctx, n, sizeof(char*));
+		pdf_choice_widget_options(ctx, selected_annot->page->doc, selected_annot, 0, options);
+		value = pdf_field_value(ctx, selected_annot->page->doc, selected_annot->obj);
+		choice = ui_select("Widget/Ch", value, (const char **)options, n);
+		if (choice >= 0)
+		{
+			pdf_field_set_value(ctx, selected_annot->page->doc, selected_annot->obj, options[choice]);
+			pdf_dirty_annot(ctx, selected_annot);
+		}
+		fz_free(ctx, value);
+		fz_free(ctx, options);
+	}
+	else
+	{
+		value = pdf_field_value(ctx, selected_annot->page->doc, selected_annot->obj);
+		ui_label("Value: %s", value);
+		fz_free(ctx, value);
+	}
 }
 
 static const char *file_attachment_icons[] = { "Graph", "Paperclip", "PushPin", "Tag" };
@@ -371,6 +421,7 @@ static const char *line_ending_styles[] = {
 	"None", "Square", "Circle", "Diamond", "OpenArrow", "ClosedArrow", "Butt",
 	"ROpenArrow", "RClosedArrow", "Slash" };
 static const char *quadding_names[] = { "Left", "Center", "Right" };
+static const char *font_names[] = { "Cour", "Helv", "TiRo", "Symb", "ZaDb", };
 
 static int should_edit_border(enum pdf_annot_type subtype)
 {
@@ -467,8 +518,14 @@ void do_annotate_panel(void)
 	{
 		char buf[256];
 		int num = pdf_to_num(ctx, annot->obj);
-		const char *type = pdf_string_from_annot_type(ctx, pdf_annot_type(ctx, annot));
-		fz_snprintf(buf, sizeof buf, "%d: %s", num, type);
+		enum pdf_annot_type subtype = pdf_annot_type(ctx, annot);
+		if (subtype == PDF_ANNOT_WIDGET)
+		{
+			pdf_obj *ft = pdf_dict_get_inheritable(ctx, annot->obj, PDF_NAME(FT));
+			fz_snprintf(buf, sizeof buf, "%d: Widget %s", num, pdf_to_name(ctx, ft));
+		}
+		else
+			fz_snprintf(buf, sizeof buf, "%d: %s", num, pdf_string_from_annot_type(ctx, subtype));
 		if (ui_list_item(&annot_list, annot->obj, buf, selected_annot == annot))
 			selected_annot = annot;
 	}
@@ -508,17 +565,47 @@ void do_annotate_panel(void)
 
 		ui_spacer();
 
-		do_annotate_contents();
+		if (subtype == PDF_ANNOT_WIDGET)
+			do_widget_value();
+		else
+			do_annotate_contents();
 
 		ui_spacer();
 
 		if (subtype == PDF_ANNOT_FREE_TEXT)
 		{
+			int font_choice, color_choice, size_changed;
 			int q = pdf_annot_quadding(ctx, selected_annot);
+			const char *text_font;
+			static float text_size_f, text_color[3];
+			static int text_size;
 			ui_label("Text Alignment:");
 			choice = ui_select("Q", quadding_names[q], quadding_names, nelem(quadding_names));
 			if (choice != -1)
 				pdf_set_annot_quadding(ctx, selected_annot, choice);
+
+			pdf_annot_default_appearance(ctx, selected_annot, &text_font, &text_size_f, text_color);
+			text_size = text_size_f;
+
+			ui_label("Text Font:");
+			font_choice = ui_select("DA/Font", text_font, font_names, nelem(font_names));
+			ui_label("Text Size: %d", text_size);
+			size_changed = ui_slider(&text_size, 8, 36, 256);
+			ui_label("Text Color:");
+			color_choice = ui_select("DA/Color", name_from_hex(hex_from_color(3, text_color)), color_names+1, nelem(color_names)-1);
+			if (font_choice != -1 || color_choice != -1 || size_changed)
+			{
+				if (font_choice != -1)
+					text_font = font_names[font_choice];
+				if (color_choice != -1)
+				{
+					text_color[0] = ((color_values[color_choice+1]>>16) & 0xff) / 255.0f;
+					text_color[1] = ((color_values[color_choice+1]>>8) & 0xff) / 255.0f;
+					text_color[2] = ((color_values[color_choice+1]) & 0xff) / 255.0f;
+				}
+				pdf_set_annot_default_appearance(ctx, selected_annot, text_font, text_size, text_color);
+			}
+			ui_spacer();
 		}
 
 		if (subtype == PDF_ANNOT_LINE)
@@ -953,7 +1040,7 @@ static void do_edit_quad_points(void)
 {
 	static fz_point pt = { 0, 0 };
 	static int marking = 0;
-	fz_rect hits[1000];
+	fz_quad hits[1000];
 	int i, n;
 
 	if (ui_mouse_inside(&view_page_area))
@@ -984,12 +1071,17 @@ static void do_edit_quad_points(void)
 		glEnable(GL_BLEND);
 
 		glColor4f(1, 1, 1, 1);
+		glBegin(GL_QUADS);
 		for (i = 0; i < n; ++i)
 		{
-			fz_rect thit = hits[i];
-			fz_transform_rect(&thit, &view_page_ctm);
-			glRectf(thit.x0, thit.y0, thit.x1 + 1, thit.y1 + 1);
+			fz_quad thit = hits[i];
+			fz_transform_quad(&thit, &view_page_ctm);
+			glVertex2f(thit.ul.x, thit.ul.y);
+			glVertex2f(thit.ur.x, thit.ur.y);
+			glVertex2f(thit.lr.x, thit.lr.y);
+			glVertex2f(thit.ll.x, thit.ll.y);
 		}
+		glEnd();
 
 		glDisable(GL_BLEND);
 

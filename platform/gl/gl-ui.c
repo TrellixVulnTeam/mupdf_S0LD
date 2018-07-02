@@ -369,6 +369,8 @@ static void on_warning(const char *fmt, va_list ap)
 
 void ui_init(int w, int h, const char *title)
 {
+	float ui_scale;
+
 	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 
 	glutInitErrorFunc(on_error);
@@ -396,16 +398,34 @@ void ui_init(int w, int h, const char *title)
 
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
 
-	ui.fontsize = DEFAULT_UI_FONTSIZE;
-	ui.baseline = DEFAULT_UI_BASELINE;
-	ui.lineheight = DEFAULT_UI_LINEHEIGHT;
-	ui.gridsize = DEFAULT_UI_GRIDSIZE;
+	ui_scale = 1;
+	{
+		int wmm = glutGet(GLUT_SCREEN_WIDTH_MM);
+		int wpx = glutGet(GLUT_SCREEN_WIDTH);
+		int hmm = glutGet(GLUT_SCREEN_HEIGHT_MM);
+		int hpx = glutGet(GLUT_SCREEN_HEIGHT);
+		if (wmm > 0 && hmm > 0)
+		{
+			float ppi = ((wpx * 254) / wmm + (hpx * 254) / hmm) / 20;
+			if (ppi >= 144) ui_scale = 1.5f;
+			if (ppi >= 192) ui_scale = 2.0f;
+			if (ppi >= 288) ui_scale = 3.0f;
+		}
+	}
+
+	ui.fontsize = DEFAULT_UI_FONTSIZE * ui_scale;
+	ui.baseline = DEFAULT_UI_BASELINE * ui_scale;
+	ui.lineheight = DEFAULT_UI_LINEHEIGHT * ui_scale;
+	ui.gridsize = DEFAULT_UI_GRIDSIZE * ui_scale;
 
 	ui_init_fonts(ui.fontsize);
+
+	ui.overlay_list = glGenLists(1);
 }
 
 void ui_finish(void)
 {
+	glDeleteLists(ui.overlay_list, 1);
 	ui_finish_fonts();
 	glutExit();
 }
@@ -432,12 +452,11 @@ void ui_begin(void)
 	ui.layout->padx = 0;
 	ui.layout->pady = 0;
 
-	ui.popup_count = 0;
-
 	ui.cursor = GLUT_CURSOR_INHERIT;
 
+	ui.overlay = 0;
+
 	glViewport(0, 0, ui.window_w, ui.window_h);
-	glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glMatrixMode(GL_PROJECTION);
@@ -452,8 +471,8 @@ void ui_end(void)
 {
 	int code;
 
-	if (ui.popup_count > 0)
-		ui_draw_popup();
+	if (ui.overlay)
+		glCallList(ui.overlay_list);
 
 	if (ui.cursor != ui.last_cursor)
 	{
@@ -993,20 +1012,21 @@ void ui_list_end(struct list *list)
 	glDisable(GL_SCISSOR_TEST);
 }
 
-int ui_popup(const void *popup, const char *label, int is_button, int count)
+int ui_popup(const void *id, const char *label, int is_button, int count)
 {
 	int width = ui_measure_string(label);
 	fz_irect area = ui_pack(width + 22 + 6, ui.gridsize);
+	fz_irect menu_area;
 	int pressed;
 
 	if (ui_mouse_inside(&area))
 	{
-		ui.hot = popup;
+		ui.hot = id;
 		if (!ui.active && ui.down)
-			ui.active = popup;
+			ui.active = id;
 	}
 
-	pressed = (ui.active == popup);
+	pressed = (ui.active == id);
 
 	if (is_button)
 	{
@@ -1037,25 +1057,34 @@ int ui_popup(const void *popup, const char *label, int is_button, int count)
 
 	if (pressed)
 	{
+		ui.overlay = 1;
+
+		glNewList(ui.overlay_list, GL_COMPILE);
+
 		/* Area inside the border line */
-		ui.popup_area.x0 = area.x0+1;
-		ui.popup_area.x1 = area.x1-1; // TODO: width of submenu
+		menu_area.x0 = area.x0+1;
+		menu_area.x1 = area.x1-1; // TODO: width of submenu
 		if (area.y1+2 + count * ui.lineheight < ui.window_h)
 		{
-			ui.popup_area.y0 = area.y1+2;
-			ui.popup_area.y1 = ui.popup_area.y0 + count * ui.lineheight;
+			menu_area.y0 = area.y1+2;
+			menu_area.y1 = menu_area.y0 + count * ui.lineheight;
 		}
 		else
 		{
-			ui.popup_area.y1 = area.y0-2;
-			ui.popup_area.y0 = ui.popup_area.y1 - count * ui.lineheight;
+			menu_area.y1 = area.y0-2;
+			menu_area.y0 = menu_area.y1 - count * ui.lineheight;
 		}
-		ui_pack_push(ui.popup_area);
+
+		glColorHex(UI_COLOR_TEXT_FG);
+		glRectf(menu_area.x0-1, menu_area.y0-1, menu_area.x1+1, menu_area.y1+1);
+		glColorHex(UI_COLOR_TEXT_BG);
+		glRectf(menu_area.x0, menu_area.y0, menu_area.x1, menu_area.y1);
+
+		ui_pack_push(menu_area);
 		ui_layout(T, X, NW, 0, 0);
-		return 1;
 	}
 
-	return 0;
+	return pressed;
 }
 
 int ui_popup_item(const char *title)
@@ -1063,46 +1092,26 @@ int ui_popup_item(const char *title)
 	fz_irect area = ui_pack(0, ui.lineheight);
 
 	if (ui_mouse_inside(&area))
+	{
 		ui.hot = title;
-
-	ui.popup[ui.popup_count].area = area;
-	ui.popup[ui.popup_count].title = title;
-	++ui.popup_count;
+		glColorHex(UI_COLOR_TEXT_SEL_BG);
+		glRectf(area.x0, area.y0, area.x1, area.y1);
+		glColorHex(UI_COLOR_TEXT_SEL_FG);
+		ui_draw_string(area.x0 + 4, area.y0 + ui.baseline, title);
+	}
+	else
+	{
+		glColorHex(UI_COLOR_TEXT_FG);
+		ui_draw_string(area.x0 + 4, area.y0 + ui.baseline, title);
+	}
 
 	return ui.hot == title && !ui.down;
 }
 
 void ui_popup_end(void)
 {
+	glEndList();
 	ui_pack_pop();
-}
-
-void ui_draw_popup(void)
-{
-	int i;
-
-	glColorHex(UI_COLOR_TEXT_FG);
-	glRectf(ui.popup_area.x0-1, ui.popup_area.y0-1, ui.popup_area.x1+1, ui.popup_area.y1+1);
-	glColorHex(UI_COLOR_TEXT_BG);
-	glRectf(ui.popup_area.x0, ui.popup_area.y0, ui.popup_area.x1, ui.popup_area.y1);
-
-	for (i = 0; i < ui.popup_count; ++i)
-	{
-		const char *title = ui.popup[i].title;
-		fz_irect area = ui.popup[i].area;
-		if (ui_mouse_inside(&area))
-		{
-			glColorHex(UI_COLOR_TEXT_SEL_BG);
-			glRectf(area.x0, area.y0, area.x1, area.y1);
-			glColorHex(UI_COLOR_TEXT_SEL_FG);
-			ui_draw_string(area.x0 + 4, area.y0 + ui.baseline, title);
-		}
-		else
-		{
-			glColorHex(UI_COLOR_TEXT_FG);
-			ui_draw_string(area.x0 + 4, area.y0 + ui.baseline, title);
-		}
-	}
 }
 
 int ui_select(const void *id, const char *current, const char *options[], int n)

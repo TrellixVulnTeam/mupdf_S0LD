@@ -58,7 +58,11 @@ static void open_browser(const char *uri)
 #endif
 }
 
-static const int zoom_list[] = { 18, 24, 36, 54, 72, 96, 120, 144, 180, 216, 288 };
+static const int zoom_list[] = {
+	24, 36, 48, 60, 72, 84, 96, 108,
+	120, 144, 168, 192, 228, 264,
+	300, 350, 400, 450, 500, 550, 600
+};
 
 static int zoom_in(int oldres)
 {
@@ -89,6 +93,7 @@ static float layout_h = DEFAULT_LAYOUT_H;
 static float layout_em = DEFAULT_LAYOUT_EM;
 static char *layout_css = NULL;
 static int layout_use_doc_css = 1;
+static int enable_js = 1;
 
 static fz_document *doc = NULL;
 static fz_page *fzpage = NULL;
@@ -102,8 +107,8 @@ static int scroll_x = 0, scroll_y = 0;
 static int canvas_x = 0, canvas_w = 100;
 static int canvas_y = 0, canvas_h = 100;
 
-static int outline_w = 260;
-static int annotate_w = 220;
+static int outline_w = 14; /* to be scaled by lineheight */
+static int annotate_w = 12; /* to be scaled by lineheight */
 
 static int oldinvert = 0, currentinvert = 0;
 static int oldpage = 0, currentpage = 0;
@@ -137,7 +142,7 @@ static int search_dir = 1;
 static int search_page = -1;
 static int search_hit_page = -1;
 static int search_hit_count = 0;
-static fz_rect search_hit_bbox[5000];
+static fz_quad search_hit_quads[5000];
 
 static char error_message[256];
 static void error_dialog(void)
@@ -200,12 +205,27 @@ void update_title(void)
 	glutSetIconTitle(buf);
 }
 
-void load_page(void)
+void transform_page(void)
 {
-	fz_irect area;
+	fz_rect rect = page_bounds;
+	fz_matrix matrix;
+
+	draw_page_bounds = page_bounds;
 
 	fz_scale(&draw_page_ctm, currentzoom / 72, currentzoom / 72);
 	fz_pre_rotate(&draw_page_ctm, -currentrotate);
+
+	/* fix the page origin at 0,0 after rotation */
+	fz_transform_rect(&rect, &draw_page_ctm);
+	fz_translate(&matrix, -rect.x0, -rect.y0);
+	fz_concat(&draw_page_ctm, &draw_page_ctm, &matrix);
+
+	fz_transform_rect(&draw_page_bounds, &draw_page_ctm);
+}
+
+void load_page(void)
+{
+	fz_irect area;
 
 	/* clear all editor selections */
 	selected_annot = NULL;
@@ -226,8 +246,8 @@ void load_page(void)
 
 	/* compute bounds here for initial window size */
 	fz_bound_page(ctx, fzpage, &page_bounds);
-	draw_page_bounds = page_bounds;
-	fz_transform_rect(&draw_page_bounds, &draw_page_ctm);
+	transform_page();
+
 	fz_irect_from_rect(&area, &draw_page_bounds);
 	page_tex.w = area.x1 - area.x0;
 	page_tex.h = area.y1 - area.y0;
@@ -237,8 +257,7 @@ void render_page(void)
 {
 	fz_pixmap *pix;
 
-	fz_scale(&draw_page_ctm, currentzoom / 72, currentzoom / 72);
-	fz_pre_rotate(&draw_page_ctm, -currentrotate);
+	transform_page();
 
 	pix = fz_new_pixmap_from_page(ctx, fzpage, &draw_page_ctm, fz_device_rgb(ctx), 0);
 	if (currentinvert)
@@ -448,7 +467,7 @@ static void do_links(fz_link *link)
 static void do_page_selection(void)
 {
 	static fz_point pt = { 0, 0 };
-	fz_rect hits[1000];
+	fz_quad hits[1000];
 	int i, n;
 
 	if (ui_mouse_inside(&view_page_area))
@@ -476,11 +495,17 @@ static void do_page_selection(void)
 		glEnable(GL_BLEND);
 
 		glColor4f(1, 1, 1, 1);
+		glBegin(GL_QUADS);
 		for (i = 0; i < n; ++i)
 		{
-			fz_transform_rect(&hits[i], &view_page_ctm);
-			glRectf(hits[i].x0, hits[i].y0, hits[i].x1 + 1, hits[i].y1 + 1);
+			fz_quad thit = hits[i];
+			fz_transform_quad(&thit, &view_page_ctm);
+			glVertex2f(thit.ul.x, thit.ul.y);
+			glVertex2f(thit.ur.x, thit.ur.y);
+			glVertex2f(thit.lr.x, thit.lr.y);
+			glVertex2f(thit.ll.x, thit.ll.y);
 		}
+		glEnd();
 
 		glDisable(GL_BLEND);
 
@@ -500,23 +525,24 @@ static void do_page_selection(void)
 
 static void do_search_hits(void)
 {
-	fz_rect bounds;
-	fz_irect area;
 	int i;
 
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 
+	glColor4f(1, 0, 0, 0.4f);
+	glBegin(GL_QUADS);
 	for (i = 0; i < search_hit_count; ++i)
 	{
-		bounds = search_hit_bbox[i];
-		fz_transform_rect(&bounds, &view_page_ctm);
-		fz_irect_from_rect(&area, &bounds);
-
-		glColor4f(1, 0, 0, 0.4f);
-		glRectf(area.x0, area.y0, area.x1, area.y1);
+		fz_quad thit = search_hit_quads[i];
+		fz_transform_quad(&thit, &view_page_ctm);
+		glVertex2f(thit.ul.x, thit.ul.y);
+		glVertex2f(thit.ur.x, thit.ur.y);
+		glVertex2f(thit.lr.x, thit.lr.y);
+		glVertex2f(thit.ll.x, thit.ll.y);
 	}
 
+	glEnd();
 	glDisable(GL_BLEND);
 }
 
@@ -604,7 +630,7 @@ static void password_dialog(void)
 	{
 		ui_layout(T, X, NW, 2, 2);
 		ui_label("Password:");
-		is = ui_input(&input_password, 200);
+		is = ui_input(&input_password, 200, 1);
 
 		ui_layout(B, X, NW, 2, 2);
 		ui_panel_begin(0, ui.gridsize, 0, 0, 0);
@@ -656,7 +682,8 @@ static void load_document(void)
 	pdf = pdf_specifics(ctx, doc);
 	if (pdf)
 	{
-		pdf_enable_js(ctx, pdf);
+		if (enable_js)
+			pdf_enable_js(ctx, pdf);
 		if (anchor)
 			currentpage = pdf_lookup_anchor(ctx, pdf, anchor, NULL, NULL);
 	}
@@ -1131,7 +1158,7 @@ static void do_canvas(void)
 		ui_layout(L, NONE, W, 2, 0);
 		ui_label("Search:");
 		ui_layout(ALL, X, E, 2, 0);
-		if (ui_input(&search_input, 0) == UI_INPUT_ACCEPT)
+		if (ui_input(&search_input, 0, 1) == UI_INPUT_ACCEPT)
 		{
 			showsearch = 0;
 			search_page = -1;
@@ -1172,7 +1199,7 @@ void do_main(void)
 		while (glutGet(GLUT_ELAPSED_TIME) < start_time + 200)
 		{
 			search_hit_count = fz_search_page_number(ctx, doc, search_page, search_needle,
-					search_hit_bbox, nelem(search_hit_bbox));
+					search_hit_quads, nelem(search_hit_quads));
 			if (search_hit_count)
 			{
 				search_active = 0;
@@ -1233,6 +1260,10 @@ void do_main(void)
 
 void run_main_loop(void)
 {
+	if (currentinvert)
+		glClearColor(0, 0, 0, 1);
+	else
+		glClearColor(0.3f, 0.3f, 0.3f, 1);
 	ui_begin();
 	fz_try(ctx)
 	{
@@ -1258,6 +1289,7 @@ static void usage(const char *argv0)
 	fprintf(stderr, "\t-S -\tfont size for EPUB layout\n");
 	fprintf(stderr, "\t-U -\tuser style sheet for EPUB layout\n");
 	fprintf(stderr, "\t-X\tdisable document styles for EPUB layout\n");
+	fprintf(stderr, "\t-J\tdisable javascript in PDF forms\n");
 	exit(1);
 }
 
@@ -1293,7 +1325,7 @@ int main(int argc, char **argv)
 	int c;
 
 	glutInit(&argc, argv);
-	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:X")) != -1)
+	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJ")) != -1)
 	{
 		switch (c)
 		{
@@ -1306,6 +1338,7 @@ int main(int argc, char **argv)
 		case 'S': layout_em = fz_atof(fz_optarg); break;
 		case 'U': layout_css = fz_optarg; break;
 		case 'X': layout_use_doc_css = 0; break;
+		case 'J': enable_js = !enable_js; break;
 		}
 	}
 
@@ -1365,6 +1398,9 @@ int main(int argc, char **argv)
 		ui_init_open_file(".", document_filter);
 		ui.dialog = do_open_document_dialog;
 	}
+
+	annotate_w *= ui.lineheight;
+	outline_w *= ui.lineheight;
 
 	glutMainLoop();
 

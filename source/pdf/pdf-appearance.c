@@ -832,6 +832,34 @@ write_simple_string_with_quadding(fz_context *ctx, fz_buffer *buf, fz_font *font
 	}
 }
 
+static void
+write_comb_string(fz_context *ctx, fz_buffer *buf, const char *a, const char *b, fz_font *font, float cell_w)
+{
+	float gw, pad, carry = 0;
+	fz_append_byte(ctx, buf, '[');
+	while (a < b)
+	{
+		int c, g;
+
+		a += fz_chartorune(&c, a);
+		/* WinAnsi is close enough to Latin-1 to not matter. Use middle dot for unencodable characters. */
+		if (c >= 256) c = REPLACEMENT;
+
+		g = fz_encode_character(ctx, font, c);
+		gw = fz_advance_glyph(ctx, font, g, 0) * 1000;
+		pad = (cell_w - gw) / 2;
+		fz_append_printf(ctx, buf, "%g", -(carry + pad));
+		carry = pad;
+
+		fz_append_byte(ctx, buf, '(');
+		if (c == '(' || c == ')' || c == '\\')
+			fz_append_byte(ctx, buf, '\\');
+		fz_append_byte(ctx, buf, c);
+		fz_append_byte(ctx, buf, ')');
+	}
+	fz_append_string(ctx, buf, "] TJ\n");
+}
+
 static const char *full_font_name(const char **name)
 {
 	if (!strcmp(*name, "Cour")) return "Courier";
@@ -845,24 +873,34 @@ static const char *full_font_name(const char **name)
 static void
 write_variable_text(fz_context *ctx, pdf_annot *annot, fz_buffer *buf, pdf_obj **res,
 	const char *text, const char *fontname, float size, float color[3], int q,
-	float w, float h, float padding, int multiline)
+	float w, float h, float padding, int multiline, int comb)
 {
 	pdf_obj *res_font;
 	fz_font *font;
 	float lineheight;
 	float baseline;
 
-	w -= padding * 2;
-	h -= padding * 2;
-	if (size == 0)
-		size = multiline ? 12 : h;
-
-	lineheight = size * 1.15f; /* empirically derived from Adobe reader */
-	baseline = size * 0.8f;
-
 	font = fz_new_base14_font(ctx, full_font_name(&fontname));
 	fz_try(ctx)
 	{
+		w -= padding * 2;
+		h -= padding * 2;
+
+		if (size == 0)
+		{
+			if (multiline)
+				size = 12;
+			else
+			{
+				size = w / measure_simple_string(ctx, font, text);
+				if (size > h)
+					size = h;
+			}
+		}
+
+		lineheight = size * 1.15f; /* empirically derived from Adobe reader */
+		baseline = size * 0.8f;
+
 		/* /Resources << /Font << /Helv %d 0 R >> >> */
 		*res = pdf_new_dict(ctx, annot->page->doc, 1);
 		res_font = pdf_dict_put_dict(ctx, *res, PDF_NAME(Font), 1);
@@ -871,7 +909,13 @@ write_variable_text(fz_context *ctx, pdf_annot *annot, fz_buffer *buf, pdf_obj *
 		fz_append_string(ctx, buf, "BT\n");
 		fz_append_printf(ctx, buf, "%g %g %g rg\n", color[0], color[1], color[2]);
 		fz_append_printf(ctx, buf, "/%s %g Tf\n", fontname, size);
-		if (multiline)
+		if (comb > 0)
+		{
+			float ty = (h - size) / 2;
+			fz_append_printf(ctx, buf, "%g %g Td\n", padding, padding+h-baseline-ty);
+			write_comb_string(ctx, buf, text, text + strlen(text), font, (w * 1000 / size) / comb);
+		}
+		else if (multiline)
 		{
 			fz_append_printf(ctx, buf, "%g TL\n", lineheight);
 			fz_append_printf(ctx, buf, "%g %g Td\n", padding, padding+h+(size-baseline));
@@ -906,11 +950,12 @@ pdf_write_free_text_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf
 {
 	const char *font;
 	float size, color[3];
-	char *text;
+	const char *text;
 	float w, h, t, b;
 	int q, r;
 
 	/* /Rotate is an undocumented annotation property supported by Adobe */
+	text = pdf_get_annot_contents(ctx, annot);
 	r = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(Rotate));
 	q = pdf_annot_quadding(ctx, annot);
 	pdf_annot_default_appearance(ctx, annot, &font, &size, color);
@@ -933,13 +978,7 @@ pdf_write_free_text_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf
 		fz_append_printf(ctx, buf, "%g %g %g %g re\nS\n", b/2, b/2, w-b, h-b);
 	}
 
-	text = pdf_copy_annot_contents(ctx, annot);
-	fz_try(ctx)
-		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, b*2, 1);
-	fz_always(ctx)
-		fz_free(ctx, text);
-	fz_catch(ctx)
-		fz_rethrow(ctx);
+	write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, b*2, 1, 0);
 }
 
 static void
@@ -966,10 +1005,15 @@ pdf_write_tx_widget_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf
 
 	fz_append_string(ctx, buf, "/Tx BMC\nq\n");
 
-	if (ff & Ff_Multiline)
-		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, 2, 1);
+	if (ff & Ff_Comb)
+	{
+		int maxlen = pdf_to_int(ctx, pdf_dict_get_inheritable(ctx, annot->obj, PDF_NAME(MaxLen)));
+		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, 0, 0, maxlen);
+	}
+	else if (ff & Ff_Multiline)
+		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, 2, 1, 0);
 	else
-		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, 2, 0);
+		write_variable_text(ctx, annot, buf, res, text, font, size, color, q, w, h, 2, 0, 0);
 
 	fz_append_string(ctx, buf, "Q\nEMC\n");
 }
@@ -1159,7 +1203,9 @@ void pdf_update_appearance(fz_context *ctx, pdf_annot *annot)
 		fz_matrix matrix = fz_identity;
 		fz_buffer *buf = fz_new_buffer(ctx, 1024);
 		pdf_obj *res = NULL;
+		pdf_obj *new_ap_n = NULL;
 		fz_var(res);
+		fz_var(new_ap_n);
 		fz_try(ctx)
 		{
 			pdf_to_rect(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(Rect)), &rect);
@@ -1173,22 +1219,24 @@ void pdf_update_appearance(fz_context *ctx, pdf_annot *annot)
 					ap = pdf_new_dict(ctx, annot->page->doc, 1);
 					pdf_dict_put_drop(ctx, annot->obj, PDF_NAME(AP), ap);
 				}
-				ap_n = pdf_new_xobject(ctx, annot->page->doc, &bbox, &matrix, res, buf);
-				pdf_dict_put_drop(ctx, ap, PDF_NAME(N), ap_n);
+				new_ap_n = pdf_new_xobject(ctx, annot->page->doc, &bbox, &matrix, res, buf);
+				pdf_dict_put(ctx, ap, PDF_NAME(N), new_ap_n);
 			}
 			else
 			{
+				new_ap_n = pdf_keep_obj(ctx, ap_n);
 				pdf_update_xobject(ctx, annot->page->doc, ap_n, &bbox, &matrix, res, buf);
 			}
 
 			pdf_drop_obj(ctx, annot->ap);
 			annot->ap = NULL;
-			annot->ap = pdf_keep_obj(ctx, ap_n);
+			annot->ap = pdf_keep_obj(ctx, new_ap_n);
 		}
 		fz_always(ctx)
 		{
 			fz_drop_buffer(ctx, buf);
 			pdf_drop_obj(ctx, res);
+			pdf_drop_obj(ctx, new_ap_n);
 		}
 		fz_catch(ctx)
 			fz_warn(ctx, "cannot create appearance stream");

@@ -93,9 +93,8 @@ struct ui
 	struct layout layout_stack[32];
 	fz_irect cavity_stack[32];
 
-	struct { fz_irect area; const char *title; } popup[32];
-	fz_irect popup_area;
-	int popup_count;
+	int overlay;
+	GLuint overlay_list;
 
 	void (*dialog)(void);
 };
@@ -139,8 +138,9 @@ enum
 
 struct input
 {
-	char text[256];
+	char text[16*1024];
 	char *end, *p, *q;
+	int scroll;
 };
 
 struct list
@@ -175,7 +175,7 @@ int ui_slider(int *value, int min, int max, int width);
 int ui_select(const void *id, const char *current, const char *options[], int n);
 
 void ui_input_init(struct input *input, const char *text);
-int ui_input(struct input *input, int width);
+int ui_input(struct input *input, int width, int height);
 void ui_scrollbar(int x0, int y0, int x1, int y1, int *value, int page_size, int max);
 
 void ui_list_begin(struct list *list, int count, int req_w, int req_h);
@@ -183,10 +183,9 @@ int ui_list_item(struct list *list, const void *id, const char *label, int selec
 int ui_list_item_x(struct list *list, const void *id, int indent, const char *label, int selected);
 void ui_list_end(struct list *list);
 
-int ui_popup(const void *id, const char *title, int is_button, int count);
+int ui_popup(const void *id, const char *label, int is_button, int count);
 int ui_popup_item(const char *title);
 void ui_popup_end(void);
-void ui_draw_popup(void);
 
 void ui_init_open_file(const char *dir, int (*filter)(const char *fn));
 int ui_open_file(char filename[]);

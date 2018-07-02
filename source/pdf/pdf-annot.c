@@ -423,10 +423,10 @@ pdf_set_annot_rect(fz_context *ctx, pdf_annot *annot, const fz_rect *rect)
 	pdf_dirty_annot(ctx, annot);
 }
 
-char *
-pdf_copy_annot_contents(fz_context *ctx, pdf_annot *annot)
+const char *
+pdf_get_annot_contents(fz_context *ctx, pdf_annot *annot)
 {
-	return pdf_to_utf8(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(Contents)));
+	return pdf_dict_get_text_string(ctx, annot->obj, PDF_NAME(Contents));
 }
 
 void
@@ -1089,7 +1089,7 @@ pdf_clear_annot_quad_points(fz_context *ctx, pdf_annot *annot)
 }
 
 void
-pdf_add_annot_quad_point(fz_context *ctx, pdf_annot *annot, fz_rect bbox)
+pdf_add_annot_quad_point(fz_context *ctx, pdf_annot *annot, fz_quad quad)
 {
 	pdf_document *doc = annot->page->doc;
 	fz_matrix page_ctm, inv_page_ctm;
@@ -1111,15 +1111,15 @@ pdf_add_annot_quad_point(fz_context *ctx, pdf_annot *annot, fz_rect bbox)
 	 * in a counterclockwise fashion. Experiments with Adobe's implementation
 	 * indicates a cross-wise ordering is intended: ul, ur, ll, lr.
 	 */
-	fz_transform_rect(&bbox, &inv_page_ctm);
-	pdf_array_push_real(ctx, quad_points, bbox.x0); /* ul */
-	pdf_array_push_real(ctx, quad_points, bbox.y1);
-	pdf_array_push_real(ctx, quad_points, bbox.x1); /* ur */
-	pdf_array_push_real(ctx, quad_points, bbox.y1);
-	pdf_array_push_real(ctx, quad_points, bbox.x0); /* ll */
-	pdf_array_push_real(ctx, quad_points, bbox.y0);
-	pdf_array_push_real(ctx, quad_points, bbox.x1); /* lr */
-	pdf_array_push_real(ctx, quad_points, bbox.y0);
+	fz_transform_quad(&quad, &inv_page_ctm);
+	pdf_array_push_real(ctx, quad_points, quad.ul.x);
+	pdf_array_push_real(ctx, quad_points, quad.ul.y);
+	pdf_array_push_real(ctx, quad_points, quad.ur.x);
+	pdf_array_push_real(ctx, quad_points, quad.ur.y);
+	pdf_array_push_real(ctx, quad_points, quad.ll.x);
+	pdf_array_push_real(ctx, quad_points, quad.ll.y);
+	pdf_array_push_real(ctx, quad_points, quad.lr.x);
+	pdf_array_push_real(ctx, quad_points, quad.lr.y);
 
 	pdf_dirty_annot(ctx, annot);
 }
@@ -1428,11 +1428,11 @@ pdf_annot_has_author(fz_context *ctx, pdf_annot *annot)
 	return is_allowed_subtype(ctx, annot, PDF_NAME(T), markup_subtypes);
 }
 
-char *
-pdf_copy_annot_author(fz_context *ctx, pdf_annot *annot)
+const char *
+pdf_get_annot_author(fz_context *ctx, pdf_annot *annot)
 {
 	check_allowed_subtypes(ctx, annot, PDF_NAME(T), markup_subtypes);
-	return pdf_to_utf8(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(T)));
+	return pdf_dict_get_text_string(ctx, annot->obj, PDF_NAME(T));
 }
 
 void
@@ -1455,7 +1455,7 @@ pdf_parse_default_appearance(fz_context *ctx, const char *da, const char **font,
 	color[0] = color[1] = color[2] = 0;
 
 	fz_strlcpy(buf, da, sizeof buf);
-	while ((tok = fz_strsep(&p, " ")) != NULL)
+	while ((tok = fz_strsep(&p, " \n\r\t")) != NULL)
 	{
 		if (tok[0] == 0)
 			;
@@ -1509,6 +1509,11 @@ void
 pdf_annot_default_appearance(fz_context *ctx, pdf_annot *annot, const char **font, float *size, float color[3])
 {
 	pdf_obj *da = pdf_dict_get(ctx, annot->obj, PDF_NAME(DA));
+	if (!da)
+	{
+		pdf_obj *trailer = pdf_trailer(ctx, annot->page->doc);
+		da = pdf_dict_getl(ctx, trailer, PDF_NAME(Root), PDF_NAME(AcroForm), PDF_NAME(DA), NULL);
+	}
 	pdf_parse_default_appearance(ctx, pdf_to_str_buf(ctx, da), font, size, color);
 }
 

@@ -343,7 +343,7 @@ int ui_open_file(char filename[PATH_MAX])
 				ui_spacer();
 			}
 			ui_layout(ALL, X, CENTER, 0, 0);
-			if (ui_input(&fc.input_dir, 0) == UI_INPUT_ACCEPT)
+			if (ui_input(&fc.input_dir, 0, 1) == UI_INPUT_ACCEPT)
 				load_dir(fc.input_dir.text);
 		}
 		ui_panel_end();
@@ -459,7 +459,7 @@ int ui_save_file(char filename[PATH_MAX], void (*extra_panel)(void))
 		ui_panel_end();
 
 		ui_layout(T, X, NW, 2, 2);
-		if (ui_input(&fc.input_dir, 0) == UI_INPUT_ACCEPT)
+		if (ui_input(&fc.input_dir, 0, 1) == UI_INPUT_ACCEPT)
 			load_dir(fc.input_dir.text);
 
 		ui_layout(T, X, NW, 2, 2);
@@ -478,7 +478,7 @@ int ui_save_file(char filename[PATH_MAX], void (*extra_panel)(void))
 				bump_file_version(-1);
 			ui_spacer();
 			ui_layout(ALL, X, CENTER, 0, 0);
-			ui_input(&fc.input_file, 0);
+			ui_input(&fc.input_file, 0, 1);
 		}
 		ui_panel_end();
 

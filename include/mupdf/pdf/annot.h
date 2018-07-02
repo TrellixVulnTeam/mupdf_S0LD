@@ -184,7 +184,7 @@ void pdf_set_annot_quadding(fz_context *ctx, pdf_annot *annot, int q);
 
 void pdf_set_annot_quad_points(fz_context *ctx, pdf_annot *annot, int n, const float *v);
 void pdf_clear_annot_quad_points(fz_context *ctx, pdf_annot *annot);
-void pdf_add_annot_quad_point(fz_context *ctx, pdf_annot *annot, fz_rect bbox);
+void pdf_add_annot_quad_point(fz_context *ctx, pdf_annot *annot, fz_quad quad);
 
 void pdf_set_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, const int *count, const fz_point *v);
 void pdf_clear_annot_ink_list(fz_context *ctx, pdf_annot *annot);
@@ -220,9 +220,9 @@ void pdf_set_annot_vertex(fz_context *ctx, pdf_annot *annot, int i, fz_point p);
 void pdf_set_text_annot_position(fz_context *ctx, pdf_annot *annot, fz_point pt);
 
 /*
-	pdf_copy_annot_contents: return a copy of the contents of an annotation.
+	pdf_get_annot_contents: return the contents of an annotation.
 */
-char *pdf_copy_annot_contents(fz_context *ctx, pdf_annot *annot);
+const char *pdf_get_annot_contents(fz_context *ctx, pdf_annot *annot);
 
 /*
 	pdf_set_annot_contents: set the contents of an annotation.
@@ -230,9 +230,9 @@ char *pdf_copy_annot_contents(fz_context *ctx, pdf_annot *annot);
 void pdf_set_annot_contents(fz_context *ctx, pdf_annot *annot, const char *text);
 
 /*
-	pdf_copy_annot_author: return a copy of the author of an annotation.
+	pdf_get_annot_author: return the author of an annotation.
 */
-char *pdf_copy_annot_author(fz_context *ctx, pdf_annot *annot);
+const char *pdf_get_annot_author(fz_context *ctx, pdf_annot *annot);
 
 /*
 	pdf_set_annot_author: set the author of an annotation.
