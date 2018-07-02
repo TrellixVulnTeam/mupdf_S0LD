@@ -1,3 +1,12 @@
+#ifdef _WIN32
+#ifndef UNICODE
+#define UNICODE
+#endif
+#ifndef _UNICODE
+#define _UNICODE
+#endif
+#endif
+
 #include "gl-app.h"
 
 #include <string.h>
