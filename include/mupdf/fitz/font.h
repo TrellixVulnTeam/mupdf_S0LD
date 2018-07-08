@@ -151,7 +151,7 @@ int fz_font_is_monospaced(fz_context *ctx, fz_font *font);
 	Returns a pointer to the font bbox (or NULL if the
 	font is NULL).
 */
-fz_rect *fz_font_bbox(fz_context *ctx, fz_font *font);
+fz_rect fz_font_bbox(fz_context *ctx, fz_font *font);
 
 /*
 	fz_load_system_font_fn: Type for user supplied system font loading hook.
@@ -372,7 +372,7 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int language, int se
 	Returns a new font handle, or throws exception on
 	allocation failure.
 */
-fz_font *fz_new_type3_font(fz_context *ctx, const char *name, const fz_matrix *matrix);
+fz_font *fz_new_type3_font(fz_context *ctx, const char *name, fz_matrix matrix);
 
 /*
 	fz_new_font_from_memory: Create a new font from a font
@@ -468,7 +468,7 @@ void fz_set_font_bbox(fz_context *ctx, fz_font *font, float xmin, float ymin, fl
 
 	Returns r, after filling it in with the bounds of the given glyph.
 */
-fz_rect *fz_bound_glyph(fz_context *ctx, fz_font *font, int gid, const fz_matrix *trm, fz_rect *r);
+fz_rect fz_bound_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix trm);
 
 /*
 	fz_glyph_cacheable: Determine if a given glyph in a font
@@ -496,7 +496,7 @@ int fz_glyph_cacheable(fz_context *ctx, fz_font *font, int gid);
 
 	dev: The device to render onto.
 */
-void fz_run_t3_glyph(fz_context *ctx, fz_font *font, int gid, const fz_matrix *trm, struct fz_device_s *dev);
+void fz_run_t3_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix trm, struct fz_device_s *dev);
 
 /*
 	fz_decouple_type3_font: Internal function to remove the

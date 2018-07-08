@@ -455,7 +455,7 @@ struct fz_text_writer_s
 };
 
 static fz_device *
-text_begin_page(fz_context *ctx, fz_document_writer *wri_, const fz_rect *mediabox)
+text_begin_page(fz_context *ctx, fz_document_writer *wri_, fz_rect mediabox)
 {
 	fz_text_writer *wri = (fz_text_writer*)wri_;
 

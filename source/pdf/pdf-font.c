@@ -1083,7 +1083,7 @@ load_cid_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict, pdf_obj *encodi
 		/* Apply encoding */
 
 		cidtogidmap = pdf_dict_get(ctx, dict, PDF_NAME(CIDToGIDMap));
-		if (pdf_is_indirect(ctx, cidtogidmap))
+		if (pdf_is_stream(ctx, cidtogidmap))
 		{
 			fz_buffer *buf;
 			size_t z, len;
@@ -1099,6 +1099,10 @@ load_cid_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict, pdf_obj *encodi
 				fontdesc->cid_to_gid[z] = (data[z * 2] << 8) + data[z * 2 + 1];
 
 			fz_drop_buffer(ctx, buf);
+		}
+		else if (!pdf_name_eq(ctx, PDF_NAME(Identity), cidtogidmap))
+		{
+			fz_warn(ctx, "ignoring unknown CIDToGIDMap entry");
 		}
 
 		/* if font is external, cidtogidmap should not be identity */
@@ -1476,49 +1480,6 @@ pdf_print_font(fz_context *ctx, fz_output *out, pdf_font_desc *fontdesc)
 
 /* Font creation */
 
-fz_rect *pdf_measure_text(fz_context *ctx, pdf_font_desc *fontdesc, unsigned char *buf, size_t len, fz_rect *acc)
-{
-	size_t i;
-	int w = 0;
-
-	for (i = 0; i < len; i++)
-		w += pdf_lookup_hmtx(ctx, fontdesc, buf[i]).w;
-
-	acc->x0 = 0;
-	acc->x1 = w / 1000.0f;
-	acc->y0 = fontdesc->descent / 1000.0f;
-	acc->y1 = fontdesc->ascent / 1000.0f;
-
-	return acc;
-}
-
-float pdf_text_stride(fz_context *ctx, pdf_font_desc *fontdesc, float fontsize, unsigned char *buf, size_t len, float room, size_t *count)
-{
-	pdf_hmtx h;
-	size_t i = 0;
-	float x = 0.0f;
-
-	while(i < len)
-	{
-		float span;
-
-		h = pdf_lookup_hmtx(ctx, fontdesc, buf[i]);
-
-		span = h.w * fontsize / 1000.0f;
-
-		if (x + span > room)
-			break;
-
-		x += span;
-		i ++;
-	}
-
-	if (count)
-		*count = i;
-
-	return x;
-}
-
 static pdf_obj*
 pdf_add_font_file(fz_context *ctx, pdf_document *doc, fz_font *font)
 {
@@ -1587,7 +1548,7 @@ pdf_add_font_descriptor(fz_context *ctx, pdf_document *doc, pdf_obj *fobj, fz_fo
 		bbox.y0 = font->bbox.y0 * 1000;
 		bbox.x1 = font->bbox.x1 * 1000;
 		bbox.y1 = font->bbox.y1 * 1000;
-		pdf_dict_put_rect(ctx, fdobj, PDF_NAME(FontBBox), &bbox);
+		pdf_dict_put_rect(ctx, fdobj, PDF_NAME(FontBBox), bbox);
 
 		pdf_dict_put_int(ctx, fdobj, PDF_NAME(ItalicAngle), 0);
 		pdf_dict_put_int(ctx, fdobj, PDF_NAME(Ascent), face->ascender * 1000.0f / face->units_per_EM);
@@ -2222,7 +2183,7 @@ pdf_add_cjk_font(fz_context *ctx, pdf_document *doc, fz_font *fzfont, int script
 			{
 				pdf_dict_put(ctx, fontdesc, PDF_NAME(Type), PDF_NAME(FontDescriptor));
 				pdf_dict_put_text_string(ctx, fontdesc, PDF_NAME(FontName), basefont);
-				pdf_dict_put_rect(ctx, fontdesc, PDF_NAME(FontBBox), &bbox);
+				pdf_dict_put_rect(ctx, fontdesc, PDF_NAME(FontBBox), bbox);
 				pdf_dict_put_int(ctx, fontdesc, PDF_NAME(Flags), flags);
 				pdf_dict_put_int(ctx, fontdesc, PDF_NAME(ItalicAngle), 0);
 				pdf_dict_put_int(ctx, fontdesc, PDF_NAME(Ascent), 1000);

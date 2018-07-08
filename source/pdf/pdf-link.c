@@ -239,7 +239,7 @@ pdf_parse_link_action(fz_context *ctx, pdf_document *doc, pdf_obj *action, int p
 }
 
 static fz_link *
-pdf_load_link(fz_context *ctx, pdf_document *doc, pdf_obj *dict, int pagenum, const fz_matrix *page_ctm)
+pdf_load_link(fz_context *ctx, pdf_document *doc, pdf_obj *dict, int pagenum, fz_matrix page_ctm)
 {
 	pdf_obj *action;
 	pdf_obj *obj;
@@ -255,8 +255,8 @@ pdf_load_link(fz_context *ctx, pdf_document *doc, pdf_obj *dict, int pagenum, co
 	if (!obj)
 		return NULL;
 
-	pdf_to_rect(ctx, obj, &bbox);
-	fz_transform_rect(&bbox, page_ctm);
+	bbox = pdf_to_rect(ctx, obj);
+	bbox = fz_transform_rect(bbox, page_ctm);
 
 	obj = pdf_dict_get(ctx, dict, PDF_NAME(Dest));
 	if (obj)
@@ -274,7 +274,7 @@ pdf_load_link(fz_context *ctx, pdf_document *doc, pdf_obj *dict, int pagenum, co
 		return NULL;
 
 	fz_try(ctx)
-		link = fz_new_link(ctx, &bbox, doc, uri);
+		link = fz_new_link(ctx, bbox, doc, uri);
 	fz_always(ctx)
 		fz_free(ctx, uri);
 	fz_catch(ctx)
@@ -284,7 +284,7 @@ pdf_load_link(fz_context *ctx, pdf_document *doc, pdf_obj *dict, int pagenum, co
 }
 
 fz_link *
-pdf_load_link_annots(fz_context *ctx, pdf_document *doc, pdf_obj *annots, int pagenum, const fz_matrix *page_ctm)
+pdf_load_link_annots(fz_context *ctx, pdf_document *doc, pdf_obj *annots, int pagenum, fz_matrix page_ctm)
 {
 	fz_link *link, *head, *tail;
 	pdf_obj *obj;
@@ -343,7 +343,7 @@ pdf_resolve_link(fz_context *ctx, pdf_document *doc, const char *uri, float *xp,
 				p.y = y ? fz_atoi(y + 1) : 0;
 				obj = pdf_lookup_page_obj(ctx, doc, page);
 				pdf_page_obj_transform(ctx, obj, NULL, &ctm);
-				fz_transform_point(&p, &ctm);
+				p = fz_transform_point(p, ctm);
 
 				if (xp) *xp = p.x;
 				if (yp) *yp = p.y;

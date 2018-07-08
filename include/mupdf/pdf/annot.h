@@ -87,7 +87,7 @@ pdf_annot *pdf_next_annot(fz_context *ctx, pdf_annot *annot);
 /*
 	pdf_bound_annot: Return the rectangle for an annotation on a page.
 */
-fz_rect *pdf_bound_annot(fz_context *ctx, pdf_annot *annot, fz_rect *rect);
+fz_rect pdf_bound_annot(fz_context *ctx, pdf_annot *annot);
 
 /*
 	pdf_annot_type: Return the type of an annotation
@@ -106,7 +106,7 @@ int pdf_annot_type(fz_context *ctx, pdf_annot *annot);
 	ctm: A transformation matrix applied to the objects on the page,
 	e.g. to scale or rotate the page contents as desired.
 */
-void pdf_run_annot(fz_context *ctx, pdf_annot *annot, fz_device *dev, const fz_matrix *ctm, fz_cookie *cookie);
+void pdf_run_annot(fz_context *ctx, pdf_annot *annot, fz_device *dev, fz_matrix ctm, fz_cookie *cookie);
 
 struct pdf_annot_s
 {
@@ -130,9 +130,9 @@ pdf_obj *pdf_lookup_name(fz_context *ctx, pdf_document *doc, pdf_obj *which, pdf
 pdf_obj *pdf_load_name_tree(fz_context *ctx, pdf_document *doc, pdf_obj *which);
 
 int pdf_resolve_link(fz_context *ctx, pdf_document *doc, const char *uri, float *xp, float *yp);
-fz_link *pdf_load_link_annots(fz_context *ctx, pdf_document *, pdf_obj *annots, int pagenum, const fz_matrix *page_ctm);
+fz_link *pdf_load_link_annots(fz_context *ctx, pdf_document *, pdf_obj *annots, int pagenum, fz_matrix page_ctm);
 
-void pdf_annot_transform(fz_context *ctx, pdf_annot *annot, fz_matrix *annot_ctm);
+fz_matrix pdf_annot_transform(fz_context *ctx, pdf_annot *annot);
 void pdf_load_annots(fz_context *ctx, pdf_page *page, pdf_obj *annots);
 void pdf_update_annot(fz_context *ctx, pdf_annot *annot);
 void pdf_drop_annots(fz_context *ctx, pdf_annot *annot_list);
@@ -160,12 +160,15 @@ int pdf_annot_has_open(fz_context *ctx, pdf_annot *annot);
 int pdf_annot_has_author(fz_context *ctx, pdf_annot *annot);
 
 int pdf_annot_flags(fz_context *ctx, pdf_annot *annot);
-void pdf_annot_rect(fz_context *ctx, pdf_annot *annot, fz_rect *rect);
+fz_rect pdf_annot_rect(fz_context *ctx, pdf_annot *annot);
 float pdf_annot_border(fz_context *ctx, pdf_annot *annot);
 float pdf_annot_opacity(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_color(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
 void pdf_annot_interior_color(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
 int pdf_annot_quadding(fz_context *ctx, pdf_annot *annot);
+
+void pdf_annot_MK_BG(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
+void pdf_annot_MK_BC(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
 
 int pdf_annot_quad_point_count(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_quad_point(fz_context *ctx, pdf_annot *annot, int i, float qp[8]);
@@ -175,7 +178,7 @@ int pdf_annot_ink_list_stroke_count(fz_context *ctx, pdf_annot *annot, int i);
 fz_point pdf_annot_ink_list_stroke_vertex(fz_context *ctx, pdf_annot *annot, int i, int k);
 
 void pdf_set_annot_flags(fz_context *ctx, pdf_annot *annot, int flags);
-void pdf_set_annot_rect(fz_context *ctx, pdf_annot *annot, const fz_rect *rect);
+void pdf_set_annot_rect(fz_context *ctx, pdf_annot *annot, fz_rect rect);
 void pdf_set_annot_border(fz_context *ctx, pdf_annot *annot, float width);
 void pdf_set_annot_opacity(fz_context *ctx, pdf_annot *annot, float opacity);
 void pdf_set_annot_color(fz_context *ctx, pdf_annot *annot, int n, const float color[4]);
@@ -220,9 +223,9 @@ void pdf_set_annot_vertex(fz_context *ctx, pdf_annot *annot, int i, fz_point p);
 void pdf_set_text_annot_position(fz_context *ctx, pdf_annot *annot, fz_point pt);
 
 /*
-	pdf_get_annot_contents: return the contents of an annotation.
+	pdf_annot_contents: return the contents of an annotation.
 */
-const char *pdf_get_annot_contents(fz_context *ctx, pdf_annot *annot);
+const char *pdf_annot_contents(fz_context *ctx, pdf_annot *annot);
 
 /*
 	pdf_set_annot_contents: set the contents of an annotation.
@@ -230,9 +233,9 @@ const char *pdf_get_annot_contents(fz_context *ctx, pdf_annot *annot);
 void pdf_set_annot_contents(fz_context *ctx, pdf_annot *annot, const char *text);
 
 /*
-	pdf_get_annot_author: return the author of an annotation.
+	pdf_annot_author: return the author of an annotation.
 */
-const char *pdf_get_annot_author(fz_context *ctx, pdf_annot *annot);
+const char *pdf_annot_author(fz_context *ctx, pdf_annot *annot);
 
 /*
 	pdf_set_annot_author: set the author of an annotation.

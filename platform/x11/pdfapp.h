@@ -22,6 +22,8 @@ enum { ARROW, HAND, WAIT, CARET };
 
 enum { DISCARD, SAVE, CANCEL };
 
+enum { QUERY_NO, QUERY_YES };
+
 extern void winwarn(pdfapp_t*, char *s);
 extern void winerror(pdfapp_t*, char *s);
 extern void wintitle(pdfapp_t*, char *title);
@@ -40,6 +42,8 @@ extern void winclose(pdfapp_t*);
 extern void winhelp(pdfapp_t*);
 extern void winfullscreen(pdfapp_t*, int state);
 extern int winsavequery(pdfapp_t*);
+extern int winquery(pdfapp_t*, const char*);
+extern int wingetcertpath(char *buf, int len);
 extern int wingetsavepath(pdfapp_t*, char *buf, int len);
 extern void winalert(pdfapp_t *, pdf_alert_event *alert);
 extern void winprint(pdfapp_t *);
@@ -164,7 +168,7 @@ void pdfapp_autozoom_horizontal(pdfapp_t *app);
 void pdfapp_autozoom_vertical(pdfapp_t *app);
 void pdfapp_autozoom(pdfapp_t *app);
 
-void pdfapp_invert(pdfapp_t *app, const fz_rect *rect);
+void pdfapp_invert(pdfapp_t *app, fz_rect rect);
 void pdfapp_inverthit(pdfapp_t *app);
 
 void pdfapp_postblit(pdfapp_t *app);

@@ -35,6 +35,7 @@ extern const char *pdf_glyph_name_from_iso8859_7[256];
 
 int pdf_cyrillic_from_unicode(int u);
 int pdf_greek_from_unicode(int u);
+int pdf_winansi_from_unicode(int u);
 
 typedef struct pdf_font_desc_s pdf_font_desc;
 typedef struct pdf_hmtx_s pdf_hmtx;
@@ -124,10 +125,7 @@ void pdf_drop_font(fz_context *ctx, pdf_font_desc *font);
 
 void pdf_print_font(fz_context *ctx, fz_output *out, pdf_font_desc *fontdesc);
 
-fz_rect *pdf_measure_text(fz_context *ctx, pdf_font_desc *fontdesc, unsigned char *buf, size_t len, fz_rect *rect);
-float pdf_text_stride(fz_context *ctx, pdf_font_desc *fontdesc, float fontsize, unsigned char *buf, size_t len, float room, size_t *count);
-
-void pdf_run_glyph(fz_context *ctx, pdf_document *doc, pdf_obj *resources, fz_buffer *contents, fz_device *dev, const fz_matrix *ctm, void *gstate, int nested_depth, fz_default_colorspaces *default_cs);
+void pdf_run_glyph(fz_context *ctx, pdf_document *doc, pdf_obj *resources, fz_buffer *contents, fz_device *dev, fz_matrix ctm, void *gstate, int nested_depth, fz_default_colorspaces *default_cs);
 
 pdf_obj *pdf_add_simple_font(fz_context *ctx, pdf_document *doc, fz_font *font, int encoding);
 pdf_obj *pdf_add_cid_font(fz_context *ctx, pdf_document *doc, fz_font *font);

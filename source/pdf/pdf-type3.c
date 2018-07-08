@@ -4,7 +4,7 @@
 #include "../fitz/font-imp.h"
 
 static void
-pdf_run_glyph_func(fz_context *ctx, void *doc, void *rdb, fz_buffer *contents, fz_device *dev, const fz_matrix *ctm, void *gstate, int nested_depth, fz_default_colorspaces *default_cs)
+pdf_run_glyph_func(fz_context *ctx, void *doc, void *rdb, fz_buffer *contents, fz_device *dev, fz_matrix ctm, void *gstate, int nested_depth, fz_default_colorspaces *default_cs)
 {
 	pdf_run_glyph(ctx, doc, (pdf_obj *)rdb, contents, dev, ctm, gstate, nested_depth, default_cs);
 }
@@ -56,12 +56,12 @@ pdf_load_type3_font(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, pdf_obj *d
 		fontdesc = pdf_new_font_desc(ctx);
 
 		obj = pdf_dict_get(ctx, dict, PDF_NAME(FontMatrix));
-		pdf_to_matrix(ctx, obj, &matrix);
+		matrix = pdf_to_matrix(ctx, obj);
 
 		obj = pdf_dict_get(ctx, dict, PDF_NAME(FontBBox));
-		fz_transform_rect(pdf_to_rect(ctx, obj, &bbox), &matrix);
+		bbox = fz_transform_rect(pdf_to_rect(ctx, obj), matrix);
 
-		font = fz_new_type3_font(ctx, buf, &matrix);
+		font = fz_new_type3_font(ctx, buf, matrix);
 		fontdesc->font = font;
 		fontdesc->size += sizeof(fz_font) + 256 * (sizeof(fz_buffer*) + sizeof(float));
 

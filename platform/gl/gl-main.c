@@ -147,7 +147,7 @@ static fz_quad search_hit_quads[5000];
 static char error_message[256];
 static void error_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*3);
+	ui_dialog_begin(500, (ui.gridsize+4)*4);
 	ui_layout(T, NONE, NW, 2, 2);
 	ui_label("%C %s", 0x1f4a3, error_message); /* BOMB */
 	ui_layout(B, NONE, S, 2, 2);
@@ -155,16 +155,19 @@ static void error_dialog(void)
 		exit(1);
 	ui_dialog_end();
 }
-void ui_show_error_dialog(const char *message)
+void ui_show_error_dialog(const char *fmt, ...)
 {
-	fz_strlcpy(error_message, message, sizeof error_message);
+	va_list ap;
+	va_start(ap, fmt);
+	fz_vsnprintf(error_message, sizeof error_message, fmt, ap);
+	va_end(ap);
 	ui.dialog = error_dialog;
 }
 
 static char warning_message[256];
 static void warning_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*3);
+	ui_dialog_begin(500, (ui.gridsize+4)*4);
 	ui_layout(T, NONE, NW, 2, 2);
 	ui_label("%C %s", 0x26a0, warning_message); /* WARNING SIGN */
 	ui_layout(B, NONE, S, 2, 2);
@@ -172,9 +175,12 @@ static void warning_dialog(void)
 		ui.dialog = NULL;
 	ui_dialog_end();
 }
-void ui_show_warning_dialog(const char *message)
+void ui_show_warning_dialog(const char *fmt, ...)
 {
-	fz_strlcpy(warning_message, message, sizeof warning_message);
+	va_list ap;
+	va_start(ap, fmt);
+	fz_vsnprintf(warning_message, sizeof warning_message, fmt, ap);
+	va_end(ap);
 	ui.dialog = warning_dialog;
 }
 
@@ -207,20 +213,8 @@ void update_title(void)
 
 void transform_page(void)
 {
-	fz_rect rect = page_bounds;
-	fz_matrix matrix;
-
-	draw_page_bounds = page_bounds;
-
-	fz_scale(&draw_page_ctm, currentzoom / 72, currentzoom / 72);
-	fz_pre_rotate(&draw_page_ctm, -currentrotate);
-
-	/* fix the page origin at 0,0 after rotation */
-	fz_transform_rect(&rect, &draw_page_ctm);
-	fz_translate(&matrix, -rect.x0, -rect.y0);
-	fz_concat(&draw_page_ctm, &draw_page_ctm, &matrix);
-
-	fz_transform_rect(&draw_page_bounds, &draw_page_ctm);
+	draw_page_ctm = fz_transform_page(page_bounds, currentzoom, currentrotate);
+	draw_page_bounds = fz_transform_rect(page_bounds, draw_page_ctm);
 }
 
 void load_page(void)
@@ -245,10 +239,10 @@ void load_page(void)
 	page_text = fz_new_stext_page_from_page(ctx, fzpage, NULL);
 
 	/* compute bounds here for initial window size */
-	fz_bound_page(ctx, fzpage, &page_bounds);
+	page_bounds = fz_bound_page(ctx, fzpage);
 	transform_page();
 
-	fz_irect_from_rect(&area, &draw_page_bounds);
+	area = fz_irect_from_rect(draw_page_bounds);
 	page_tex.w = area.x1 - area.x0;
 	page_tex.h = area.y1 - area.y0;
 }
@@ -259,11 +253,18 @@ void render_page(void)
 
 	transform_page();
 
-	pix = fz_new_pixmap_from_page(ctx, fzpage, &draw_page_ctm, fz_device_rgb(ctx), 0);
+	pix = fz_new_pixmap_from_page(ctx, fzpage, draw_page_ctm, fz_device_rgb(ctx), 0);
 	if (currentinvert)
 	{
 		fz_invert_pixmap(ctx, pix);
 		fz_gamma_pixmap(ctx, pix, 1 / 1.4f);
+	}
+
+	if (pdf)
+	{
+		pdf_annot *annot;
+		for (annot = page->annots; annot; annot = annot->next)
+			annot->has_new_ap = 0;
 	}
 
 	ui_texture_from_pixmap(&page_tex, pix);
@@ -274,16 +275,14 @@ static struct mark save_mark()
 {
 	struct mark mark;
 	mark.page = currentpage;
-	mark.scroll.x = scroll_x;
-	mark.scroll.y = scroll_y;
-	fz_transform_point(&mark.scroll, &view_page_inv_ctm);
+	mark.scroll = fz_transform_point_xy(scroll_x, scroll_y, view_page_inv_ctm);
 	return mark;
 }
 
 static void restore_mark(struct mark mark)
 {
 	currentpage = mark.page;
-	fz_transform_point(&mark.scroll, &draw_page_ctm);
+	mark.scroll = fz_transform_point(mark.scroll, draw_page_ctm);
 	scroll_x = mark.scroll.x;
 	scroll_y = mark.scroll.y;
 }
@@ -330,9 +329,8 @@ static void jump_to_page(int newpage)
 
 static void jump_to_page_xy(int newpage, float x, float y)
 {
-	fz_point p = { x, y };
+	fz_point p = fz_transform_point_xy(x, y, draw_page_ctm);
 	newpage = fz_clampi(newpage, 0, fz_count_pages(ctx, doc) - 1);
-	fz_transform_point(&p, &draw_page_ctm);
 	clear_future();
 	push_history();
 	currentpage = newpage;
@@ -420,8 +418,8 @@ static void do_links(fz_link *link)
 	while (link)
 	{
 		bounds = link->rect;
-		fz_transform_rect(&bounds, &view_page_ctm);
-		fz_irect_from_rect(&area, &bounds);
+		bounds = fz_transform_rect(link->rect, view_page_ctm);
+		area = fz_irect_from_rect(bounds);
 
 		if (ui_mouse_inside(&area))
 		{
@@ -486,8 +484,13 @@ static void do_page_selection(void)
 		fz_point page_a = { pt.x, pt.y };
 		fz_point page_b = { ui.x, ui.y };
 
-		fz_transform_point(&page_a, &view_page_inv_ctm);
-		fz_transform_point(&page_b, &view_page_inv_ctm);
+		page_a = fz_transform_point(page_a, view_page_inv_ctm);
+		page_b = fz_transform_point(page_b, view_page_inv_ctm);
+
+		if (ui.mod == GLUT_ACTIVE_CTRL)
+			fz_snap_selection(ctx, page_text, &page_a, &page_b, FZ_SELECT_WORDS);
+		else if (ui.mod == GLUT_ACTIVE_CTRL + GLUT_ACTIVE_SHIFT)
+			fz_snap_selection(ctx, page_text, &page_a, &page_b, FZ_SELECT_LINES);
 
 		n = fz_highlight_selection(ctx, page_text, page_a, page_b, hits, nelem(hits));
 
@@ -498,8 +501,7 @@ static void do_page_selection(void)
 		glBegin(GL_QUADS);
 		for (i = 0; i < n; ++i)
 		{
-			fz_quad thit = hits[i];
-			fz_transform_quad(&thit, &view_page_ctm);
+			fz_quad thit = fz_transform_quad(hits[i], view_page_ctm);
 			glVertex2f(thit.ul.x, thit.ul.y);
 			glVertex2f(thit.ur.x, thit.ur.y);
 			glVertex2f(thit.lr.x, thit.lr.y);
@@ -534,8 +536,7 @@ static void do_search_hits(void)
 	glBegin(GL_QUADS);
 	for (i = 0; i < search_hit_count; ++i)
 	{
-		fz_quad thit = search_hit_quads[i];
-		fz_transform_quad(&thit, &view_page_ctm);
+		fz_quad thit = fz_transform_quad(search_hit_quads[i], view_page_ctm);
 		glVertex2f(thit.ul.x, thit.ul.y);
 		glVertex2f(thit.ur.x, thit.ur.y);
 		glVertex2f(thit.lr.x, thit.lr.y);
@@ -555,9 +556,7 @@ static void do_forms(void)
 	if (!pdf || search_active)
 		return;
 
-	p.x = ui.x;
-	p.y = ui.y;
-	fz_transform_point(&p, &view_page_inv_ctm);
+	p = fz_transform_point_xy(ui.x, ui.y, view_page_inv_ctm);
 
 	if (ui.down && !ui.active)
 	{
@@ -568,8 +567,8 @@ static void do_forms(void)
 		{
 			if (pdf->focus)
 				ui.active = &do_forms_tag;
-			pdf_update_page(ctx, (pdf_page*)page);
-			render_page();
+			if (pdf_update_page(ctx, page))
+				render_page();
 		}
 	}
 	else if (ui.active == &do_forms_tag && !ui.down)
@@ -580,8 +579,8 @@ static void do_forms(void)
 		event.event.pointer.ptype = PDF_POINTER_UP;
 		if (pdf_pass_event(ctx, pdf, (pdf_page*)page, &event))
 		{
-			pdf_update_page(ctx, (pdf_page*)page);
-			render_page();
+			if (pdf_update_page(ctx, page))
+				render_page();
 		}
 	}
 }
@@ -843,8 +842,8 @@ static void do_app(void)
 		case 'z': set_zoom(number > 0 ? number : DEFRES, canvas_w/2, canvas_h/2); break;
 		case '+': set_zoom(zoom_in(currentzoom), ui.x, ui.y); break;
 		case '-': set_zoom(zoom_out(currentzoom), ui.x, ui.y); break;
-		case '[': currentrotate += 90; break;
-		case ']': currentrotate -= 90; break;
+		case '[': currentrotate -= 90; break;
+		case ']': currentrotate += 90; break;
 		case 'k': case KEY_UP: scroll_y -= 10; break;
 		case 'j': case KEY_DOWN: scroll_y += 10; break;
 		case 'h': case KEY_LEFT: scroll_x -= 10; break;
@@ -1119,10 +1118,9 @@ static void do_canvas(void)
 	view_page_ctm = draw_page_ctm;
 	view_page_ctm.e += page_x;
 	view_page_ctm.f += page_y;
-	fz_invert_matrix(&view_page_inv_ctm, &view_page_ctm);
-	view_page_bounds = page_bounds;
-	fz_transform_rect(&view_page_bounds, &view_page_ctm);
-	fz_irect_from_rect(&view_page_area, &view_page_bounds);
+	view_page_inv_ctm = fz_invert_matrix(view_page_ctm);
+	view_page_bounds = fz_transform_rect(page_bounds, view_page_ctm);
+	view_page_area = fz_irect_from_rect(view_page_bounds);
 
 	ui_draw_image(&page_tex, page_x, page_y);
 
@@ -1273,7 +1271,7 @@ void run_main_loop(void)
 			do_main();
 	}
 	fz_catch(ctx)
-		ui_show_error_dialog(fz_caught_message(ctx));
+		ui_show_error_dialog("%s", fz_caught_message(ctx));
 	ui_end();
 }
 
@@ -1372,7 +1370,7 @@ int main(int argc, char **argv)
 		}
 		fz_catch(ctx)
 		{
-			ui_show_error_dialog(fz_caught_message(ctx));
+			ui_show_error_dialog("%s", fz_caught_message(ctx));
 		}
 
 		fz_try(ctx)
@@ -1385,7 +1383,7 @@ int main(int argc, char **argv)
 		}
 		fz_catch(ctx)
 		{
-			ui_show_error_dialog(fz_caught_message(ctx));
+			ui_show_error_dialog("%s", fz_caught_message(ctx));
 		}
 	}
 	else

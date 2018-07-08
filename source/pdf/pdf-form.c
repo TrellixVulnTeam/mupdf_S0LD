@@ -42,14 +42,10 @@ static void pdf_field_mark_dirty(fz_context *ctx, pdf_document *doc, pdf_obj *fi
 	if (kids)
 	{
 		int i, n = pdf_array_len(ctx, kids);
-
 		for (i = 0; i < n; i++)
 			pdf_field_mark_dirty(ctx, doc, pdf_array_get(ctx, kids, i));
 	}
-	else
-	{
-		pdf_dirty_obj(ctx, field);
-	}
+	pdf_dirty_obj(ctx, field);
 }
 
 static void update_field_value(fz_context *ctx, pdf_document *doc, pdf_obj *obj, const char *text)
@@ -538,7 +534,7 @@ int pdf_pass_event(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf_ui_ev
 
 	for (annot = page->annots; annot; annot = annot->next)
 	{
-		pdf_bound_annot(ctx, annot, &bbox);
+		bbox = pdf_bound_annot(ctx, annot);
 		if (pt->x >= bbox.x0 && pt->x <= bbox.x1)
 			if (pt->y >= bbox.y0 && pt->y <= bbox.y1)
 				break;
@@ -622,14 +618,18 @@ int pdf_pass_event(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf_ui_ev
 	return changed;
 }
 
-void pdf_update_page(fz_context *ctx, pdf_page *page)
+int
+pdf_update_page(fz_context *ctx, pdf_page *page)
 {
 	pdf_annot *annot;
-
+	int changed = 0;
 	for (annot = page->annots; annot; annot = annot->next)
 	{
 		pdf_update_annot(ctx, annot);
+		if (annot->has_new_ap)
+			changed = 1;
 	}
+	return changed;
 }
 
 pdf_widget *pdf_focused_widget(fz_context *ctx, pdf_document *doc)
@@ -996,9 +996,9 @@ void pdf_field_set_text_color(fz_context *ctx, pdf_document *doc, pdf_obj *field
 	pdf_field_mark_dirty(ctx, doc, field);
 }
 
-fz_rect *pdf_bound_widget(fz_context *ctx, pdf_widget *widget, fz_rect *rect)
+fz_rect pdf_bound_widget(fz_context *ctx, pdf_widget *widget)
 {
-	return pdf_bound_annot(ctx, (pdf_annot*)widget, rect);
+	return pdf_bound_annot(ctx, (pdf_annot*)widget);
 }
 
 char *pdf_text_widget_text(fz_context *ctx, pdf_document *doc, pdf_widget *tw)
