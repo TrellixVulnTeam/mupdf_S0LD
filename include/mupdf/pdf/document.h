@@ -635,6 +635,7 @@ struct pdf_document_s
 	int *xref_index;
 	int freeze_updates;
 	int has_xref_streams;
+	int has_old_style_xrefs;
 
 	int rev_page_count;
 	pdf_rev_page_map *rev_page_map;
@@ -919,8 +920,6 @@ int pdf_has_unsaved_sigs(fz_context *ctx, pdf_document *doc);
 
 /*
 	pdf_write_document: Write out the document to an output stream with all changes finalised.
-
-	This method will throw an error if pdf_has_unsaved_sigs.
 */
 void pdf_write_document(fz_context *ctx, pdf_document *doc, fz_output *out, pdf_write_options *opts);
 

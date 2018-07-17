@@ -549,6 +549,8 @@ static int pdfapp_save(pdfapp_t *app)
 		{
 			wincopyfile(app->docpath, buf);
 			pdf_save_document(app->ctx, idoc, buf, &opts);
+			pdfapp_close(app);
+			pdfapp_open(app, buf, 1);
 			return 1;
 		}
 
@@ -1682,8 +1684,8 @@ void pdfapp_onmouse(pdfapp_t *app, int x, int y, int btn, int modifiers, int sta
 					{
 						int nopts;
 						int nvals;
-						char **opts = NULL;
-						char **vals = NULL;
+						const char **opts = NULL;
+						const char **vals = NULL;
 
 						fz_var(opts);
 						fz_var(vals);
