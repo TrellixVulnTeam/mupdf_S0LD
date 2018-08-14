@@ -21,8 +21,8 @@ enum
 static int pdf_field_dirties_document(fz_context *ctx, pdf_document *doc, pdf_obj *field)
 {
 	int ff = pdf_get_field_flags(ctx, doc, field);
-	if (ff & Ff_NoExport) return 0;
-	if (ff & Ff_ReadOnly) return 0;
+	if (ff & PDF_FIELD_IS_NO_EXPORT) return 0;
+	if (ff & PDF_FIELD_IS_READ_ONLY) return 0;
 	return 1;
 }
 
@@ -72,7 +72,7 @@ static pdf_obj *find_field(fz_context *ctx, pdf_obj *dict, char *name, int len)
 	for (i = 0; i < n; i++)
 	{
 		pdf_obj *field = pdf_array_get(ctx, dict, i);
-		const char *part = pdf_dict_get_string(ctx, field, PDF_NAME(T), NULL);
+		const char *part = pdf_dict_get_text_string(ctx, field, PDF_NAME(T));
 		if (strlen(part) == (size_t)len && !memcmp(part, name, len))
 			return field;
 	}
@@ -454,7 +454,8 @@ static void toggle_check_box(fz_context *ctx, pdf_document *doc, pdf_obj *obj)
 {
 	pdf_obj *as = pdf_dict_get(ctx, obj, PDF_NAME(AS));
 	int ff = pdf_get_field_flags(ctx, doc, obj);
-	int radio = ((ff & (Ff_Pushbutton|Ff_Radio)) == Ff_Radio);
+	int button_mask = PDF_BTN_FIELD_IS_RADIO | PDF_BTN_FIELD_IS_PUSHBUTTON;
+	int radio = ((ff & button_mask) == PDF_BTN_FIELD_IS_RADIO);
 	char *val = NULL;
 	pdf_obj *grp = radio ? pdf_dict_get(ctx, obj, PDF_NAME(Parent)) : find_head_of_field_group(ctx, obj);
 
@@ -465,7 +466,7 @@ static void toggle_check_box(fz_context *ctx, pdf_document *doc, pdf_obj *obj)
 	{
 		/* "as" neither missing nor set to Off. Set it to Off, unless
 		 * this is a non-toggle-off radio button. */
-		if ((ff & (Ff_Pushbutton|Ff_NoToggleToOff|Ff_Radio)) != (Ff_NoToggleToOff|Ff_Radio))
+		if (radio && !(ff & PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF))
 		{
 			check_off(ctx, doc, obj);
 			val = "Off";
@@ -676,7 +677,7 @@ pdf_widget *pdf_create_widget(fz_context *ctx, pdf_document *doc, pdf_page *page
 	fz_try(ctx)
 	{
 		pdf_set_field_type(ctx, doc, annot->obj, type);
-		pdf_dict_put_string(ctx, annot->obj, PDF_NAME(T), fieldname, strlen(fieldname));
+		pdf_dict_put_text_string(ctx, annot->obj, PDF_NAME(T), fieldname);
 
 		if (type == PDF_WIDGET_TYPE_SIGNATURE)
 		{
@@ -887,7 +888,7 @@ static char *get_field_name(fz_context *ctx, pdf_document *doc, pdf_obj *field, 
 {
 	char *res = NULL;
 	pdf_obj *parent = pdf_dict_get(ctx, field, PDF_NAME(Parent));
-	const char *lname = pdf_dict_get_string(ctx, field, PDF_NAME(T), NULL);
+	const char *lname = pdf_dict_get_text_string(ctx, field, PDF_NAME(T));
 	int llen = (int)strlen(lname);
 
 	/*
@@ -1060,6 +1061,10 @@ static int run_keystroke(fz_context *ctx, pdf_document *doc, pdf_obj *field, cha
 {
 	pdf_obj *k = pdf_dict_getl(ctx, field, PDF_NAME(AA), PDF_NAME(K), NULL);
 
+	/* Return 1 on empty string */
+	if (*text[0] == 0)
+		return 1;
+
 	if (k && doc->js)
 	{
 		pdf_js_event e;
@@ -1138,7 +1143,7 @@ int pdf_choice_widget_is_multiselect(fz_context *ctx, pdf_document *doc, pdf_wid
 	{
 	case PDF_WIDGET_TYPE_LISTBOX:
 	case PDF_WIDGET_TYPE_COMBOBOX:
-		return (pdf_get_field_flags(ctx, doc, annot->obj) & Ff_MultiSelect) != 0;
+		return (pdf_get_field_flags(ctx, doc, annot->obj) & PDF_CH_FIELD_IS_MULTI_SELECT) != 0;
 	default:
 		return 0;
 	}
