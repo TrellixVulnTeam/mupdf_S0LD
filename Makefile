@@ -96,6 +96,11 @@ $(OUT)/platform/x11/curl/%.o : platform/x11/%.c
 $(OUT)/platform/gl/%.o : platform/gl/%.c
 	$(CC_CMD) -Wall $(GLUT_CFLAGS)
 
+ifeq ($(HAVE_OBJCOPY),yes)
+  $(OUT)/source/fitz/noto.o : source/fitz/noto.c
+	$(CC_CMD) -Wall -Wdeclaration-after-statement -DHAVE_OBJCOPY $(THIRD_CFLAGS)
+endif
+
 $(OUT)/source/%.o : source/%.c
 	$(CC_CMD) -Wall -Wdeclaration-after-statement $(THIRD_CFLAGS)
 
@@ -127,9 +132,7 @@ THREAD_SRC := source/helpers/mu-threads/mu-threads.c
 THREAD_OBJ := $(THREAD_SRC:%.c=$(OUT)/%.o)
 
 PKCS7_SRC := source/helpers/pkcs7/pkcs7-check.c
-ifeq ($(HAVE_LIBCRYPTO),yes)
-  PKCS7_SRC += source/helpers/pkcs7/pkcs7-openssl.c
-endif
+PKCS7_SRC += source/helpers/pkcs7/pkcs7-openssl.c
 PKCS7_OBJ := $(PKCS7_SRC:%.c=$(OUT)/%.o)
 
 # --- Generated embedded font files ---
@@ -150,7 +153,7 @@ $(GENERATED)/%.otf.c : %.otf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDU
 $(GENERATED)/%.ttf.c : %.ttf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
 $(GENERATED)/%.ttc.c : %.ttc $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
 
-ifeq ($(OS),Linux)
+ifeq ($(HAVE_OBJCOPY),yes)
   MUPDF_OBJ += $(FONT_BIN:%=$(OUT)/%.o)
   $(OUT)/%.cff.o : %.cff ; $(OBJCOPY_CMD)
   $(OUT)/%.otf.o : %.otf ; $(OBJCOPY_CMD)

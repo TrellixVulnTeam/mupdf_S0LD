@@ -132,7 +132,7 @@ static void reset_form_field(fz_context *ctx, pdf_document *doc, pdf_obj *field)
 		case PDF_WIDGET_TYPE_RADIOBUTTON:
 		case PDF_WIDGET_TYPE_CHECKBOX:
 			{
-				pdf_obj *leafv = pdf_get_inheritable(ctx, doc, field, PDF_NAME(V));
+				pdf_obj *leafv = pdf_dict_get_inheritable(ctx, field, PDF_NAME(V));
 
 				if (leafv)
 					pdf_keep_obj(ctx, leafv);
@@ -633,8 +633,7 @@ pdf_update_page(fz_context *ctx, pdf_page *page)
 	int changed = 0;
 	for (annot = page->annots; annot; annot = annot->next)
 	{
-		pdf_update_annot(ctx, annot);
-		if (annot->has_new_ap)
+		if (pdf_update_annot(ctx, annot))
 			changed = 1;
 	}
 	return changed;
@@ -975,7 +974,7 @@ void pdf_field_set_text_color(fz_context *ctx, pdf_document *doc, pdf_obj *field
 	char buf[100];
 	const char *font;
 	float size, color[3], black;
-	const char *da = pdf_to_str_buf(ctx, pdf_get_inheritable(ctx, doc, field, PDF_NAME(DA)));
+	const char *da = pdf_to_str_buf(ctx, pdf_dict_get_inheritable(ctx, field, PDF_NAME(DA)));
 
 	pdf_parse_default_appearance(ctx, da, &font, &size, color);
 
@@ -983,6 +982,7 @@ void pdf_field_set_text_color(fz_context *ctx, pdf_document *doc, pdf_obj *field
 	{
 	default:
 		color[0] = color[1] = color[2] = 0;
+		break;
 	case 1:
 		color[0] = color[1] = color[2] = pdf_array_get_real(ctx, col, 0);
 		break;
@@ -1031,38 +1031,26 @@ int pdf_text_widget_max_len(fz_context *ctx, pdf_document *doc, pdf_widget *tw)
 {
 	pdf_annot *annot = (pdf_annot *)tw;
 
-	return pdf_to_int(ctx, pdf_get_inheritable(ctx, doc, annot->obj, PDF_NAME(MaxLen)));
+	return pdf_to_int(ctx, pdf_dict_get_inheritable(ctx, annot->obj, PDF_NAME(MaxLen)));
 }
 
 int pdf_text_widget_content_type(fz_context *ctx, pdf_document *doc, pdf_widget *tw)
 {
 	pdf_annot *annot = (pdf_annot *)tw;
-	char *code = NULL;
 	int type = PDF_WIDGET_CONTENT_UNRESTRAINED;
-
-	fz_var(code);
-	fz_try(ctx)
+	pdf_obj *js = pdf_dict_getl(ctx, annot->obj, PDF_NAME(AA), PDF_NAME(F), PDF_NAME(JS), NULL);
+	if (js)
 	{
-		code = pdf_get_string_or_stream(ctx, doc, pdf_dict_getl(ctx, annot->obj, PDF_NAME(AA), PDF_NAME(F), PDF_NAME(JS), NULL));
-		if (code)
-		{
-			if (strstr(code, "AFNumber_Format"))
-				type = PDF_WIDGET_CONTENT_NUMBER;
-			else if (strstr(code, "AFSpecial_Format"))
-				type = PDF_WIDGET_CONTENT_SPECIAL;
-			else if (strstr(code, "AFDate_FormatEx"))
-				type = PDF_WIDGET_CONTENT_DATE;
-			else if (strstr(code, "AFTime_FormatEx"))
-				type = PDF_WIDGET_CONTENT_TIME;
-		}
-	}
-	fz_always(ctx)
-	{
+		char *code = pdf_load_stream_or_string_as_utf8(ctx, js);
+		if (strstr(code, "AFNumber_Format"))
+			type = PDF_WIDGET_CONTENT_NUMBER;
+		else if (strstr(code, "AFSpecial_Format"))
+			type = PDF_WIDGET_CONTENT_SPECIAL;
+		else if (strstr(code, "AFDate_FormatEx"))
+			type = PDF_WIDGET_CONTENT_DATE;
+		else if (strstr(code, "AFTime_FormatEx"))
+			type = PDF_WIDGET_CONTENT_TIME;
 		fz_free(ctx, code);
-	}
-	fz_catch(ctx)
-	{
-		fz_warn(ctx, "failure in fz_text_widget_content_type");
 	}
 
 	return type;
@@ -1245,7 +1233,7 @@ int pdf_signature_widget_byte_range(fz_context *ctx, pdf_document *doc, pdf_widg
 		for (i = 0; i < n; i++)
 		{
 			byte_range[i].offset = pdf_array_get_int(ctx, br, 2*i);
-			byte_range[i].len = pdf_array_get_int(ctx, br, 2*i+1);
+			byte_range[i].length = pdf_array_get_int(ctx, br, 2*i+1);
 		}
 	}
 
@@ -1268,7 +1256,7 @@ fz_stream *pdf_signature_widget_hash_bytes(fz_context *ctx, pdf_document *doc, p
 			pdf_signature_widget_byte_range(ctx, doc, widget, byte_range);
 		}
 
-		bytes = fz_open_null_n(ctx, doc->file, byte_range, byte_range_len);
+		bytes = fz_open_range_filter(ctx, doc->file, byte_range, byte_range_len);
 	}
 	fz_always(ctx)
 	{

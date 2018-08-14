@@ -3364,7 +3364,7 @@ newNativeAndroidDrawDevice(JNIEnv *env, jobject self, fz_context *ctx, jobject o
 
 	fz_try(ctx)
 	{
-		pixmap = fz_new_pixmap_with_bbox_and_data(ctx, fz_device_rgb(ctx), &bbox, NULL, 1, &dummy);
+		pixmap = fz_new_pixmap_with_bbox_and_data(ctx, fz_device_rgb(ctx), bbox, NULL, 1, &dummy);
 		pixmap->stride = width * sizeof(int32_t);
 		ninfo = fz_malloc(ctx, sizeof(*ninfo));
 		ninfo->pixmap = pixmap;
@@ -3382,7 +3382,7 @@ newNativeAndroidDrawDevice(JNIEnv *env, jobject self, fz_context *ctx, jobject o
 		{
 			fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
 			unlockNativeDevice(env,ninfo);
-			device = fz_new_draw_device(ctx, NULL, pixmap);
+			device = fz_new_draw_device(ctx, fz_identity, pixmap);
 		}
 	}
 	fz_catch(ctx)
@@ -8761,6 +8761,23 @@ FUN(PDFPage_deleteAnnotation)(JNIEnv *env, jobject self, jobject jannot)
 		jni_rethrow(env, ctx);
 }
 
+JNIEXPORT jboolean JNICALL
+FUN(PDFPage_update)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_page *page = from_PDFPage(env, self);
+	jboolean changed = JNI_FALSE;
+
+	if (!ctx || !page) return JNI_FALSE;
+
+	fz_try(ctx)
+		changed = pdf_update_page(ctx, page);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return changed;
+}
+
 /* PDFAnnotation interface */
 
 JNIEXPORT jint JNICALL
@@ -9211,13 +9228,26 @@ FUN(PDFAnnotation_updateAppearance)(JNIEnv *env, jobject self)
 	if (!ctx || !annot) return;
 
 	fz_try(ctx)
-	{
-		pdf_dict_del(ctx, annot->obj, PDF_NAME(AP)); /* nuke old AP */
 		pdf_update_appearance(ctx, annot);
-		pdf_update_annot(ctx, annot); /* ensure new AP is put into annot */
-	}
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_update)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean changed = JNI_FALSE;
+
+	if (!ctx || !annot) return JNI_FALSE;
+
+	fz_try(ctx)
+		changed = pdf_update_annot(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return changed;
 }
 
 JNIEXPORT jobject JNICALL

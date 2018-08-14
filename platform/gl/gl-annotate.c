@@ -115,6 +115,8 @@ static void new_annot(int type)
 	case PDF_ANNOT_SOUND:
 		{
 			fz_rect icon_rect = { 12, 12, 12+20, 12+20 };
+			pdf_set_annot_flags(ctx, selected_annot,
+				PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_NO_ZOOM | PDF_ANNOT_IS_NO_ROTATE);
 			pdf_set_annot_rect(ctx, selected_annot, icon_rect);
 			pdf_set_annot_color(ctx, selected_annot, 3, yellow);
 		}
@@ -611,7 +613,7 @@ void do_annotate_panel(void)
 			static int border;
 			border = pdf_annot_border(ctx, selected_annot);
 			ui_label("Border: %d", border);
-			if (ui_slider(&border, 0, 10, 100))
+			if (ui_slider(&border, 0, 12, 100))
 				pdf_set_annot_border(ctx, selected_annot, border);
 		}
 
@@ -721,10 +723,14 @@ static void do_edit_icon(fz_irect canvas_area, fz_irect area, fz_rect *rect)
 		/* Commit movement on mouse-up */
 		if (!ui.down)
 		{
+			fz_point dp = { rect->x0 - start_pt.x, rect->y0 - start_pt.y };
 			moving = 0;
-			if (fz_abs(start_pt.x - rect->x0) > 0.1f || fz_abs(start_pt.x - rect->y0) > 0.1f)
+			if (fz_abs(dp.x) > 0.1f || fz_abs(dp.y) > 0.1f)
 			{
-				fz_rect trect = fz_transform_rect(*rect, view_page_inv_ctm);
+				fz_rect trect = pdf_annot_rect(ctx, selected_annot);
+				dp = fz_transform_vector(dp, view_page_inv_ctm);
+				trect.x0 += dp.x; trect.x1 += dp.x;
+				trect.y0 += dp.y; trect.y1 += dp.y;
 				pdf_set_annot_rect(ctx, selected_annot, trect);
 			}
 		}
