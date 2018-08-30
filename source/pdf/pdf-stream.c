@@ -173,6 +173,7 @@ build_filter(fz_context *ctx, fz_stream *chain, pdf_document *doc, pdf_obj *f, p
 {
 	fz_compression_params local_params;
 
+	local_params.u.jbig2.globals = NULL;
 	if (params == NULL)
 		params = &local_params;
 
@@ -184,6 +185,18 @@ build_filter(fz_context *ctx, fz_stream *chain, pdf_document *doc, pdf_obj *f, p
 	if (params != &local_params && params->type != FZ_IMAGE_RAW)
 		return fz_keep_stream(ctx, chain); /* nothing to do */
 
+	else if (params->type == FZ_IMAGE_JBIG2)
+	{
+		fz_stream *stm;
+		fz_try(ctx)
+			stm = fz_open_image_decomp_stream(ctx, chain, params, NULL);
+		fz_always(ctx)
+			fz_drop_jbig2_globals(ctx, local_params.u.jbig2.globals);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
+		return stm;
+	}
+
 	else if (params->type != FZ_IMAGE_RAW)
 		return fz_open_image_decomp_stream(ctx, chain, params, NULL);
 
@@ -192,9 +205,6 @@ build_filter(fz_context *ctx, fz_stream *chain, pdf_document *doc, pdf_obj *f, p
 
 	else if (pdf_name_eq(ctx, f, PDF_NAME(ASCII85Decode)) || pdf_name_eq(ctx, f, PDF_NAME(A85)))
 		return fz_open_a85d(ctx, chain);
-
-	else if (pdf_name_eq(ctx, f, PDF_NAME(JBIG2Decode)))
-		return fz_open_jbig2d(ctx, chain, params->u.jbig2.globals); /* takes ownership of jbig2_globals */
 
 	else if (pdf_name_eq(ctx, f, PDF_NAME(JPXDecode)))
 		return fz_keep_stream(ctx, chain); /* JPX decoding is special cased in the image loading code */
