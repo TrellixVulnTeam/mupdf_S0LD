@@ -95,6 +95,7 @@ static jclass cls_SeekableStream;
 static jclass cls_Shade;
 static jclass cls_StrokeState;
 static jclass cls_StructuredText;
+static jclass cls_StructuredTextWalker;
 static jclass cls_Text;
 static jclass cls_TextBlock;
 static jclass cls_TextChar;
@@ -213,6 +214,12 @@ static jmethodID mid_SeekableStream_seek;
 static jmethodID mid_Shade_init;
 static jmethodID mid_StrokeState_init;
 static jmethodID mid_StructuredText_init;
+static jmethodID mid_StructuredTextWalker_onImageBlock;
+static jmethodID mid_StructuredTextWalker_beginTextBlock;
+static jmethodID mid_StructuredTextWalker_endTextBlock;
+static jmethodID mid_StructuredTextWalker_beginLine;
+static jmethodID mid_StructuredTextWalker_endLine;
+static jmethodID mid_StructuredTextWalker_onChar;
 static jmethodID mid_TextBlock_init;
 static jmethodID mid_TextChar_init;
 static jmethodID mid_TextLine_init;
@@ -229,6 +236,43 @@ static fz_context *base_context;
 static int check_enums()
 {
 	int valid = 1;
+
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_NORMAL == FZ_BLEND_NORMAL;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_MULTIPLY == FZ_BLEND_MULTIPLY;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_SCREEN == FZ_BLEND_SCREEN;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_OVERLAY == FZ_BLEND_OVERLAY;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_DARKEN == FZ_BLEND_DARKEN;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_LIGHTEN == FZ_BLEND_LIGHTEN;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_COLOR_DODGE == FZ_BLEND_COLOR_DODGE;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_COLOR_BURN == FZ_BLEND_COLOR_BURN;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_HARD_LIGHT == FZ_BLEND_HARD_LIGHT;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_SOFT_LIGHT == FZ_BLEND_SOFT_LIGHT;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_DIFFERENCE == FZ_BLEND_DIFFERENCE;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_EXCLUSION == FZ_BLEND_EXCLUSION;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_HUE == FZ_BLEND_HUE;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_SATURATION == FZ_BLEND_SATURATION;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_COLOR == FZ_BLEND_COLOR;
+	valid &= com_artifex_mupdf_fitz_Device_BLEND_LUMINOSITY == FZ_BLEND_LUMINOSITY;
+
+	valid &= com_artifex_mupdf_fitz_Font_LATIN == PDF_SIMPLE_ENCODING_LATIN;
+	valid &= com_artifex_mupdf_fitz_Font_GREEK == PDF_SIMPLE_ENCODING_GREEK;
+	valid &= com_artifex_mupdf_fitz_Font_CYRILLIC == PDF_SIMPLE_ENCODING_CYRILLIC;
+
+	valid &= com_artifex_mupdf_fitz_Font_CN == FZ_ADOBE_CNS_1;
+	valid &= com_artifex_mupdf_fitz_Font_TW == FZ_ADOBE_GB_1;
+	valid &= com_artifex_mupdf_fitz_Font_JP == FZ_ADOBE_JAPAN_1;
+	valid &= com_artifex_mupdf_fitz_Font_KR == FZ_ADOBE_KOREA_1;
+
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_NONE == PDF_ANNOT_LE_NONE;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_SQUARE == PDF_ANNOT_LE_SQUARE;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_CIRCLE == PDF_ANNOT_LE_CIRCLE;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_DIAMOND == PDF_ANNOT_LE_DIAMOND;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_OPEN_ARROW == PDF_ANNOT_LE_OPEN_ARROW;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_CLOSED_ARROW == PDF_ANNOT_LE_CLOSED_ARROW;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_BUTT == PDF_ANNOT_LE_BUTT;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_R_OPEN_ARROW == PDF_ANNOT_LE_R_OPEN_ARROW;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_R_CLOSED_ARROW == PDF_ANNOT_LE_R_CLOSED_ARROW;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_SLASH == PDF_ANNOT_LE_SLASH;
 
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_TEXT == PDF_ANNOT_TEXT;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_LINK == PDF_ANNOT_LINK;
@@ -257,16 +301,19 @@ static int check_enums()
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_3D == PDF_ANNOT_3D;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_UNKNOWN == PDF_ANNOT_UNKNOWN;
 
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_NONE == PDF_ANNOT_LE_NONE;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_SQUARE == PDF_ANNOT_LE_SQUARE;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_CIRCLE == PDF_ANNOT_LE_CIRCLE;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_DIAMOND == PDF_ANNOT_LE_DIAMOND;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_OPEN_ARROW == PDF_ANNOT_LE_OPEN_ARROW;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_CLOSED_ARROW == PDF_ANNOT_LE_CLOSED_ARROW;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_BUTT == PDF_ANNOT_LE_BUTT;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_R_OPEN_ARROW == PDF_ANNOT_LE_R_OPEN_ARROW;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_R_CLOSED_ARROW == PDF_ANNOT_LE_R_CLOSED_ARROW;
-	valid &= com_artifex_mupdf_fitz_PDFAnnotation_LINE_ENDING_SLASH == PDF_ANNOT_LE_SLASH;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_CAP_BUTT == FZ_LINECAP_BUTT;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_CAP_ROUND == FZ_LINECAP_ROUND;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_CAP_SQUARE == FZ_LINECAP_SQUARE;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_CAP_TRIANGLE == FZ_LINECAP_TRIANGLE;
+
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_JOIN_MITER == FZ_LINEJOIN_MITER;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_JOIN_ROUND == FZ_LINEJOIN_ROUND;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_JOIN_BEVEL == FZ_LINEJOIN_BEVEL;
+	valid &= com_artifex_mupdf_fitz_StrokeState_LINE_JOIN_MITER_XPS == FZ_LINEJOIN_MITER_XPS;
+
+	valid &= com_artifex_mupdf_fitz_StructuredText_SELECT_CHARS == FZ_SELECT_CHARS;
+	valid &= com_artifex_mupdf_fitz_StructuredText_SELECT_WORDS == FZ_SELECT_WORDS;
+	valid &= com_artifex_mupdf_fitz_StructuredText_SELECT_LINES == FZ_SELECT_LINES;
 
 	return valid ? 1 : 0;
 }
@@ -458,23 +505,23 @@ static int find_fids(JNIEnv *env)
 	cls_Device = get_class(&err, env, PKG"Device");
 	fid_Device_pointer = get_field(&err, env, "pointer", "J");
 	mid_Device_init = get_method(&err, env, "<init>", "(J)V");
-	mid_Device_fillPath = get_method(&err, env, "fillPath", "(L"PKG"Path;ZL"PKG"Matrix;L"PKG"ColorSpace;[FF)V");
-	mid_Device_strokePath = get_method(&err, env, "strokePath", "(L"PKG"Path;L"PKG"StrokeState;L"PKG"Matrix;L"PKG"ColorSpace;[FF)V");
+	mid_Device_fillPath = get_method(&err, env, "fillPath", "(L"PKG"Path;ZL"PKG"Matrix;L"PKG"ColorSpace;[FFI)V");
+	mid_Device_strokePath = get_method(&err, env, "strokePath", "(L"PKG"Path;L"PKG"StrokeState;L"PKG"Matrix;L"PKG"ColorSpace;[FFI)V");
 	mid_Device_clipPath = get_method(&err, env, "clipPath", "(L"PKG"Path;ZL"PKG"Matrix;)V");
 	mid_Device_clipStrokePath = get_method(&err, env, "clipStrokePath", "(L"PKG"Path;L"PKG"StrokeState;L"PKG"Matrix;)V");
-	mid_Device_fillText = get_method(&err, env, "fillText", "(L"PKG"Text;L"PKG"Matrix;L"PKG"ColorSpace;[FF)V");
-	mid_Device_strokeText = get_method(&err, env, "strokeText", "(L"PKG"Text;L"PKG"StrokeState;L"PKG"Matrix;L"PKG"ColorSpace;[FF)V");
+	mid_Device_fillText = get_method(&err, env, "fillText", "(L"PKG"Text;L"PKG"Matrix;L"PKG"ColorSpace;[FFI)V");
+	mid_Device_strokeText = get_method(&err, env, "strokeText", "(L"PKG"Text;L"PKG"StrokeState;L"PKG"Matrix;L"PKG"ColorSpace;[FFI)V");
 	mid_Device_clipText = get_method(&err, env, "clipText", "(L"PKG"Text;L"PKG"Matrix;)V");
 	mid_Device_clipStrokeText = get_method(&err, env, "clipStrokeText", "(L"PKG"Text;L"PKG"StrokeState;L"PKG"Matrix;)V");
 	mid_Device_ignoreText = get_method(&err, env, "ignoreText", "(L"PKG"Text;L"PKG"Matrix;)V");
-	mid_Device_fillShade = get_method(&err, env, "fillShade", "(L"PKG"Shade;L"PKG"Matrix;F)V");
-	mid_Device_fillImage = get_method(&err, env, "fillImage", "(L"PKG"Image;L"PKG"Matrix;F)V");
-	mid_Device_fillImageMask = get_method(&err, env, "fillImageMask", "(L"PKG"Image;L"PKG"Matrix;L"PKG"ColorSpace;[FF)V");
+	mid_Device_fillShade = get_method(&err, env, "fillShade", "(L"PKG"Shade;L"PKG"Matrix;FI)V");
+	mid_Device_fillImage = get_method(&err, env, "fillImage", "(L"PKG"Image;L"PKG"Matrix;FI)V");
+	mid_Device_fillImageMask = get_method(&err, env, "fillImageMask", "(L"PKG"Image;L"PKG"Matrix;L"PKG"ColorSpace;[FFI)V");
 	mid_Device_clipImageMask = get_method(&err, env, "clipImageMask", "(L"PKG"Image;L"PKG"Matrix;)V");
 	mid_Device_popClip = get_method(&err, env, "popClip", "()V");
 	mid_Device_beginLayer = get_method(&err, env, "beginLayer", "(Ljava/lang/String;)V");
 	mid_Device_endLayer = get_method(&err, env, "endLayer", "()V");
-	mid_Device_beginMask = get_method(&err, env, "beginMask", "(L"PKG"Rect;ZL"PKG"ColorSpace;[F)V");
+	mid_Device_beginMask = get_method(&err, env, "beginMask", "(L"PKG"Rect;ZL"PKG"ColorSpace;[FI)V");
 	mid_Device_endMask = get_method(&err, env, "endMask", "()V");
 	mid_Device_beginGroup = get_method(&err, env, "beginGroup", "(L"PKG"Rect;L"PKG"ColorSpace;ZZIF)V");
 	mid_Device_endGroup = get_method(&err, env, "endGroup", "()V");
@@ -606,6 +653,14 @@ static int find_fids(JNIEnv *env)
 	fid_StructuredText_pointer = get_field(&err, env, "pointer", "J");
 	mid_StructuredText_init = get_method(&err, env, "<init>", "(J)V");
 
+	cls_StructuredTextWalker = get_class(&err, env, PKG"StructuredTextWalker");
+	mid_StructuredTextWalker_onImageBlock = get_method(&err, env, "onImageBlock", "(L"PKG"Rect;L"PKG"Matrix;L"PKG"Image;)V");
+	mid_StructuredTextWalker_beginTextBlock = get_method(&err, env, "beginTextBlock", "(L"PKG"Rect;)V");
+	mid_StructuredTextWalker_endTextBlock = get_method(&err, env, "endTextBlock", "()V");
+	mid_StructuredTextWalker_beginLine = get_method(&err, env, "beginLine", "(L"PKG"Rect;I)V");
+	mid_StructuredTextWalker_endLine = get_method(&err, env, "endLine", "()V");
+	mid_StructuredTextWalker_onChar = get_method(&err, env, "onChar", "(IL"PKG"Point;L"PKG"Font;FL"PKG"Quad;)V");
+
 	cls_Text = get_class(&err, env, PKG"Text");
 	fid_Text_pointer = get_field(&err, env, "pointer", "J");
 	mid_Text_init = get_method(&err, env, "<init>", "(J)V");
@@ -732,6 +787,7 @@ static void lose_fids(JNIEnv *env)
 	(*env)->DeleteGlobalRef(env, cls_Shade);
 	(*env)->DeleteGlobalRef(env, cls_StrokeState);
 	(*env)->DeleteGlobalRef(env, cls_StructuredText);
+	(*env)->DeleteGlobalRef(env, cls_StructuredTextWalker);
 	(*env)->DeleteGlobalRef(env, cls_Text);
 	(*env)->DeleteGlobalRef(env, cls_TextBlock);
 	(*env)->DeleteGlobalRef(env, cls_TextChar);
@@ -1365,6 +1421,13 @@ static inline jobject to_Image_safe(fz_context *ctx, JNIEnv *env, fz_image *img)
 		fz_drop_image(ctx, img);
 
 	return jimg;
+}
+
+static inline jobject to_Matrix_safe(fz_context *ctx, JNIEnv *env, fz_matrix mat)
+{
+	if (!ctx) return NULL;
+
+	return (*env)->NewObject(env, cls_Matrix, mid_Matrix_init, mat.a, mat.b, mat.c, mat.d, mat.e, mat.f);
 }
 
 static inline jobject to_Outline_safe(fz_context *ctx, JNIEnv *env, fz_document *doc, fz_outline *outline)
@@ -3197,11 +3260,12 @@ FUN(NativeDevice_endMask)(JNIEnv *env, jobject self)
 }
 
 JNIEXPORT void JNICALL
-FUN(NativeDevice_beginGroup)(JNIEnv *env, jobject self, jobject jrect, jboolean isolated, jboolean knockout, jint blendmode, jfloat alpha)
+FUN(NativeDevice_beginGroup)(JNIEnv *env, jobject self, jobject jrect, jobject jcs, jboolean isolated, jboolean knockout, jint blendmode, jfloat alpha)
 {
 	fz_context *ctx = get_context(env);
 	fz_device *dev = from_Device(env, self);
 	fz_rect rect = from_Rect(env, jrect);
+	fz_colorspace *cs = from_ColorSpace(env, self);
 	NativeDeviceInfo *info;
 	int err;
 
@@ -3211,7 +3275,7 @@ FUN(NativeDevice_beginGroup)(JNIEnv *env, jobject self, jobject jrect, jboolean 
 	if (err)
 		return;
 	fz_try(ctx)
-		fz_begin_group(ctx, dev, rect, NULL, isolated, knockout, blendmode, alpha);
+		fz_begin_group(ctx, dev, rect, cs, isolated, knockout, blendmode, alpha);
 	fz_always(ctx)
 		unlockNativeDevice(env, info);
 	fz_catch(ctx)
@@ -6436,6 +6500,33 @@ FUN(StructuredText_highlight)(JNIEnv *env, jobject self, jobject jpt1, jobject j
 }
 
 JNIEXPORT jobject JNICALL
+FUN(StructuredText_snapSelection)(JNIEnv *env, jobject self, jobject jpt1, jobject jpt2, jint mode)
+{
+	fz_context *ctx = get_context(env);
+	fz_stext_page *text = from_StructuredText(env, self);
+	fz_point pt1 = from_Point(env, jpt1);
+	fz_point pt2 = from_Point(env, jpt2);
+	fz_quad quad;
+
+	if (!ctx || !text) return NULL;
+
+	fz_try(ctx)
+		quad = fz_snap_selection(ctx, text, &pt1, &pt2, mode);
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+		return NULL;
+	}
+
+	(*env)->SetFloatField(env, jpt1, fid_Point_x, pt1.x);
+	(*env)->SetFloatField(env, jpt1, fid_Point_y, pt1.y);
+	(*env)->SetFloatField(env, jpt2, fid_Point_x, pt2.x);
+	(*env)->SetFloatField(env, jpt2, fid_Point_y, pt2.y);
+
+	return to_Quad_safe(ctx, env, quad);
+}
+
+JNIEXPORT jobject JNICALL
 FUN(StructuredText_copy)(JNIEnv *env, jobject self, jobject jpt1, jobject jpt2)
 {
 	fz_context *ctx = get_context(env);
@@ -6463,136 +6554,92 @@ FUN(StructuredText_copy)(JNIEnv *env, jobject self, jobject jpt1, jobject jpt2)
 	return jstring;
 }
 
-JNIEXPORT jobject JNICALL
-FUN(StructuredText_getBlocks)(JNIEnv *env, jobject self)
+JNIEXPORT void JNICALL
+FUN(StructuredText_walk)(JNIEnv *env, jobject self, jobject walker)
 {
 	fz_context *ctx = get_context(env);
 	fz_stext_page *page = from_StructuredText(env, self);
-
-	jobject barr = NULL;
-	jobject larr = NULL;
-	jobject carr = NULL;
-	jobject jrect = NULL;
-	jobject jquad = NULL;
-
-	int len;
-	int b;
-	int l;
-	int c;
-
 	fz_stext_block *block = NULL;
 	fz_stext_line *line = NULL;
 	fz_stext_char *ch = NULL;
+	jobject jbbox = NULL;
+	jobject jtrm = NULL;
+	jobject jimage = NULL;
+	jobject jorigin = NULL;
+	jobject jfont = NULL;
+	jobject jquad = NULL;
 
-	jobject jblock = NULL;
-	jobject jline = NULL;
-	jobject jchar = NULL;
+	if (!ctx || !page) return;
+	if (!walker) { jni_throw_arg(env, "walker must not be null"); return; }
 
-	if (!ctx || !page) return NULL;
+	if (page->first_block == NULL)
+		return; /* structured text has no blocks to walk */
 
-	len = 0;
 	for (block = page->first_block; block; block = block->next)
-		if (block->type == FZ_STEXT_BLOCK_TEXT)
-			++len;
-
-	/* create block array */
-	barr = (*env)->NewObjectArray(env, len, cls_TextBlock, NULL);
-	if (!barr) return NULL;
-
-	for (b=0, block = page->first_block; block; ++b, block = block->next)
 	{
-		/* only do text blocks */
-		if (block->type != FZ_STEXT_BLOCK_TEXT)
-			continue;
+		jbbox = to_Rect_safe(ctx, env, block->bbox);
+		if (!jbbox) return;
 
-		/* make a block */
-		jblock = (*env)->NewObject(env, cls_TextBlock, mid_TextBlock_init, self);
-		if (!jblock) return NULL;
-
-		/* set block's bbox */
-		jrect = to_Rect_safe(ctx, env, block->bbox);
-		if (!jrect) return NULL;
-
-		(*env)->SetObjectField(env, jblock, fid_TextBlock_bbox, jrect);
-		(*env)->DeleteLocalRef(env, jrect);
-
-		/* create block's line array */
-		len = 0;
-		for (line = block->u.t.first_line; line; line = line->next)
-			++len;
-
-		larr = (*env)->NewObjectArray(env, len, cls_TextLine, NULL);
-		if (!larr) return NULL;
-
-		for (l=0, line = block->u.t.first_line; line; ++l, line = line->next)
+		if (block->type == FZ_STEXT_BLOCK_IMAGE)
 		{
-			/* make a line */
-			jline = (*env)->NewObject(env, cls_TextLine, mid_TextLine_init, self);
-			if (!jline) return NULL;
+			jtrm = to_Matrix_safe(ctx, env, block->u.i.transform);
+			if (!jtrm) return;
 
-			/* set line's bbox */
-			jrect = to_Rect_safe(ctx, env, line->bbox);
-			if (!jrect) return NULL;
+			jimage = to_Image_safe(ctx, env, block->u.i.image);
+			if (!jimage) return;
 
-			(*env)->SetObjectField(env, jline, fid_TextLine_bbox, jrect);
-			(*env)->DeleteLocalRef(env, jrect);
+			(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_onImageBlock, jbbox, jtrm, jimage);
+			if ((*env)->ExceptionCheck(env)) return;
 
-			/* count the chars */
-			len = 0;
-			for (ch = line->first_char; ch; ch = ch->next)
-				len++;
+			(*env)->DeleteLocalRef(env, jbbox);
+			(*env)->DeleteLocalRef(env, jimage);
+			(*env)->DeleteLocalRef(env, jtrm);
+		}
+		else if (block->type == FZ_STEXT_BLOCK_TEXT)
+		{
+			(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_beginTextBlock, jbbox);
+			if ((*env)->ExceptionCheck(env)) return;
 
-			/* make a char array */
-			carr = (*env)->NewObjectArray(env, len, cls_TextChar, NULL);
-			if (!carr) return NULL;
+			(*env)->DeleteLocalRef(env, jbbox);
 
-			for (c=0, ch = line->first_char; ch; ++c, ch = ch->next)
+			for (line = block->u.t.first_line; line; line = line->next)
 			{
-				/* create a char */
-				jchar = (*env)->NewObject(env, cls_TextChar, mid_TextChar_init, self);
-				if (!jchar) return NULL;
+				jbbox = to_Rect_safe(ctx, env, line->bbox);
+				if (!jbbox) return;
 
-				/* set the char's bbox */
-				jquad = to_Quad_safe(ctx, env, ch->quad);
-				if (!jquad) return NULL;
+				(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_beginLine, jbbox, line->wmode);
+				if ((*env)->ExceptionCheck(env)) return;
 
-				(*env)->SetObjectField(env, jchar, fid_TextChar_quad, jquad);
-				(*env)->DeleteLocalRef(env, jquad);
+				(*env)->DeleteLocalRef(env, jbbox);
 
-				/* set the char's value */
-				(*env)->SetIntField(env, jchar, fid_TextChar_c, ch->c);
+				for (ch = line->first_char; ch; ch = ch->next)
+				{
+					jorigin = to_Point_safe(ctx, env, ch->origin);
+					if (!jorigin) return;
 
-				/* add it to the char array */
-				(*env)->SetObjectArrayElement(env, carr, c, jchar);
-				if ((*env)->ExceptionCheck(env)) return NULL;
+					jfont = to_Font_safe(ctx, env, ch->font);
+					if (!jfont) return;
 
-				(*env)->DeleteLocalRef(env, jchar);
+					jquad = to_Quad_safe(ctx, env, ch->quad);
+					if (!jquad) return;
+
+					(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_onChar,
+						ch->c, jorigin, jfont, ch->size, jquad);
+					if ((*env)->ExceptionCheck(env)) return;
+
+					(*env)->DeleteLocalRef(env, jquad);
+					(*env)->DeleteLocalRef(env, jfont);
+					(*env)->DeleteLocalRef(env, jorigin);
+				}
+
+				(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_endLine);
+				if ((*env)->ExceptionCheck(env)) return;
 			}
 
-			/* set the line's char array */
-			(*env)->SetObjectField(env, jline, fid_TextLine_chars, carr);
-
-			(*env)->DeleteLocalRef(env, carr);
-
-			/* add to the line array */
-			(*env)->SetObjectArrayElement(env, larr, l, jline);
-			if ((*env)->ExceptionCheck(env)) return NULL;
-
-			(*env)->DeleteLocalRef(env, jline);
+			(*env)->CallVoidMethod(env, walker, mid_StructuredTextWalker_endTextBlock);
+			if ((*env)->ExceptionCheck(env)) return;
 		}
-
-		/* set the block's line array */
-		(*env)->SetObjectField(env, jblock, fid_TextBlock_lines, larr);
-		(*env)->DeleteLocalRef(env, larr);
-
-		/* add to the block array */
-		(*env)->SetObjectArrayElement(env, barr, b, jblock);
-		if ((*env)->ExceptionCheck(env)) return NULL;
-
-		(*env)->DeleteLocalRef(env, jblock);
 	}
-
-	return barr;
 }
 
 /* PDFDocument interface */
