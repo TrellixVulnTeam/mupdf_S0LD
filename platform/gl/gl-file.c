@@ -62,7 +62,10 @@ static int cmp_entry(const void *av, const void *bv)
 
 #ifdef _WIN32
 
-#include <strsafe.h>
+#ifdef __MINGW32__
+typedef int errno_t;
+__attribute__ ((dllimport)) errno_t wcscat_s (wchar_t *, size_t, const wchar_t *);
+#endif
 #include <shlobj.h>
 
 const char *realpath(const char *path, char buf[PATH_MAX])
@@ -100,7 +103,7 @@ static void load_dir(const char *path)
 	for (i=0; wpath[i]; ++i)
 		if (wpath[i] == '/')
 			wpath[i] = '\\';
-	StringCchCat(wpath, PATH_MAX, TEXT("/*"));
+	wcscat_s(wpath, PATH_MAX, TEXT("/*"));
 	dir = FindFirstFileW(wpath, &ffd);
 	if (dir)
 	{
