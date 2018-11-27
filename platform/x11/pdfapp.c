@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifndef _WIN32
+#ifndef _MSC_VER
 #include <unistd.h> /* for getcwd */
 #endif
 

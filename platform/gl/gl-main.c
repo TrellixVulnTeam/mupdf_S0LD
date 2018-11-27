@@ -11,9 +11,11 @@
 #define PATH_MAX 2048
 #endif
 
-#ifndef _WIN32
+#ifndef _MSC_VER
 #include <unistd.h> /* for fork, exec, and getcwd */
-#else
+#endif
+
+#ifdef _WIN32
 char *realpath(const char *path, char *resolved_path); /* in gl-file.c */
 #endif
 
