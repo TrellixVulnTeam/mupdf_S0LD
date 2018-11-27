@@ -339,11 +339,12 @@ static void ensure_incremental_xref(fz_context *ctx, pdf_document *doc)
 		pdf_xref *xref = &doc->xref_sections[0];
 		pdf_xref *pxref;
 		pdf_xref_entry *new_table = fz_calloc(ctx, xref->num_objects, sizeof(pdf_xref_entry));
-		pdf_xref_subsec *sub;
+		pdf_xref_subsec *sub = NULL;
 		pdf_obj *trailer = NULL;
 		int i;
 
 		fz_var(trailer);
+		fz_var(sub);
 		fz_try(ctx)
 		{
 			sub = fz_malloc_struct(ctx, pdf_xref_subsec);
@@ -354,19 +355,21 @@ static void ensure_incremental_xref(fz_context *ctx, pdf_document *doc)
 			memmove(pxref, xref, doc->num_xref_sections * sizeof(pdf_xref));
 			/* xref->num_objects is already correct */
 			xref->subsec = sub;
+			sub = NULL;
 			xref->trailer = trailer;
 			xref->pre_repair_trailer = NULL;
 			xref->unsaved_sigs = NULL;
 			xref->unsaved_sigs_end = NULL;
-			sub->next = NULL;
-			sub->len = xref->num_objects;
-			sub->start = 0;
-			sub->table = new_table;
+			xref->subsec->next = NULL;
+			xref->subsec->len = xref->num_objects;
+			xref->subsec->start = 0;
+			xref->subsec->table = new_table;
 			doc->num_xref_sections++;
 			doc->num_incremental_sections++;
 		}
 		fz_catch(ctx)
 		{
+			fz_free(ctx, sub);
 			fz_free(ctx, new_table);
 			pdf_drop_obj(ctx, trailer);
 			fz_rethrow(ctx);
@@ -510,45 +513,46 @@ void pdf_xref_ensure_incremental_object(fz_context *ctx, pdf_document *doc, int 
 
 void pdf_replace_xref(fz_context *ctx, pdf_document *doc, pdf_xref_entry *entries, int n)
 {
+	int *xref_index = NULL;
 	pdf_xref *xref = NULL;
 	pdf_xref_subsec *sub;
-	pdf_obj *trailer = pdf_keep_obj(ctx, pdf_trailer(ctx, doc));
 
+	fz_var(xref_index);
 	fz_var(xref);
+
 	fz_try(ctx)
 	{
-		fz_free(ctx, doc->xref_index);
-		doc->xref_index = NULL; /* In case the calloc fails */
-		doc->xref_index = fz_calloc(ctx, n, sizeof(int));
+		xref_index = fz_calloc(ctx, n, sizeof(int));
 		xref = fz_malloc_struct(ctx, pdf_xref);
 		sub = fz_malloc_struct(ctx, pdf_xref_subsec);
-
-		/* The new table completely replaces the previous separate sections */
-		pdf_drop_xref_sections(ctx, doc);
-
-		sub->table = entries;
-		sub->start = 0;
-		sub->len = n;
-		xref->subsec = sub;
-		xref->num_objects = n;
-		xref->trailer = trailer;
-		trailer = NULL;
-
-		doc->xref_sections = xref;
-		doc->num_xref_sections = 1;
-		doc->num_incremental_sections = 0;
-		doc->xref_base = 0;
-		doc->disallow_new_increments = 0;
-		doc->max_xref_len = n;
-
-		memset(doc->xref_index, 0, sizeof(int)*doc->max_xref_len);
 	}
 	fz_catch(ctx)
 	{
 		fz_free(ctx, xref);
-		pdf_drop_obj(ctx, trailer);
+		fz_free(ctx, xref_index);
 		fz_rethrow(ctx);
 	}
+
+	sub->table = entries;
+	sub->start = 0;
+	sub->len = n;
+
+	xref->subsec = sub;
+	xref->num_objects = n;
+	xref->trailer = pdf_keep_obj(ctx, pdf_trailer(ctx, doc));
+
+	/* The new table completely replaces the previous separate sections */
+	pdf_drop_xref_sections(ctx, doc);
+
+	doc->xref_sections = xref;
+	doc->num_xref_sections = 1;
+	doc->num_incremental_sections = 0;
+	doc->xref_base = 0;
+	doc->disallow_new_increments = 0;
+	doc->max_xref_len = n;
+
+	fz_free(ctx, doc->xref_index);
+	doc->xref_index = xref_index;
 }
 
 void pdf_forget_xref(fz_context *ctx, pdf_document *doc)
@@ -1534,7 +1538,6 @@ pdf_drop_document_imp(fz_context *ctx, pdf_document *doc)
 	fz_free(ctx, doc->type3_fonts);
 
 	pdf_drop_ocg(ctx, doc);
-	pdf_drop_portfolio(ctx, doc);
 
 	pdf_empty_store(ctx, doc);
 
@@ -1836,24 +1839,29 @@ pdf_obj_read(fz_context *ctx, pdf_document *doc, int64_t *offset, int *nump, pdf
 static void
 pdf_load_hinted_page(fz_context *ctx, pdf_document *doc, int pagenum)
 {
+	pdf_obj *page = NULL;
+
 	if (!doc->hints_loaded || !doc->linear_page_refs)
 		return;
 
 	if (doc->linear_page_refs[pagenum])
 		return;
 
+	fz_var(page);
+
 	fz_try(ctx)
 	{
 		int num = doc->hint_page[pagenum].number;
-		pdf_obj *page = pdf_load_object(ctx, doc, num);
+		page = pdf_load_object(ctx, doc, num);
 		if (pdf_name_eq(ctx, PDF_NAME(Page), pdf_dict_get(ctx, page, PDF_NAME(Type))))
 		{
 			/* We have found the page object! */
 			DEBUGMESS((ctx, "LoadHintedPage pagenum=%d num=%d", pagenum, num));
 			doc->linear_page_refs[pagenum] = pdf_new_indirect(ctx, doc, num, 0);
 		}
-		pdf_drop_obj(ctx, page);
 	}
+	fz_always(ctx)
+		pdf_drop_obj(ctx, page);
 	fz_catch(ctx)
 	{
 		fz_rethrow_if(ctx, FZ_ERROR_TRYLATER);
@@ -2805,7 +2813,7 @@ void pdf_mark_xref(fz_context *ctx, pdf_document *doc)
 				pdf_xref_entry *entry = &sub->table[e];
 				if (entry->obj)
 				{
-					entry->flags |= PDF_OBJ_FLAG_MARK;
+					entry->marked = 1;
 				}
 			}
 		}
@@ -2860,7 +2868,7 @@ void pdf_clear_xref_to_mark(fz_context *ctx, pdf_document *doc)
 				 * been updated */
 				if (entry->obj != NULL && entry->stm_buf == NULL)
 				{
-					if ((entry->flags & PDF_OBJ_FLAG_MARK) == 0 && pdf_obj_refs(ctx, entry->obj) == 1)
+					if (!entry->marked && pdf_obj_refs(ctx, entry->obj) == 1)
 					{
 						pdf_drop_obj(ctx, entry->obj);
 						entry->obj = NULL;

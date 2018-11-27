@@ -150,7 +150,6 @@ struct fz_list_device_s
 enum { ISOLATED = 1, KNOCKOUT = 2 };
 enum { OPM = 1, OP = 2, BP = 3, RI = 4};
 
-
 #define SIZE_IN_NODES(t) \
 	((t + sizeof(fz_display_node) - 1) / sizeof(fz_display_node))
 
@@ -1750,7 +1749,7 @@ visible:
 				break;
 			case FZ_CMD_BEGIN_MASK:
 				fz_unpack_color_params(&color_params, n.flags);
-				fz_begin_mask(ctx, dev, trans_rect, n.flags, colorspace, color, &color_params);
+				fz_begin_mask(ctx, dev, trans_rect, n.flags & 1, colorspace, color, &color_params);
 				break;
 			case FZ_CMD_END_MASK:
 				fz_end_mask(ctx, dev);

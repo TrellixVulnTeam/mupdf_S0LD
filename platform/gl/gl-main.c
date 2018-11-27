@@ -12,7 +12,7 @@
 #endif
 
 #ifndef _WIN32
-#include <unistd.h> /* for fork and exec */
+#include <unistd.h> /* for fork, exec, and getcwd */
 #else
 char *realpath(const char *path, char *resolved_path); /* in gl-file.c */
 #endif
@@ -50,6 +50,20 @@ enum
 
 static void open_browser(const char *uri)
 {
+	char buf[PATH_MAX];
+
+	/* Relative file:// URI, make it absolute! */
+	if (!strncmp(uri, "file://", 7) && uri[7] != '/')
+	{
+		char buf_base[PATH_MAX];
+		char buf_cwd[PATH_MAX];
+		fz_dirname(buf_base, filename, sizeof buf_base);
+		getcwd(buf_cwd, sizeof buf_cwd);
+		fz_snprintf(buf, sizeof buf, "file://%s/%s/%s", buf_cwd, buf_base, uri+7);
+		fz_cleanname(buf+7);
+		uri = buf;
+	}
+
 #ifdef _WIN32
 	ShellExecuteA(NULL, "open", uri, 0, 0, SW_SHOWNORMAL);
 #else
@@ -116,6 +130,7 @@ static fz_link *links = NULL;
 static int number = 0;
 
 static struct texture page_tex = { 0 };
+static int screen_w = 0, screen_h = 0;
 static int scroll_x = 0, scroll_y = 0;
 static int canvas_x = 0, canvas_w = 100;
 static int canvas_y = 0, canvas_h = 100;
@@ -779,8 +794,6 @@ static void toggle_fullscreen(void)
 
 static void shrinkwrap(void)
 {
-	int screen_w = glutGet(GLUT_SCREEN_WIDTH) - SCREEN_FURNITURE_W;
-	int screen_h = glutGet(GLUT_SCREEN_HEIGHT) - SCREEN_FURNITURE_H;
 	int w = page_tex.w + (showoutline ? outline_w + 4 : 0) + (showannotate ? annotate_w : 0);
 	int h = page_tex.h;
 	if (screen_w > 0 && w > screen_w)
@@ -849,22 +862,23 @@ static void load_document(void)
 	fz_catch(ctx)
 		outline = NULL;
 
+	load_history();
+
 	pdf = pdf_specifics(ctx, doc);
 	if (pdf)
 	{
 		if (enable_js)
 			pdf_enable_js(ctx, pdf);
 		if (anchor)
-			currentpage = pdf_lookup_anchor(ctx, pdf, anchor, NULL, NULL);
+			jump_to_page(pdf_lookup_anchor(ctx, pdf, anchor, NULL, NULL));
 	}
 	else
 	{
 		if (anchor)
-			currentpage = fz_atoi(anchor) - 1;
+			jump_to_page(fz_atoi(anchor) - 1);
 	}
 	anchor = NULL;
 
-	load_history();
 	currentpage = fz_clampi(currentpage, 0, fz_count_pages(ctx, doc) - 1);
 }
 
@@ -1164,7 +1178,7 @@ static void do_help_line(char *label, char *text)
 	ui_panel_begin(0, ui.lineheight, 0, 0, 0);
 	{
 		ui_layout(L, NONE, W, 0, 0);
-		ui_panel_begin(100, ui.lineheight, 0, 0, 0);
+		ui_panel_begin(150, ui.lineheight, 0, 0, 0);
 		ui_layout(R, NONE, W, 20, 0);
 		ui_label("%s", label);
 		ui_panel_end();
@@ -1179,7 +1193,7 @@ static void do_help_line(char *label, char *text)
 
 static void do_help(void)
 {
-	ui_dialog_begin(500, 35 * ui.lineheight);
+	ui_dialog_begin(500, 36 * ui.lineheight);
 	ui_layout(T, X, W, 0, 0);
 
 	do_help_line("MuPDF", FZ_VERSION);
@@ -1189,6 +1203,7 @@ static void do_help(void)
 	do_help_line("o", "show/hide outline");
 	do_help_line("a", "show/hide annotation editor");
 	do_help_line("L", "show/hide links");
+	do_help_line("F", "show/hide form fields");
 	do_help_line("r", "reload file");
 	do_help_line("q", "quit");
 	ui_spacer();
@@ -1517,6 +1532,10 @@ int main(int argc, char **argv)
 	int c;
 
 	glutInit(&argc, argv);
+
+	screen_w = glutGet(GLUT_SCREEN_WIDTH) - SCREEN_FURNITURE_W;
+	screen_h = glutGet(GLUT_SCREEN_HEIGHT) - SCREEN_FURNITURE_H;
+
 	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJ")) != -1)
 	{
 		switch (c)
@@ -1559,6 +1578,20 @@ int main(int argc, char **argv)
 		}
 		fz_always(ctx)
 		{
+			float sx = 1, sy = 1;
+			if (screen_w > 0 && page_tex.w > screen_w)
+				sx = (float)screen_w / page_tex.w;
+			if (screen_h > 0 && page_tex.h > screen_h)
+				sy = (float)screen_h / page_tex.h;
+			if (sy < sx)
+				sx = sy;
+			if (sx < 1)
+			{
+				currentzoom *= sx;
+				page_tex.w *= sx;
+				page_tex.h *= sx;
+			}
+
 			ui_init(page_tex.w, page_tex.h, "MuPDF: Loading...");
 			ui_input_init(&search_input, "");
 		}

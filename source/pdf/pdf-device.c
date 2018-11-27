@@ -66,7 +66,6 @@ struct pdf_device_s
 
 	pdf_document *doc;
 	pdf_obj *resources;
-	fz_buffer *buffer;
 
 	int in_text;
 
@@ -735,9 +734,13 @@ pdf_dev_clip_text(fz_context *ctx, fz_device *dev, const fz_text *text, fz_matri
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
+
+	pdf_dev_end_text(ctx, pdev);
+	pdf_dev_push(ctx, pdev);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, span->trm, 0);
+		pdf_dev_begin_text(ctx, pdev, span->trm, 7);
 		pdf_dev_ctm(ctx, pdev, ctm);
 		pdf_dev_font(ctx, pdev, span->font);
 		pdf_dev_text_span(ctx, pdev, span);
@@ -749,9 +752,13 @@ pdf_dev_clip_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, c
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
+
+	pdf_dev_end_text(ctx, pdev);
+	pdf_dev_push(ctx, pdev);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, span->trm, 0);
+		pdf_dev_begin_text(ctx, pdev, span->trm, 7);
 		pdf_dev_font(ctx, pdev, span->font);
 		pdf_dev_ctm(ctx, pdev, ctm);
 		pdf_dev_text_span(ctx, pdev, span);
@@ -812,7 +819,7 @@ pdf_dev_fill_image(fz_context *ctx, fz_device *dev, fz_image *image, fz_matrix c
 	gstate *gs = CURRENT_GSTATE(pdev);
 
 	pdf_dev_end_text(ctx, pdev);
-	im_res = pdf_add_image(ctx, pdev->doc, image, 0);
+	im_res = pdf_add_image(ctx, pdev->doc, image);
 	if (im_res == NULL)
 	{
 		fz_warn(ctx, "pdf_add_image: problem adding image resource");
@@ -849,7 +856,7 @@ pdf_dev_fill_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, fz_mat
 	gstate *gs = CURRENT_GSTATE(pdev);
 
 	pdf_dev_end_text(ctx, pdev);
-	im_res = pdf_add_image(ctx, pdev->doc, image, 1);
+	im_res = pdf_add_image(ctx, pdev->doc, image);
 	if (im_res == NULL)
 	{
 		fz_warn(ctx, "pdf_add_image: problem adding image resource");
@@ -941,6 +948,7 @@ pdf_dev_begin_mask(fz_context *ctx, fz_device *dev, fz_rect bbox, int luminosity
 	fz_always(ctx)
 	{
 		pdf_drop_obj(ctx, smask);
+		pdf_drop_obj(ctx, egs);
 	}
 	fz_catch(ctx)
 	{
@@ -960,14 +968,13 @@ pdf_dev_end_mask(fz_context *ctx, fz_device *dev)
 	pdf_device *pdev = (pdf_device*)dev;
 	pdf_document *doc = pdev->doc;
 	gstate *gs = CURRENT_GSTATE(pdev);
-	fz_buffer *buf = fz_keep_buffer(ctx, gs->buf);
 	pdf_obj *form_ref = (pdf_obj *)gs->on_pop_arg;
 
 	/* Here we do part of the pop, but not all of it. */
 	pdf_dev_end_text(ctx, pdev);
-	fz_append_string(ctx, buf, "Q\n");
-	pdf_update_stream(ctx, doc, form_ref, buf, 0);
-	fz_drop_buffer(ctx, buf);
+	fz_append_string(ctx, gs->buf, "Q\n");
+	pdf_update_stream(ctx, doc, form_ref, gs->buf, 0);
+	fz_drop_buffer(ctx, gs->buf);
 	gs->buf = fz_keep_buffer(ctx, gs[-1].buf);
 	gs->on_pop_arg = NULL;
 	pdf_drop_obj(ctx, form_ref);
@@ -1061,15 +1068,20 @@ pdf_dev_drop_device(fz_context *ctx, fz_device *dev)
 	int i;
 
 	for (i = pdev->num_gstates-1; i >= 0; i--)
+	{
+		fz_drop_buffer(ctx, pdev->gstates[i].buf);
 		fz_drop_stroke_state(ctx, pdev->gstates[i].stroke_state);
+	}
 
 	for (i = pdev->num_cid_fonts-1; i >= 0; i--)
 		fz_drop_font(ctx, pdev->cid_fonts[i]);
 
 	for (i = pdev->num_groups - 1; i >= 0; i--)
+	{
 		pdf_drop_obj(ctx, pdev->groups[i].ref);
+		fz_drop_colorspace(ctx, pdev->groups[i].colorspace);
+	}
 
-	fz_drop_buffer(ctx, pdev->buffer);
 	pdf_drop_obj(ctx, pdev->resources);
 	fz_free(ctx, pdev->cid_fonts);
 	fz_free(ctx, pdev->image_indices);
@@ -1111,10 +1123,13 @@ fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, fz_matrix topc
 	dev->super.begin_tile = pdf_dev_begin_tile;
 	dev->super.end_tile = pdf_dev_end_tile;
 
+	fz_var(buf);
+
 	fz_try(ctx)
 	{
-		dev->buffer = fz_keep_buffer(ctx, buf);
-		if (!buf)
+		if (buf)
+			buf = fz_keep_buffer(ctx, buf);
+		else
 			buf = fz_new_buffer(ctx, 256);
 		dev->doc = doc;
 		dev->resources = pdf_keep_obj(ctx, resources);
@@ -1132,12 +1147,11 @@ fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, fz_matrix topc
 		dev->max_gstates = 1;
 
 		if (!fz_is_identity(topctm))
-			fz_append_printf(ctx, buf, "%M cm\n", topctm);
+			fz_append_printf(ctx, buf, "%M cm\n", &topctm);
 	}
 	fz_catch(ctx)
 	{
-		if (dev->gstates && dev->buffer == NULL)
-			fz_drop_buffer(ctx, dev->gstates[0].buf);
+		fz_drop_buffer(ctx, buf);
 		fz_free(ctx, dev);
 		fz_rethrow(ctx);
 	}

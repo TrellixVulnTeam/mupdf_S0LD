@@ -82,7 +82,7 @@ img_load_page(fz_context *ctx, fz_document *doc_, int number)
 	img_page *page = NULL;
 
 	if (number < 0 || number >= doc->page_count)
-		return NULL;
+		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot load page %d", number);
 
 	fz_var(pixmap);
 	fz_var(image);
@@ -150,7 +150,7 @@ img_open_document_with_stream(fz_context *ctx, fz_stream *file)
 		size_t len;
 		unsigned char *data;
 
-		doc->buffer = fz_read_all(ctx, file, 1024);
+		doc->buffer = fz_read_all(ctx, file, 0);
 		len = fz_buffer_storage(ctx, doc->buffer, &data);
 
 		fmt = FZ_IMAGE_UNKNOWN;

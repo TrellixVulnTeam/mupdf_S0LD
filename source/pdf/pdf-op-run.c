@@ -106,6 +106,7 @@ begin_softmask(fz_context *ctx, pdf_run_processor *pr, softmask_save *save)
 	fz_matrix tos_save[2], save_ctm;
 	fz_matrix mask_matrix;
 	fz_colorspace *mask_colorspace;
+	int saved_blendmode;
 
 	save->softmask = softmask;
 	if (softmask == NULL)
@@ -135,13 +136,19 @@ begin_softmask(fz_context *ctx, pdf_run_processor *pr, softmask_save *save)
 	if (gstate->luminosity && !mask_colorspace)
 		mask_colorspace = fz_keep_colorspace(ctx, fz_device_gray(ctx));
 
+	saved_blendmode = gstate->blendmode;
+
 	fz_try(ctx)
 	{
 		fz_begin_mask(ctx, pr->dev, mask_bbox, gstate->luminosity, mask_colorspace, gstate->softmask_bc, &gstate->fill.color_params);
+		gstate->blendmode = 0;
 		pdf_run_xobject(ctx, pr, softmask, save->page_resources, fz_identity, 1);
 	}
 	fz_always(ctx)
+	{
 		fz_drop_colorspace(ctx, mask_colorspace);
+		gstate->blendmode = saved_blendmode;
+	}
 	fz_catch(ctx)
 	{
 		fz_rethrow_if(ctx, FZ_ERROR_TRYLATER);
@@ -953,7 +960,6 @@ pdf_flush_text(fz_context *ctx, pdf_run_processor *pr)
 				break;
 			}
 		}
-
 	}
 	fz_always(ctx)
 	{
@@ -2156,7 +2162,7 @@ static void pdf_run_BMC(fz_context *ctx, pdf_processor *proc, const char *tag)
 	pdf_run_processor *pr = (pdf_run_processor *)proc;
 
 	if (!tag)
-		tag = "UnnamedLayer";
+		tag = "Untitled";
 
 	fz_begin_layer(ctx, pr->dev, tag);
 }
@@ -2166,12 +2172,12 @@ static void pdf_run_BDC(fz_context *ctx, pdf_processor *proc, const char *tag, p
 	pdf_run_processor *pr = (pdf_run_processor *)proc;
 	const char *str;
 
-	if (!tag || strcmp(tag, "OC"))
-		return;
+	if (!tag)
+		tag = "Untitled";
 
-	str = pdf_dict_get_string(ctx, cooked, PDF_NAME(Name), NULL);
+	str = pdf_dict_get_text_string(ctx, cooked, PDF_NAME(Name));
 	if (strlen(str) == 0)
-		str = "UnnamedLayer";
+		str = tag;
 
 	fz_begin_layer(ctx, pr->dev, str);
 }
@@ -2200,21 +2206,30 @@ static void pdf_run_END(fz_context *ctx, pdf_processor *proc)
 }
 
 static void
-pdf_drop_run_processor(fz_context *ctx, pdf_processor *proc)
+pdf_close_run_processor(fz_context *ctx, pdf_processor *proc)
 {
 	pdf_run_processor *pr = (pdf_run_processor *)proc;
 
 	while (pr->gtop)
 		pdf_grestore(ctx, pr);
 
-	pdf_drop_material(ctx, &pr->gstate[0].fill);
-	pdf_drop_material(ctx, &pr->gstate[0].stroke);
-	pdf_drop_font(ctx, pr->gstate[0].text.font);
-	pdf_drop_obj(ctx, pr->gstate[0].softmask);
-	fz_drop_stroke_state(ctx, pr->gstate[0].stroke_state);
-
-	while (pr->gstate[0].clip_depth--)
+	while (pr->gstate[0].clip_depth)
+	{
 		fz_pop_clip(ctx, pr->dev);
+		pr->gstate[0].clip_depth--;
+	}
+}
+
+static void
+pdf_drop_run_processor(fz_context *ctx, pdf_processor *proc)
+{
+	pdf_run_processor *pr = (pdf_run_processor *)proc;
+
+	while (pr->gtop >= 0)
+	{
+		pdf_drop_gstate(ctx, &pr->gstate[pr->gtop]);
+		pr->gtop--;
+	}
 
 	fz_drop_path(ctx, pr->path);
 	fz_drop_text(ctx, pr->tos.text);
@@ -2231,6 +2246,7 @@ pdf_new_run_processor(fz_context *ctx, fz_device *dev, fz_matrix ctm, const char
 	{
 		proc->super.usage = usage;
 
+		proc->super.close_processor = pdf_close_run_processor;
 		proc->super.drop_processor = pdf_drop_run_processor;
 
 		/* general graphics state */
@@ -2388,6 +2404,7 @@ pdf_new_run_processor(fz_context *ctx, fz_device *dev, fz_matrix ctm, const char
 	}
 	fz_catch(ctx)
 	{
+		fz_drop_default_colorspaces(ctx, proc->default_cs);
 		fz_drop_path(ctx, proc->path);
 		fz_free(ctx, proc);
 		fz_rethrow(ctx);
