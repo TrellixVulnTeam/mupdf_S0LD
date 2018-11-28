@@ -1909,6 +1909,9 @@ static void writeobject(fz_context *ctx, pdf_document *doc, pdf_write_state *opt
 	pdf_obj *obj;
 	pdf_obj *type;
 
+	if (opts->do_decrypt)
+		unenc = 1;
+
 	fz_try(ctx)
 	{
 		obj = pdf_load_object(ctx, doc, num);
@@ -1956,7 +1959,7 @@ static void writeobject(fz_context *ctx, pdf_document *doc, pdf_write_state *opt
 	else if (entry->stm_ofs < 0 && entry->stm_buf == NULL)
 	{
 		fz_write_printf(ctx, opts->out, "%d %d obj\n", num, gen);
-		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, doc->crypt, num, gen);
+		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, unenc ? NULL : doc->crypt, num, gen);
 		fz_write_string(ctx, opts->out, "\nstream\nendstream\nendobj\n\n");
 	}
 	else
@@ -2689,7 +2692,7 @@ static void presize_unsaved_signature_byteranges(fz_context *ctx, pdf_document *
 static void complete_signatures(fz_context *ctx, pdf_document *doc, pdf_write_state *opts)
 {
 	pdf_unsaved_sig *usig;
-	char *buf = NULL;
+	char *buf = NULL, *ptr;
 	int buf_size;
 	int s;
 	int i;
@@ -2766,7 +2769,9 @@ static void complete_signatures(fz_context *ctx, pdf_document *doc, pdf_write_st
 					pdf_dict_putl_drop(ctx, usig->field, pdf_copy_array(ctx, byte_range), PDF_NAME(V), PDF_NAME(ByteRange), NULL);
 
 				/* Write the byte range into buf, padding with spaces*/
-				i = pdf_sprint_obj(ctx, buf, buf_size, byte_range, 1);
+				ptr = pdf_sprint_obj(ctx, buf, buf_size, &i, byte_range, 1);
+				if (ptr != buf) /* should never happen, since data should fit in buf_size */
+					fz_free(ctx, ptr);
 				memset(buf+i, ' ', buf_size-i);
 
 				/* Write the byte range to the file */

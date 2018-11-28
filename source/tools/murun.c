@@ -3692,18 +3692,18 @@ static void ffi_PDFObject_toString(js_State *J)
 	char *s = NULL;
 	int n;
 
-	fz_var(s);
-
-	fz_try(ctx) {
-		n = pdf_sprint_obj(ctx, NULL, 0, obj, tight);
-		s = fz_malloc(ctx, n+1);
-		pdf_sprint_obj(ctx, s, n+1, obj, tight);
-		js_pushstring(J, s);
-	} fz_always(ctx) {
-		fz_free(ctx, s);
-	} fz_catch(ctx) {
+	fz_try(ctx)
+		s = pdf_sprint_obj(ctx, NULL, 0, &n, obj, tight);
+	fz_catch(ctx)
 		rethrow(J);
+
+	if (js_try(J)) {
+		fz_free(ctx, s);
+		js_throw(J);
 	}
+	js_pushstring(J, s);
+	js_endtry(J);
+	fz_free(ctx, s);
 }
 
 static void ffi_PDFObject_valueOf(js_State *J)
@@ -4731,7 +4731,7 @@ int murun_main(int argc, char **argv)
 		// Pixmap.scale()
 
 		jsB_propfun(J, "Pixmap.saveAsPNG", ffi_Pixmap_saveAsPNG, 1);
-		// Pixmap.saveAsPNM, PAM, TGA, PWG, PCL
+		// Pixmap.saveAsPNM, PAM, PWG, PCL
 
 		// Pixmap.halftone() -> Bitmap
 		// Pixmap.md5()
