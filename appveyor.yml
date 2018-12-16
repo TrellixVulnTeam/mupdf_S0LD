@@ -34,7 +34,6 @@ build_script:
 - cmd: if [%TARGET%]==[mingw] (
     C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
     make OUT=/home/appveyor/mupdf/release
-    GENERATED=/home/appveyor/mupdf/generated
     XLIBS+=-static-libgcc" )
 - cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
     C:\cygwin\bin\bash -e -l -c "cd /cygdrive/c/projects/mupdf &&
