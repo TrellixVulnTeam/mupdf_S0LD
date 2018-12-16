@@ -35,6 +35,7 @@ ifneq ($(threading),no)
 endif
 
 ifeq ($(HAVE_WIN32),yes)
+  HAVE_OBJCOPY := yes
   WIN32_LIBS := -lcomdlg32 -lgdi32
   WIN32_LDFLAGS := -Wl,-subsystem,windows
 endif

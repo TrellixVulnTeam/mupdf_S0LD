@@ -46,6 +46,17 @@
 #endif
 
 #ifdef HAVE_OBJCOPY
+#ifdef _WIN32
+#define RETURN(FORGE,NAME) \
+	do { \
+	extern unsigned char binary_resources_fonts_##FORGE##_##NAME##_start; \
+	extern unsigned char binary_resources_fonts_##FORGE##_##NAME##_end; \
+	return *size = \
+		&binary_resources_fonts_##FORGE##_##NAME##_end - \
+		&binary_resources_fonts_##FORGE##_##NAME##_start, \
+		&binary_resources_fonts_##FORGE##_##NAME##_start; \
+	} while (0)
+#else // !_WIN32
 #define RETURN(FORGE,NAME) \
 	do { \
 	extern unsigned char _binary_resources_fonts_##FORGE##_##NAME##_start; \
@@ -55,14 +66,15 @@
 		&_binary_resources_fonts_##FORGE##_##NAME##_start, \
 		&_binary_resources_fonts_##FORGE##_##NAME##_start; \
 	} while (0)
-#else
+#endif // _WIN32
+#else // !HAVE_OBJCOPY
 #define RETURN(FORGE,NAME) \
 	do { \
 	extern unsigned char _binary_##NAME[]; \
 	extern unsigned int _binary_##NAME##_size; \
 	return *size = _binary_##NAME##_size, _binary_##NAME; \
 	} while (0)
-#endif
+#endif // HAVE_OBJCOPY
 
 const unsigned char *
 fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)

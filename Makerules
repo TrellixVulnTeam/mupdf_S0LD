@@ -170,7 +170,7 @@ ifeq "$(OS)" "mingw32-cross"
   OUT := build/$(OS)/$(build)
   CC = i686-w64-mingw32-gcc
   CXX = i686-w64-mingw32-g++
-  LD = i686-w64-mingw32-gcc
+  LD = i686-w64-mingw32-ld
   AR = i686-w64-mingw32-ar
   WINDRES = i686-w64-mingw32-windres
   HAVE_WIN32=yes
@@ -181,7 +181,7 @@ ifeq "$(OS)" "mingw64-cross"
   OUT := build/$(OS)/$(build)
   CC = x86_64-w64-mingw32-gcc
   CXX = x86_64-w64-mingw32-g++
-  LD = x86_64-w64-mingw32-gcc
+  LD = x86_64-w64-mingw32-ld
   AR = x86_64-w64-mingw32-ar
   WINDRES = x86_64-w64-mingw32-windres
   HAVE_WIN32=yes
