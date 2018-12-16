@@ -38,19 +38,12 @@ build_script:
     XLIBS+=-static-libgcc" )
 - cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
     C:\cygwin\bin\bash -e -l -c "cd /cygdrive/c/projects/mupdf &&
-    make generate OUT=/home/appveyor/mupdf/native/release
-    GENERATED=/home/appveyor/mupdf/generated &&
     make OUT=/home/appveyor/mupdf/release
-    GENERATED=/home/appveyor/mupdf/generated
     OS=mingw32-cross
     XLIBS+=-static-libgcc" )
 - cmd: if [%TARGET%]==[msys2-mingw32-cross] (
     C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
-    make generate OUT=/home/appveyor/mupdf/native/release
-    GENERATED=/home/appveyor/mupdf/generated
-    2>&1 | tee mupdf-$(git describe --tags)-build.log &&
     make OUT=/home/appveyor/mupdf/release
-    GENERATED=/home/appveyor/mupdf/generated
     OS=mingw32-cross
     XLIBS+=-static-libgcc
     2>&1 | tee -a mupdf-$(git describe --tags)-build.log" )
