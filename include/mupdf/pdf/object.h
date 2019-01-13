@@ -55,16 +55,6 @@ int pdf_obj_marked(fz_context *ctx, pdf_obj *obj);
 int pdf_mark_obj(fz_context *ctx, pdf_obj *obj);
 void pdf_unmark_obj(fz_context *ctx, pdf_obj *obj);
 
-/* obj memo functions - allows us to secretly remember "a memo" (a bool) in
- * an object, and to read back whether there was a memo, and if so, what it
- * was. */
-
-enum
-{
-	PDF_FLAGS_MEMO_BM = 0,
-	PDF_FLAGS_MEMO_OP = 1
-};
-
 void pdf_set_obj_memo(fz_context *ctx, pdf_obj *obj, int bit, int memo);
 int pdf_obj_memo(fz_context *ctx, pdf_obj *obj, int bit, int *memo);
 
@@ -101,6 +91,7 @@ int pdf_array_contains(fz_context *ctx, pdf_obj *array, pdf_obj *obj);
 int pdf_dict_len(fz_context *ctx, pdf_obj *dict);
 pdf_obj *pdf_dict_get_key(fz_context *ctx, pdf_obj *dict, int idx);
 pdf_obj *pdf_dict_get_val(fz_context *ctx, pdf_obj *dict, int idx);
+void pdf_dict_put_val_null(fz_context *ctx, pdf_obj *obj, int idx);
 pdf_obj *pdf_dict_get(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 pdf_obj *pdf_dict_getp(fz_context *ctx, pdf_obj *dict, const char *path);
 pdf_obj *pdf_dict_getl(fz_context *ctx, pdf_obj *dict, ...);
@@ -170,9 +161,9 @@ int pdf_obj_refs(fz_context *ctx, pdf_obj *ref);
 
 int pdf_obj_parent_num(fz_context *ctx, pdf_obj *obj);
 
-char *pdf_sprint_obj(fz_context *ctx, char *buf, int cap, int *len, pdf_obj *obj, int tight);
-void pdf_print_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int tight);
-void pdf_print_encrypted_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int tight, pdf_crypt *crypt, int num, int gen);
+char *pdf_sprint_obj(fz_context *ctx, char *buf, int cap, int *len, pdf_obj *obj, int tight, int ascii);
+void pdf_print_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int tight, int ascii);
+void pdf_print_encrypted_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int tight, int ascii, pdf_crypt *crypt, int num, int gen);
 
 void pdf_debug_obj(fz_context *ctx, pdf_obj *obj);
 

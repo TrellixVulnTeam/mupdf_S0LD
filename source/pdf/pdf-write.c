@@ -1,6 +1,5 @@
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
-#include "pdf-imp.h"
 
 #include <zlib.h>
 
@@ -1711,14 +1710,14 @@ static void copystream(fz_context *ctx, pdf_document *doc, pdf_write_state *opts
 		if (opts->do_decrypt)
 		{
 			pdf_dict_put_int(ctx, obj, PDF_NAME(Length), len);
-			pdf_print_obj(ctx, opts->out, obj, opts->do_tight);
+			pdf_print_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii);
 			fz_write_string(ctx, opts->out, "\nstream\n");
 			fz_write_data(ctx, opts->out, data, len);
 		}
 		else
 		{
 			pdf_dict_put_int(ctx, obj, PDF_NAME(Length), pdf_encrypted_len(ctx, doc->crypt, num, gen, (int)len));
-			pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, doc->crypt, num, gen);
+			pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii, doc->crypt, num, gen);
 			fz_write_string(ctx, opts->out, "\nstream\n");
 			pdf_encrypt_data(ctx, doc->crypt, num, gen, write_data, opts->out, data, len);
 		}
@@ -1787,14 +1786,14 @@ static void expandstream(fz_context *ctx, pdf_document *doc, pdf_write_state *op
 		if (opts->do_decrypt)
 		{
 			pdf_dict_put_int(ctx, obj, PDF_NAME(Length), len);
-			pdf_print_obj(ctx, opts->out, obj, opts->do_tight);
+			pdf_print_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii);
 			fz_write_string(ctx, opts->out, "\nstream\n");
 			fz_write_data(ctx, opts->out, data, len);
 		}
 		else
 		{
 			pdf_dict_put_int(ctx, obj, PDF_NAME(Length), pdf_encrypted_len(ctx, doc->crypt, num, gen, (int)len));
-			pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, doc->crypt, num, gen);
+			pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii, doc->crypt, num, gen);
 			fz_write_string(ctx, opts->out, "\nstream\n");
 			pdf_encrypt_data(ctx, doc->crypt, num, gen, write_data, opts->out, data, len);
 		}
@@ -1953,13 +1952,13 @@ static void writeobject(fz_context *ctx, pdf_document *doc, pdf_write_state *opt
 	if (!pdf_obj_num_is_stream(ctx, doc, num))
 	{
 		fz_write_printf(ctx, opts->out, "%d %d obj\n", num, gen);
-		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, unenc ? NULL : doc->crypt, num, gen);
+		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii, unenc ? NULL : doc->crypt, num, gen);
 		fz_write_string(ctx, opts->out, "\nendobj\n\n");
 	}
 	else if (entry->stm_ofs < 0 && entry->stm_buf == NULL)
 	{
 		fz_write_printf(ctx, opts->out, "%d %d obj\n", num, gen);
-		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, unenc ? NULL : doc->crypt, num, gen);
+		pdf_print_encrypted_obj(ctx, opts->out, obj, opts->do_tight, opts->do_ascii, unenc ? NULL : doc->crypt, num, gen);
 		fz_write_string(ctx, opts->out, "\nstream\nendstream\nendobj\n\n");
 	}
 	else
@@ -2095,7 +2094,7 @@ static void writexref(fz_context *ctx, pdf_document *doc, pdf_write_state *opts,
 
 	fz_write_string(ctx, opts->out, "trailer\n");
 	/* Trailer is NOT encrypted */
-	pdf_print_obj(ctx, opts->out, trailer, opts->do_tight);
+	pdf_print_obj(ctx, opts->out, trailer, opts->do_tight, opts->do_ascii);
 	fz_write_string(ctx, opts->out, "\n");
 
 	pdf_drop_obj(ctx, trailer);
@@ -2769,7 +2768,7 @@ static void complete_signatures(fz_context *ctx, pdf_document *doc, pdf_write_st
 					pdf_dict_putl_drop(ctx, usig->field, pdf_copy_array(ctx, byte_range), PDF_NAME(V), PDF_NAME(ByteRange), NULL);
 
 				/* Write the byte range into buf, padding with spaces*/
-				ptr = pdf_sprint_obj(ctx, buf, buf_size, &i, byte_range, 1);
+				ptr = pdf_sprint_obj(ctx, buf, buf_size, &i, byte_range, 1, 0);
 				if (ptr != buf) /* should never happen, since data should fit in buf_size */
 					fz_free(ctx, ptr);
 				memset(buf+i, ' ', buf_size-i);
@@ -2976,7 +2975,6 @@ prepare_for_save(fz_context *ctx, pdf_document *doc, pdf_write_options *in_opts)
 	if (in_opts->do_clean || in_opts->do_sanitize)
 		clean_content_streams(ctx, doc, in_opts->do_sanitize, in_opts->do_ascii);
 
-	pdf_finish_edit(ctx, doc);
 	presize_unsaved_signature_byteranges(ctx, doc);
 }
 
@@ -3282,104 +3280,6 @@ void pdf_save_document(fz_context *ctx, pdf_document *doc, const char *filename,
 }
 
 #define KIDS_PER_LEVEL 32
-
-#if 0
-
-// TODO: pdf_rebalance_page_tree(ctx, doc);
-
-static pdf_obj *
-make_page_tree_node(fz_context *ctx, pdf_document *doc, int l, int r, pdf_obj *parent_ref, int root)
-{
-	int count_per_kid, spaces;
-	pdf_obj *a = NULL;
-	pdf_obj *me = NULL;
-	pdf_obj *o = NULL;
-	pdf_obj *me_ref = NULL;
-
-	count_per_kid = 1;
-	while(count_per_kid * KIDS_PER_LEVEL < r-l)
-		count_per_kid *= KIDS_PER_LEVEL;
-
-	fz_var(o);
-	fz_var(me);
-	fz_var(a);
-	fz_var(me_ref);
-
-	fz_try(ctx)
-	{
-		me = pdf_new_dict(ctx, doc, 2);
-		pdf_dict_put(ctx, me, PDF_NAME(Type), PDF_NAME(Pages));
-		pdf_dict_put_int(ctx, me, PDF_NAME(Count), r-l);
-		if (!root)
-			pdf_dict_put(ctx, me, PDF_NAME(Parent), parent_ref);
-		a = pdf_new_array(ctx, doc, KIDS_PER_LEVEL);
-		me_ref = pdf_add_object(ctx, doc, me);
-
-		for (spaces = KIDS_PER_LEVEL; l < r; spaces--)
-		{
-			if (spaces >= r-l)
-			{
-				o = pdf_keep_obj(ctx, doc->page_refs[l++]);
-				pdf_dict_put(ctx, o, PDF_NAME(Parent), me_ref);
-			}
-			else
-			{
-				int j = l+count_per_kid;
-				if (j > r)
-					j = r;
-				o = make_page_tree_node(ctx, doc, l, j, me_ref, 0);
-				l = j;
-			}
-			pdf_array_push(ctx, a, o);
-			pdf_drop_obj(ctx, o);
-			o = NULL;
-		}
-		pdf_dict_put_drop(ctx, me, PDF_NAME(Kids), a);
-		a = NULL;
-	}
-	fz_always(ctx)
-	{
-		pdf_drop_obj(ctx, me);
-	}
-	fz_catch(ctx)
-	{
-		pdf_drop_obj(ctx, a);
-		pdf_drop_obj(ctx, o);
-		pdf_drop_obj(ctx, me);
-		fz_rethrow(ctx);
-	}
-	return me_ref;
-}
-
-static void
-pdf_rebalance_page_tree(fz_context *ctx, pdf_document *doc)
-{
-	pdf_obj *catalog;
-	pdf_obj *pages;
-
-	if (!doc || !doc->needs_page_tree_rebuild)
-		return;
-
-	catalog = pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root));
-	pages = make_page_tree_node(ctx, doc, 0, doc->page_len, catalog, 1);
-	pdf_dict_put_drop(ctx, catalog, PDF_NAME(Pages), pages);
-
-	doc->needs_page_tree_rebuild = 0;
-}
-
-#endif
-
-static void
-pdf_rebalance_page_tree(fz_context *ctx, pdf_document *doc)
-{
-}
-
-void pdf_finish_edit(fz_context *ctx, pdf_document *doc)
-{
-	if (!doc)
-		return;
-	pdf_rebalance_page_tree(ctx, doc);
-}
 
 typedef struct pdf_writer_s pdf_writer;
 

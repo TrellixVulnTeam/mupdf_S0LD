@@ -11,19 +11,23 @@ struct fz_device_s;
 
 /* Various font encoding tables and lookup functions */
 
+extern const char *fz_glyph_name_from_adobe_standard[256];
 extern const char *fz_glyph_name_from_iso8859_1[256];
 extern const char *fz_glyph_name_from_iso8859_7[256];
 extern const char *fz_glyph_name_from_koi8u[256];
+extern const char *fz_glyph_name_from_mac_expert[256];
+extern const char *fz_glyph_name_from_mac_roman[256];
 extern const char *fz_glyph_name_from_windows_1250[256];
 extern const char *fz_glyph_name_from_windows_1251[256];
 extern const char *fz_glyph_name_from_windows_1252[256];
 
-extern unsigned short fz_unicode_from_iso8859_1[256];
-extern unsigned short fz_unicode_from_iso8859_7[256];
-extern unsigned short fz_unicode_from_koi8u[256];
-extern unsigned short fz_unicode_from_windows_1250[256];
-extern unsigned short fz_unicode_from_windows_1251[256];
-extern unsigned short fz_unicode_from_windows_1252[256];
+extern const unsigned short fz_unicode_from_iso8859_1[256];
+extern const unsigned short fz_unicode_from_iso8859_7[256];
+extern const unsigned short fz_unicode_from_koi8u[256];
+extern const unsigned short fz_unicode_from_pdf_doc_encoding[256];
+extern const unsigned short fz_unicode_from_windows_1250[256];
+extern const unsigned short fz_unicode_from_windows_1251[256];
+extern const unsigned short fz_unicode_from_windows_1252[256];
 
 int fz_iso8859_1_from_unicode(int u);
 int fz_iso8859_7_from_unicode(int u);
@@ -31,6 +35,9 @@ int fz_koi8u_from_unicode(int u);
 int fz_windows_1250_from_unicode(int u);
 int fz_windows_1251_from_unicode(int u);
 int fz_windows_1252_from_unicode(int u);
+
+int fz_unicode_from_glyph_name(const char *name);
+const char **fz_duplicate_glyph_names_from_unicode(int ucs);
 
 /*
 	An abstract font handle.
@@ -76,6 +83,8 @@ fz_buffer **fz_font_t3_procs(fz_context *ctx, fz_font *font);
 	of a freetype error.
 */
 const char *ft_error_string(int err);
+int ft_char_index(void *face, int cid);
+int ft_name_index(void *face, const char *name);
 
 /* common CJK font collections */
 enum { FZ_ADOBE_CNS, FZ_ADOBE_GB, FZ_ADOBE_JAPAN, FZ_ADOBE_KOREA };
@@ -561,6 +570,7 @@ float fz_advance_glyph(fz_context *ctx, fz_font *font, int glyph, int wmode);
 	unknown.
 */
 int fz_encode_character(fz_context *ctx, fz_font *font, int unicode);
+int fz_encode_character_by_glyph_name(fz_context *ctx, fz_font *font, const char *glyphname);
 
 /*
 	fz_encode_character_with_fallback: Find the glyph id for

@@ -494,12 +494,12 @@ static void ffi_pushquad(js_State *J, fz_quad quad)
 	js_newarray(J);
 	js_pushnumber(J, quad.ul.x); js_setindex(J, -2, 0);
 	js_pushnumber(J, quad.ul.y); js_setindex(J, -2, 1);
-	js_pushnumber(J, quad.ur.x); js_setindex(J, -2, 0);
-	js_pushnumber(J, quad.ur.y); js_setindex(J, -2, 1);
-	js_pushnumber(J, quad.ll.x); js_setindex(J, -2, 0);
-	js_pushnumber(J, quad.ll.y); js_setindex(J, -2, 1);
-	js_pushnumber(J, quad.lr.x); js_setindex(J, -2, 0);
-	js_pushnumber(J, quad.lr.y); js_setindex(J, -2, 1);
+	js_pushnumber(J, quad.ur.x); js_setindex(J, -2, 2);
+	js_pushnumber(J, quad.ur.y); js_setindex(J, -2, 3);
+	js_pushnumber(J, quad.ll.x); js_setindex(J, -2, 4);
+	js_pushnumber(J, quad.ll.y); js_setindex(J, -2, 5);
+	js_pushnumber(J, quad.lr.x); js_setindex(J, -2, 6);
+	js_pushnumber(J, quad.lr.y); js_setindex(J, -2, 7);
 }
 
 static fz_irect ffi_toirect(js_State *J, int idx)
@@ -3689,11 +3689,12 @@ static void ffi_PDFObject_toString(js_State *J)
 	fz_context *ctx = js_getcontext(J);
 	pdf_obj *obj = js_touserdata(J, 0, "pdf_obj");
 	int tight = js_isdefined(J, 1) ? js_toboolean(J, 1) : 1;
+	int ascii = js_isdefined(J, 2) ? js_toboolean(J, 2) : 0;
 	char *s = NULL;
 	int n;
 
 	fz_try(ctx)
-		s = pdf_sprint_obj(ctx, NULL, 0, &n, obj, tight);
+		s = pdf_sprint_obj(ctx, NULL, 0, &n, obj, tight, ascii);
 	fz_catch(ctx)
 		rethrow(J);
 
@@ -4830,7 +4831,7 @@ int murun_main(int argc, char **argv)
 		jsB_propfun(J, "PDFObject.push", ffi_PDFObject_push, 1);
 		jsB_propfun(J, "PDFObject.delete", ffi_PDFObject_delete, 1);
 		jsB_propfun(J, "PDFObject.resolve", ffi_PDFObject_resolve, 0);
-		jsB_propfun(J, "PDFObject.toString", ffi_PDFObject_toString, 1);
+		jsB_propfun(J, "PDFObject.toString", ffi_PDFObject_toString, 2);
 		jsB_propfun(J, "PDFObject.valueOf", ffi_PDFObject_valueOf, 0);
 		jsB_propfun(J, "PDFObject.isArray", ffi_PDFObject_isArray, 0);
 		jsB_propfun(J, "PDFObject.isDictionary", ffi_PDFObject_isDictionary, 0);
