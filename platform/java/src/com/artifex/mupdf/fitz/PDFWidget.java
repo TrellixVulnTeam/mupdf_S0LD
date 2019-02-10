@@ -48,9 +48,13 @@ public class PDFWidget extends PDFAnnotation
 	public static final int PDF_CH_FIELD_IS_SORT = 1 << 19;
 	public static final int PDF_CH_FIELD_IS_MULTI_SELECT = 1 << 21;
 
-	public native void setValue(String val);
+	public native boolean setTextValue(String val);
+	public native boolean setValue(String val);
 	public native String getValue();
 	public native Quad[] textQuads();
+	public native void setEditingState(boolean state);
+	public native boolean getEditingState();
+	public native boolean toggle();
 
 	// These don't change after creation, so are cached in java fields.
 	private int kind;

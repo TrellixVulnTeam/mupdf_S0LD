@@ -47,9 +47,6 @@ typedef void (fz_cmm_transform_color_fn)(fz_cmm_instance *ctx, fz_icclink *link,
 */
 typedef void (fz_cmm_init_link_fn)(fz_cmm_instance *ctx, fz_icclink *link, const fz_iccprofile *dst, int dst_extras, const fz_iccprofile *src, int src_extras, const fz_iccprofile *prf, const fz_color_params *rend, int cmm_flags, int num_bytes, int copy_spots);
 
-/*
-	Drop a link.
-*/
 typedef void (fz_cmm_fin_link_fn)(fz_cmm_instance *ctx, fz_icclink *link);
 
 /*
@@ -79,27 +76,8 @@ struct fz_cmm_engine_s {
 	fz_cmm_fin_profile_fn *fin_profile;
 };
 
-/*
-	Read details of the current color
-	management engine. If NULL, we are working without
-	color management.
-*/
 const fz_cmm_engine *fz_get_cmm_engine(fz_context *ctx);
 
-/*
-	Set the color management engine to
-	be used. This should only ever be called on the "base"
-	context before cloning it, and before opening any files.
-
-	Attempting to change the engine in use once a file has
-	been opened, or to use different color management engine
-	for the same file in different threads will lead to
-	undefined behaviour, including crashing.
-
-	Using different ICC engines for different files using
-	different sets of fz_contexts should theoretically be
-	possible.
-*/
 void fz_set_cmm_engine(fz_context *ctx, const fz_cmm_engine *engine);
 
 /*

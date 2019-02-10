@@ -911,7 +911,7 @@ function AFSimple_Calculate(op, list) {
 		list = list.split(/ *, */);
 
 	for (i = 0; i < list.length; i++) {
-		var field = MuPDF_Doc.getField(list[i]);
+		var field = this.getField(list[i]);
 		var value = Number(field.value);
 		switch (op) {
 		case 'SUM': res += value; break;
@@ -942,6 +942,22 @@ function AFRange_Validate(lowerCheck, lowerLimit, upperCheck, upperLimit) {
 			app.alert(util.printf('The entered value ('+event.value+') must be less than or equal to %s', upperLimit));
 	}
 }
+
+/* Compatibility ECMAScript functions */
+String.prototype.substr = function (start, length) {
+	if (start < 0)
+		start = this.length + start;
+	if (length === undefined)
+		return this.substring(start, this.length);
+	return this.substring(start, start + length);
+}
+Date.prototype.getYear = Date.prototype.getFullYear;
+Date.prototype.setYear = Date.prototype.setFullYear;
+Date.prototype.toGMTString = Date.prototype.toUTCString;
+
+console.clear = function() { console.println("--- clear console ---\n"); };
+console.show = function(){};
+console.hide = function(){};
 
 app.plugIns = [];
 app.viewerType = 'Reader';

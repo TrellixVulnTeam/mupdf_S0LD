@@ -1090,7 +1090,7 @@ pdf_write_widget_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf,
 	fz_rect *rect, fz_rect *bbox, fz_matrix *matrix, pdf_obj **res)
 {
 	pdf_obj *ft = pdf_dict_get_inheritable(ctx, annot->obj, PDF_NAME(FT));
-	int ff = pdf_get_field_flags(ctx, annot->page->doc, annot->obj);
+	int ff = pdf_field_flags(ctx, annot->obj);
 	if (pdf_name_eq(ctx, ft, PDF_NAME(Tx)))
 	{
 		pdf_document *doc = annot->page->doc;
@@ -1100,22 +1100,22 @@ pdf_write_widget_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf,
 		{
 			pdf_js_event e;
 			e.target = annot->obj;
-			e.value = pdf_field_value(ctx, doc, annot->obj);
+			e.value = pdf_field_value(ctx, annot->obj);
 			fz_try(ctx)
 				pdf_js_setup_event(doc->js, &e);
 			fz_always(ctx)
 				fz_free(ctx, e.value);
 			fz_catch(ctx)
 				fz_rethrow(ctx);
-			pdf_execute_action(ctx, doc, annot->obj, f);
+			pdf_execute_action(ctx, doc, annot->obj, f, "AA/F");
 			if (pdf_js_get_event(doc->js)->rc)
 				text = fz_strdup(ctx, pdf_js_get_event(doc->js)->value);
 			else
-				text = pdf_field_value(ctx, doc, annot->obj);
+				text = pdf_field_value(ctx, annot->obj);
 		}
 		else
 		{
-			text = pdf_field_value(ctx, doc, annot->obj);
+			text = pdf_field_value(ctx, annot->obj);
 		}
 		fz_try(ctx)
 			pdf_write_tx_widget_appearance(ctx, annot, buf, rect, bbox, matrix, res, text, ff);
@@ -1126,7 +1126,7 @@ pdf_write_widget_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf,
 	}
 	else if (pdf_name_eq(ctx, ft, PDF_NAME(Ch)))
 	{
-		char *text = pdf_field_value(ctx, annot->page->doc, annot->obj);
+		char *text = pdf_field_value(ctx, annot->obj);
 		fz_try(ctx)
 			pdf_write_ch_widget_appearance(ctx, annot, buf, rect, bbox, matrix, res, text, ff);
 		fz_always(ctx)
@@ -1313,6 +1313,9 @@ void pdf_update_signature_appearance(fz_context *ctx, pdf_annot *annot, const ch
 	}
 }
 
+/*
+	Recreate the appearance stream for an annotation.
+*/
 void pdf_update_appearance(fz_context *ctx, pdf_annot *annot)
 {
 	pdf_obj *subtype;
@@ -1397,6 +1400,22 @@ void pdf_update_appearance(fz_context *ctx, pdf_annot *annot)
 	}
 }
 
+/*
+	Regenerate any appearance streams that are out of date and check for
+	cases where a different appearance stream should be selected because of
+	state changes.
+
+	Note that a call to pdf_pass_event for one page may lead to changes on
+	any other, so an app should call pdf_update_annot for every annotation
+	it currently displays. Also it is important that the pdf_annot object
+	is the one used to last render the annotation. If instead the app were
+	to drop the page or annotations and reload them then a call to
+	pdf_update_annot would not reliably be able to report all changed
+	annotations.
+
+	Returns true if the annotation appearance has changed since the last time
+	pdf_update_annot was called or the annotation was first loaded.
+*/
 int
 pdf_update_annot(fz_context *ctx, pdf_annot *annot)
 {

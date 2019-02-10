@@ -76,6 +76,18 @@
 	} while (0)
 #endif // HAVE_OBJCOPY
 
+/*
+	Search the builtin base14 fonts for a match.
+	Whether a given font is present or not will depend on the
+	configuration in which MuPDF is built.
+
+	name: The name of the font desired.
+
+	len: Pointer to a place to receive the length of the discovered
+	font buffer.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)
 {
@@ -105,6 +117,22 @@ fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)
 		if (!is_italic) RETURN(F, B); else RETURN(F, BI); \
 	}
 
+/*
+	Search the builtin fonts for a match.
+	Whether a given font is present or not will depend on the
+	configuration in which MuPDF is built.
+
+	name: The name of the font desired.
+
+	bold: 1 if bold desired, 0 otherwise.
+
+	italic: 1 if italic desired, 0 otherwise.
+
+	len: Pointer to a place to receive the length of the discovered
+	font buffer.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_builtin_font(fz_context *ctx, const char *name, int is_bold, int is_italic, int *size)
 {
@@ -150,6 +178,19 @@ fz_lookup_builtin_font(fz_context *ctx, const char *name, int is_bold, int is_it
 	return *size = 0, NULL;
 }
 
+/*
+	Search the builtin cjk fonts for a match.
+	Whether a font is present or not will depend on the
+	configuration in which MuPDF is built.
+
+	ordering: The desired ordering of the font (e.g. FZ_ADOBE_KOREA).
+
+	size: Pointer to a place to receive the length of the discovered font buffer.
+
+	subfont: Pointer to a place to store the subfont index of the discovered font.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_cjk_font(fz_context *ctx, int ordering, int *size, int *subfont)
 {
@@ -175,6 +216,10 @@ fz_lookup_cjk_font(fz_context *ctx, int ordering, int *size, int *subfont)
 #endif
 }
 
+/*
+	Return the matching FZ_ADOBE_* ordering
+	for the given language tag, such as "zh-Hant", "zh-Hans", "ja", or "ko".
+*/
 int
 fz_lookup_cjk_ordering_by_language(const char *name)
 {
@@ -197,6 +242,20 @@ fz_lookup_cjk_font_by_language(fz_context *ctx, const char *lang, int *size, int
 	return *size = 0, *subfont = 0, NULL;
 }
 
+/*
+	Search the builtin noto fonts for a match.
+	Whether a font is present or not will depend on the
+	configuration in which MuPDF is built.
+
+	script: The script desired (e.g. UCDN_SCRIPT_KATAKANA).
+
+	lang: The language desired (e.g. FZ_LANG_ja).
+
+	len: Pointer to a place to receive the length of the discovered
+	font buffer.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_noto_font(fz_context *ctx, int script, int language, int *size, int *subfont)
 {
@@ -387,6 +446,16 @@ fz_lookup_noto_font(fz_context *ctx, int script, int language, int *size, int *s
 	return *size = 0, NULL;
 }
 
+/*
+	Search the builtin noto fonts
+	for a symbol font. Whether a font is present or not will
+	depend on the configuration in which MuPDF is built.
+
+	len: Pointer to a place to receive the length of the discovered
+	font buffer.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_noto_symbol1_font(fz_context *ctx, int *size)
 {
@@ -407,6 +476,16 @@ fz_lookup_noto_symbol2_font(fz_context *ctx, int *size)
 #endif
 }
 
+/*
+	Search the builtin noto fonts
+	for an emoji font. Whether a font is present or not will
+	depend on the configuration in which MuPDF is built.
+
+	len: Pointer to a place to receive the length of the discovered
+	font buffer.
+
+	Returns a pointer to the font file data, or NULL if not present.
+*/
 const unsigned char *
 fz_lookup_noto_emoji_font(fz_context *ctx, int *size)
 {

@@ -77,28 +77,12 @@ typedef struct fz_icclink_s fz_icclink;
 */
 typedef struct fz_default_colorspaces_s fz_default_colorspaces;
 
-/*
-	Return true if a colorspace is subtractive.
-
-	True for CMYK, Separation and DeviceN colorspaces.
-*/
 int fz_colorspace_is_subtractive(fz_context *ctx, const fz_colorspace *cs);
 
-/*
-	Return true if devicen color space
-	has only colorants from the cmyk set.
-*/
 int fz_colorspace_device_n_has_only_cmyk(fz_context *ctx, const fz_colorspace *cs);
 
-/*
-	Return true if devicen color space has cyan
-	magenta yellow or black as one of its colorants.
-*/
 int fz_colorspace_device_n_has_cmyk(fz_context *ctx, const fz_colorspace *cs);
 
-/*
-	Colorspace feature test functions.
-*/
 int fz_colorspace_is_gray(fz_context *ctx, const fz_colorspace *cs);
 int fz_colorspace_is_rgb(fz_context *ctx, const fz_colorspace *cs);
 int fz_colorspace_is_bgr(fz_context *ctx, const fz_colorspace *cs);
@@ -116,34 +100,12 @@ int fz_colorspace_is_device_cmyk(fz_context *ctx, const fz_colorspace *cs);
 
 int fz_colorspace_is_lab_icc(fz_context *ctx, const fz_colorspace *cs);
 
-/*
-	Get colorspace representing device specific gray.
-*/
 fz_colorspace *fz_device_gray(fz_context *ctx);
-
-/*
-	Get colorspace representing device specific rgb.
-*/
 fz_colorspace *fz_device_rgb(fz_context *ctx);
-
-/*
-	Get colorspace representing device specific bgr.
-*/
 fz_colorspace *fz_device_bgr(fz_context *ctx);
-
-/*
-	Get colorspace representing device specific CMYK.
-*/
 fz_colorspace *fz_device_cmyk(fz_context *ctx);
-
-/*
-	Get colorspace representing device specific LAB.
-*/
 fz_colorspace *fz_device_lab(fz_context *ctx);
 
-/*
-	Get default color params for general color conversion.
-*/
 const fz_color_params *fz_default_color_params(fz_context *ctx);
 
 typedef void (fz_colorspace_convert_fn)(fz_context *ctx, const fz_colorspace *cs, const float *src, float *dst);
@@ -209,9 +171,6 @@ struct fz_cal_colorspace_s {
 	fz_iccprofile *profile;
 };
 
-/*
-	icc methods
-*/
 fz_colorspace *fz_new_icc_colorspace(fz_context *ctx, enum fz_colorspace_type type, fz_buffer *buf, fz_colorspace *alternate);
 fz_colorspace *fz_new_icc_colorspace_from_file(fz_context *ctx, enum fz_colorspace_type type, const char *path);
 fz_colorspace *fz_new_icc_colorspace_from_stream(fz_context *ctx, enum fz_colorspace_type type, fz_stream *in);
@@ -220,13 +179,12 @@ fz_buffer *fz_new_icc_data_from_cal_colorspace(fz_context *ctx, fz_cal_colorspac
 fz_buffer *fz_icc_data_from_icc_colorspace(fz_context *ctx, const fz_colorspace *cs);
 const fz_colorspace *fz_alternate_colorspace(fz_context *ctx, const fz_colorspace *cs);
 
-/* Default cs */
 fz_default_colorspaces *fz_new_default_colorspaces(fz_context *ctx);
 fz_default_colorspaces* fz_keep_default_colorspaces(fz_context *ctx, fz_default_colorspaces *default_cs);
 void fz_drop_default_colorspaces(fz_context *ctx, fz_default_colorspaces *default_cs);
 fz_default_colorspaces *fz_clone_default_colorspaces(fz_context *ctx, fz_default_colorspaces *base);
 
-/* Do we want to make fz_default_colorspaces public and get rid of these? */
+/* FIXME: Do we want to make fz_default_colorspaces public and get rid of these? */
 void fz_set_default_gray(fz_context *ctx, fz_default_colorspaces *default_cs, fz_colorspace *cs);
 void fz_set_default_rgb(fz_context *ctx, fz_default_colorspaces *default_cs, fz_colorspace *cs);
 void fz_set_default_cmyk(fz_context *ctx, fz_default_colorspaces *default_cs, fz_colorspace *cs);

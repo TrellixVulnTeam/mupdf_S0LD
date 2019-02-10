@@ -270,6 +270,7 @@ int pdf_is_dict(fz_context *ctx, pdf_obj *obj)
 	return OBJ_IS_DICT(obj);
 }
 
+/* safe, silent failure, no error reporting on type mismatches */
 int pdf_to_bool(fz_context *ctx, pdf_obj *obj)
 {
 	RESOLVE(obj);
@@ -1574,6 +1575,7 @@ pdf_deep_copy_obj(fz_context *ctx, pdf_obj *obj)
 	}
 }
 
+/* obj marking and unmarking functions - to avoid infinite recursions. */
 int
 pdf_obj_marked(fz_context *ctx, pdf_obj *obj)
 {
@@ -1629,6 +1631,7 @@ pdf_obj_memo(fz_context *ctx, pdf_obj *obj, int bit, int *memo)
 	return 1;
 }
 
+/* obj dirty bit support. */
 int pdf_obj_is_dirty(fz_context *ctx, pdf_obj *obj)
 {
 	RESOLVE(obj);
@@ -1709,6 +1712,12 @@ pdf_drop_obj(fz_context *ctx, pdf_obj *obj)
 	}
 }
 
+/*
+	Recurse through the object structure setting the node's parent_num to num.
+	parent_num is used when a subobject is to be changed during a document edit.
+	The whole containing hierarchy is moved to the incremental xref section, so
+	to be later written out as an incremental file update.
+*/
 void
 pdf_set_obj_parent(fz_context *ctx, pdf_obj *obj, int num)
 {
@@ -1847,6 +1856,18 @@ static inline void fmt_puts(fz_context *ctx, struct fmt *fmt, char *s)
 static inline void fmt_sep(fz_context *ctx, struct fmt *fmt)
 {
 	fmt->sep = 1;
+}
+
+static int is_binary_string(fz_context *ctx, pdf_obj *obj)
+{
+	unsigned char *s = (unsigned char *)pdf_to_str_buf(ctx, obj);
+	int i, n = pdf_to_str_len(ctx, obj);
+	for (i = 0; i < n; ++i)
+	{
+		if (s[i] > 126) return 1;
+		if (s[i] < 32 && (s[i] != '\t' && s[i] != '\n' && s[i] != '\r')) return 1;
+	}
+	return 0;
 }
 
 static void fmt_str_out(fz_context *ctx, void *fmt_, const unsigned char *s, int n)
@@ -2041,7 +2062,11 @@ static void fmt_obj(fz_context *ctx, struct fmt *fmt, pdf_obj *obj)
 	else if (pdf_is_string(ctx, obj))
 	{
 		unsigned char *str = (unsigned char *)pdf_to_str_buf(ctx, obj);
-		if (fmt->ascii || fmt->crypt || (str[0]==0xff && str[1]==0xfe) || (str[0]==0xfe && str[1] == 0xff))
+		if (fmt->crypt
+			|| (fmt->ascii && is_binary_string(ctx, obj))
+			|| (str[0]==0xff && str[1]==0xfe)
+			|| (str[0]==0xfe && str[1] == 0xff)
+			)
 			fmt_hex(ctx, fmt, obj);
 		else
 			fmt_str(ctx, fmt, obj);

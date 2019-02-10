@@ -1758,7 +1758,7 @@ static inline jobject to_PDFWidget(fz_context *ctx, JNIEnv *env, pdf_widget *wid
 		(*env)->SetIntField(env, jwidget, fid_PDFWidget_kind, pdf_widget_type(ctx, widget));
 		(*env)->SetIntField(env, jwidget, fid_PDFWidget_contentType, pdf_text_widget_content_type(ctx, widget->page->doc, widget));
 		(*env)->SetIntField(env, jwidget, fid_PDFWidget_maxLen, pdf_text_widget_max_len(ctx, widget->page->doc, widget));
-		(*env)->SetIntField(env, jwidget, fid_PDFWidget_fieldFlags, pdf_get_field_flags(ctx, widget->page->doc, widget->obj));
+		(*env)->SetIntField(env, jwidget, fid_PDFWidget_fieldFlags, pdf_field_flags(ctx, widget->obj));
 
 		nopts = pdf_choice_widget_options(ctx, widget->page->doc, widget, 0, NULL);
 		if (nopts > 0)
@@ -5688,7 +5688,6 @@ FUN(PDFPage_getWidgetsNative)(JNIEnv *env, jobject self)
 {
 	fz_context *ctx = get_context(env);
 	pdf_page *page = from_PDFPage(env, self);
-	pdf_document *doc = page->doc;
 	pdf_widget *widget;
 	jobjectArray jwidgets = NULL;
 	int count = 0;
@@ -5698,7 +5697,7 @@ FUN(PDFPage_getWidgetsNative)(JNIEnv *env, jobject self)
 
 	fz_try(ctx)
 	{
-		for (widget = pdf_first_widget(ctx, doc, (pdf_page *)page); widget; widget = pdf_next_widget(ctx, widget))
+		for (widget = pdf_first_widget(ctx, page); widget; widget = pdf_next_widget(ctx, widget))
 			count++;
 	}
 	fz_catch(ctx)
@@ -5717,7 +5716,7 @@ FUN(PDFPage_getWidgetsNative)(JNIEnv *env, jobject self)
 	{
 		int i = 0;
 
-		for (widget = pdf_first_widget(ctx, doc, (pdf_page *)page); widget; widget = pdf_next_widget(ctx, widget))
+		for (widget = pdf_first_widget(ctx, page); widget; widget = pdf_next_widget(ctx, widget))
 		{
 			jobject jwidget;
 
@@ -9924,7 +9923,6 @@ FUN(PDFPage_selectWidgetAtNative)(JNIEnv *env, jobject self, jint x, jint y)
 {
 	fz_context *ctx = get_context(env);
 	pdf_page *page = from_PDFPage(env, self);
-	int changed = 0;
 	pdf_ui_event event;
 	fz_point fzpt = {x, y};
 	pdf_document *doc = page->doc;
@@ -9938,11 +9936,9 @@ FUN(PDFPage_selectWidgetAtNative)(JNIEnv *env, jobject self, jint x, jint y)
 		event.etype = PDF_EVENT_TYPE_POINTER;
 		event.event.pointer.pt = fzpt;
 		event.event.pointer.ptype = PDF_POINTER_DOWN;
-		changed = pdf_pass_event(ctx, doc, page, &event);
+		pdf_pass_event(ctx, doc, page, &event);
 		event.event.pointer.ptype = PDF_POINTER_UP;
-		changed |= pdf_pass_event(ctx, doc, page, &event);
-		if (changed)
-			pdf_update_page(ctx, page);
+		pdf_pass_event(ctx, doc, page, &event);
 		focus = pdf_focused_widget(ctx, doc);
 	}
 	fz_catch(ctx)
@@ -9989,22 +9985,23 @@ FUN(PDFWidget_getValue)(JNIEnv *env, jobject self)
 	return jval;
 }
 
-JNIEXPORT void JNICALL
-FUN(PDFWidget_setValue)(JNIEnv *env, jobject self, jstring jval)
+JNIEXPORT jboolean JNICALL
+FUN(PDFWidget_setTextValue)(JNIEnv *env, jobject self, jstring jval)
 {
 	fz_context *ctx = get_context(env);
 	pdf_widget *widget = from_PDFWidget_safe(env, self);
 	const char *val;
+	jboolean accepted = JNI_FALSE;
 
 	if (!ctx || !widget)
-		return;
+		return JNI_FALSE;
 
 	val = (*env)->GetStringUTFChars(env, jval, NULL);
 
+	fz_var(accepted);
 	fz_try(ctx)
 	{
-		pdf_text_widget_set_text(ctx, widget->page->doc, widget, (char *)val);
-		pdf_update_page(ctx, widget->page);
+		accepted = pdf_text_widget_set_text(ctx, widget->page->doc, widget, (char *)val);
 	}
 	fz_always(ctx)
 	{
@@ -10014,6 +10011,103 @@ FUN(PDFWidget_setValue)(JNIEnv *env, jobject self, jstring jval)
 	{
 		jni_rethrow(env, ctx);
 	}
+
+	return accepted;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFWidget_setValue)(JNIEnv *env, jobject self, jstring jval)
+{
+	fz_context *ctx = get_context(env);
+	pdf_widget *widget = from_PDFWidget_safe(env, self);
+	const char *val;
+	jboolean accepted = JNI_FALSE;
+
+	if (!ctx || !widget)
+		return JNI_FALSE;
+
+	val = (*env)->GetStringUTFChars(env, jval, NULL);
+
+	fz_var(accepted);
+	fz_try(ctx)
+	{
+		accepted = pdf_field_set_value(ctx, widget->page->doc, widget->obj, (char *)val, widget->ignore_trigger_events);
+	}
+	fz_always(ctx)
+	{
+		(*env)->ReleaseStringUTFChars(env, jval, val);
+	}
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+	}
+
+	return accepted;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFWidget_toggle)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_widget *widget = from_PDFWidget_safe(env, self);
+	jboolean accepted = JNI_FALSE;
+
+	if (!ctx || !widget)
+		return JNI_FALSE;
+
+	fz_var(accepted);
+	fz_try(ctx)
+	{
+		accepted = pdf_toggle_annot(ctx, widget->page->doc, widget);
+	}
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+	}
+
+	return accepted;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFWidget_setEditingState)(JNIEnv *env, jobject self, jboolean val)
+{
+	fz_context *ctx = get_context(env);
+	pdf_widget *widget = from_PDFWidget_safe(env, self);
+
+	if (!ctx || !widget)
+		return;
+
+	fz_try(ctx)
+	{
+		pdf_set_widget_editing_state(ctx, widget, val);
+	}
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+	}
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFWidget_getEditingState)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_widget *widget = from_PDFWidget_safe(env, self);
+	jboolean state = JNI_FALSE;
+
+	if (!ctx || !widget)
+		return JNI_FALSE;
+
+	fz_var(state);
+	fz_try(ctx)
+	{
+		state = pdf_get_widget_editing_state(ctx, widget);
+	}
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+	}
+
+	return state;
 }
 
 JNIEXPORT jobject JNICALL
