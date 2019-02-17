@@ -2020,6 +2020,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\source\fitz\load-jbig2.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\source\fitz\load-jpeg.c"
 				>
 			</File>
@@ -2409,6 +2413,10 @@
 			</File>
 			<File
 				RelativePath="..\..\source\pdf\pdf-unicode.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\source\pdf\pdf-util.c"
 				>
 			</File>
 			<File

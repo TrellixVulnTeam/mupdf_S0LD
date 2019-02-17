@@ -74,6 +74,9 @@ enum pdf_line_ending pdf_line_ending_from_string(fz_context *ctx, const char *en
 pdf_obj *pdf_name_from_line_ending(fz_context *ctx, enum pdf_line_ending end);
 const char *pdf_string_from_line_ending(fz_context *ctx, enum pdf_line_ending end);
 
+pdf_annot *pdf_keep_annot(fz_context *ctx, pdf_annot *annot);
+void pdf_drop_annot(fz_context *ctx, pdf_annot *annot);
+
 pdf_annot *pdf_first_annot(fz_context *ctx, pdf_page *page);
 pdf_annot *pdf_next_annot(fz_context *ctx, pdf_annot *annot);
 
@@ -85,11 +88,15 @@ void pdf_run_annot(fz_context *ctx, pdf_annot *annot, fz_device *dev, fz_matrix 
 
 struct pdf_annot_s
 {
-	fz_annot super;
+	int refs;
+
 	pdf_page *page;
 	pdf_obj *obj;
 
 	pdf_obj *ap;
+
+	int is_hot;
+	int is_active;
 
 	int needs_new_ap;
 	int has_new_ap;
@@ -111,6 +118,7 @@ fz_link *pdf_load_link_annots(fz_context *ctx, pdf_document *, pdf_obj *annots, 
 fz_matrix pdf_annot_transform(fz_context *ctx, pdf_annot *annot);
 void pdf_load_annots(fz_context *ctx, pdf_page *page, pdf_obj *annots);
 void pdf_drop_annots(fz_context *ctx, pdf_annot *annot_list);
+void pdf_drop_widgets(fz_context *ctx, pdf_widget *widget_list);
 
 pdf_annot *pdf_create_annot_raw(fz_context *ctx, pdf_page *page, enum pdf_annot_type type);
 pdf_annot *pdf_create_annot(fz_context *ctx, pdf_page *page, enum pdf_annot_type type);
@@ -137,6 +145,8 @@ int pdf_annot_quadding(fz_context *ctx, pdf_annot *annot);
 
 void pdf_annot_MK_BG(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
 void pdf_annot_MK_BC(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
+int pdf_annot_MK_BG_rgb(fz_context *ctx, pdf_annot *annot, float rgb[3]);
+int pdf_annot_MK_BC_rgb(fz_context *ctx, pdf_annot *annot, float rgb[3]);
 
 int pdf_annot_quad_point_count(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_quad_point(fz_context *ctx, pdf_annot *annot, int i, float qp[8]);
@@ -185,8 +195,6 @@ void pdf_clear_annot_vertices(fz_context *ctx, pdf_annot *annot);
 void pdf_add_annot_vertex(fz_context *ctx, pdf_annot *annot, fz_point p);
 void pdf_set_annot_vertex(fz_context *ctx, pdf_annot *annot, int i, fz_point p);
 
-void pdf_set_text_annot_position(fz_context *ctx, pdf_annot *annot, fz_point pt);
-
 const char *pdf_annot_contents(fz_context *ctx, pdf_annot *annot);
 void pdf_set_annot_contents(fz_context *ctx, pdf_annot *annot, const char *text);
 
@@ -202,7 +210,6 @@ void pdf_print_default_appearance(fz_context *ctx, char *buf, int nbuf, const ch
 void pdf_annot_default_appearance(fz_context *ctx, pdf_annot *annot, const char **font, float *size, float color[3]);
 void pdf_set_annot_default_appearance(fz_context *ctx, pdf_annot *annot, const char *font, float size, const float color[3]);
 
-pdf_annot *pdf_new_annot(fz_context *ctx, pdf_page *page, pdf_obj *obj);
 void pdf_dirty_annot(fz_context *ctx, pdf_annot *annot);
 
 void pdf_update_appearance(fz_context *ctx, pdf_annot *annot);
@@ -216,10 +223,10 @@ void pdf_set_widget_editing_state(fz_context *ctx, pdf_widget *widget, int editi
 
 int pdf_get_widget_editing_state(fz_context *ctx, pdf_widget *widget);
 
-void pdf_clear_focus(fz_context *ctx, pdf_document *doc);
+int pdf_toggle_widget(fz_context *ctx, pdf_widget *widget);
 
-void pdf_focus_annot(fz_context *ctx, pdf_document *doc, pdf_annot *annot);
-
-int pdf_toggle_annot(fz_context *ctx, pdf_document *doc, pdf_annot *annot);
+fz_display_list *pdf_new_display_list_from_annot(fz_context *ctx, pdf_annot *annot);
+fz_pixmap *pdf_new_pixmap_from_annot(fz_context *ctx, pdf_annot *annot, fz_matrix ctm, fz_colorspace *cs, int alpha);
+fz_stext_page *pdf_new_stext_page_from_annot(fz_context *ctx, pdf_annot *annot, const fz_stext_options *options);
 
 #endif

@@ -1504,7 +1504,6 @@ pdf_drop_document_imp(fz_context *ctx, pdf_document *doc)
 	pdf_drop_xref_sections(ctx, doc);
 	fz_free(ctx, doc->xref_index);
 
-	pdf_drop_obj(ctx, doc->focus_obj);
 	fz_drop_stream(ctx, doc->file);
 	pdf_drop_crypt(ctx, doc->crypt);
 
@@ -2711,11 +2710,6 @@ pdf_document *pdf_document_from_fz_document(fz_context *ctx, fz_document *ptr)
 pdf_page *pdf_page_from_fz_page(fz_context *ctx, fz_page *ptr)
 {
 	return (pdf_page *)((ptr && ptr->bound_page == (fz_page_bound_page_fn*)pdf_bound_page) ? ptr : NULL);
-}
-
-pdf_annot *pdf_annot_from_fz_annot(fz_context *ctx, fz_annot *ptr)
-{
-	return (pdf_annot *)((ptr && ptr->bound_annot == (fz_annot_bound_fn*)pdf_bound_annot) ? ptr : NULL);
 }
 
 /*

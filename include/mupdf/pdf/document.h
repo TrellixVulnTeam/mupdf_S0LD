@@ -9,7 +9,6 @@ typedef struct pdf_ocg_descriptor_s pdf_ocg_descriptor;
 typedef struct pdf_page_s pdf_page;
 typedef struct pdf_annot_s pdf_annot;
 typedef struct pdf_annot_s pdf_widget;
-typedef struct pdf_hotspot_s pdf_hotspot;
 typedef struct pdf_js_s pdf_js;
 
 enum
@@ -33,12 +32,6 @@ struct pdf_lexbuf_large_s
 {
 	pdf_lexbuf base;
 	char buffer[PDF_LEXBUF_LARGE - PDF_LEXBUF_SMALL];
-};
-
-struct pdf_hotspot_s
-{
-	int num;
-	int state;
 };
 
 /*
@@ -65,7 +58,6 @@ pdf_document *pdf_specifics(fz_context *ctx, fz_document *doc);
 
 pdf_document *pdf_document_from_fz_document(fz_context *ctx, fz_document *ptr);
 pdf_page *pdf_page_from_fz_page(fz_context *ctx, fz_page *ptr);
-pdf_annot *pdf_annot_from_fz_annot(fz_context *ctx, fz_annot *ptr);
 
 int pdf_needs_password(fz_context *ctx, pdf_document *doc);
 
@@ -203,7 +195,6 @@ struct pdf_document_s
 	int64_t file_size;
 	pdf_crypt *crypt;
 	pdf_ocg_descriptor *ocg;
-	pdf_hotspot hotspot;
 	fz_colorspace *oi;
 
 	int max_xref_len;
@@ -273,9 +264,6 @@ struct pdf_document_s
 	int resources_localised;
 
 	pdf_lexbuf_large lexbuf;
-
-	pdf_annot *focus;
-	pdf_obj *focus_obj;
 
 	pdf_js *js;
 
@@ -347,6 +335,7 @@ struct pdf_write_options_s
 	int do_clean; /* Clean content streams. */
 	int do_sanitize; /* Sanitize content streams. */
 	int do_decrypt; /* Save without decryption. */
+	int do_appearance; /* (Re)create appearance streams. */
 	int continue_on_error; /* If set, errors are (optionally) counted and writing continues. */
 	int *errors; /* Pointer to a place to store a count of errors */
 };

@@ -1,5 +1,6 @@
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
+#include "../fitz/fitz-imp.h" // ick!
 
 #include <string.h>
 #include <time.h>
@@ -39,15 +40,23 @@ static time_t _mkgmtime(struct tm* timeptr)
 
 #endif // _WIN32
 
-#define TEXT_ANNOT_SIZE (25.0f)
-
 #define isdigit(c) (c >= '0' && c <= '9')
 
-static void
-pdf_drop_annot_imp(fz_context *ctx, pdf_annot *annot)
+pdf_annot *
+pdf_keep_annot(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_drop_obj(ctx, annot->ap);
-	pdf_drop_obj(ctx, annot->obj);
+	return fz_keep_imp(ctx, annot, &annot->refs);
+}
+
+void
+pdf_drop_annot(fz_context *ctx, pdf_annot *annot)
+{
+	if (fz_drop_imp(ctx, annot, &annot->refs))
+	{
+		pdf_drop_obj(ctx, annot->ap);
+		pdf_drop_obj(ctx, annot->obj);
+		fz_free(ctx, annot);
+	}
 }
 
 void
@@ -56,7 +65,7 @@ pdf_drop_annots(fz_context *ctx, pdf_annot *annot)
 	while (annot)
 	{
 		pdf_annot *next = annot->next;
-		fz_drop_annot(ctx, &annot->super);
+		pdf_drop_annot(ctx, annot);
 		annot = next;
 	}
 }
@@ -91,17 +100,13 @@ pdf_annot_transform(fz_context *ctx, pdf_annot *annot)
 /*
 	Internal function for creating a new pdf annotation.
 */
-pdf_annot *pdf_new_annot(fz_context *ctx, pdf_page *page, pdf_obj *obj)
+static pdf_annot *
+pdf_new_annot(fz_context *ctx, pdf_page *page, pdf_obj *obj)
 {
 	pdf_annot *annot;
 
-	annot = fz_new_derived_annot(ctx, pdf_annot);
-
-	annot->super.drop_annot = (fz_annot_drop_fn*)pdf_drop_annot_imp;
-	annot->super.bound_annot = (fz_annot_bound_fn*)pdf_bound_annot;
-	annot->super.run_annot = (fz_annot_run_fn*)pdf_run_annot;
-	annot->super.next_annot = (fz_annot_next_fn*)pdf_next_annot;
-
+	annot = fz_malloc_struct(ctx, pdf_annot);
+	annot->refs = 1;
 	annot->page = page; /* only borrowed, as the page owns the annot */
 	annot->obj = pdf_keep_obj(ctx, obj);
 
@@ -111,7 +116,6 @@ pdf_annot *pdf_new_annot(fz_context *ctx, pdf_page *page, pdf_obj *obj)
 void
 pdf_load_annots(fz_context *ctx, pdf_page *page, pdf_obj *annots)
 {
-	pdf_document *doc = page->doc;
 	pdf_annot *annot;
 	pdf_obj *subtype;
 	int i, n;
@@ -137,11 +141,16 @@ pdf_load_annots(fz_context *ctx, pdf_page *page, pdf_obj *annots)
 			fz_catch(ctx)
 				fz_warn(ctx, "could not update appearance for annotation");
 
-			if (doc->focus_obj == obj)
-				doc->focus = annot;
-
-			*page->annot_tailp = annot;
-			page->annot_tailp = &annot->next;
+			if (pdf_name_eq(ctx, subtype, PDF_NAME(Widget)))
+			{
+				*page->widget_tailp = annot;
+				page->widget_tailp = &annot->next;
+			}
+			else
+			{
+				*page->annot_tailp = annot;
+				page->annot_tailp = &annot->next;
+			}
 		}
 	}
 }
@@ -149,13 +158,13 @@ pdf_load_annots(fz_context *ctx, pdf_page *page, pdf_obj *annots)
 pdf_annot *
 pdf_first_annot(fz_context *ctx, pdf_page *page)
 {
-	return page ? page->annots : NULL;
+	return page->annots;
 }
 
 pdf_annot *
 pdf_next_annot(fz_context *ctx, pdf_annot *annot)
 {
-	return annot ? annot->next : NULL;
+	return annot->next;
 }
 
 /*
@@ -452,7 +461,7 @@ pdf_create_annot(fz_context *ctx, pdf_page *page, enum pdf_annot_type type)
 	pdf_dict_put(ctx, annot->obj, PDF_NAME(P), page->obj);
 	pdf_dict_put_int(ctx, annot->obj, PDF_NAME(F), flags);
 
-	return annot;
+	return pdf_keep_annot(ctx, annot);
 }
 
 void
@@ -483,13 +492,6 @@ pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 	if (*annotptr == NULL)
 		page->annot_tailp = annotptr;
 
-	/* If the removed annotation has the focus, blur it. */
-	if (doc->focus == annot)
-	{
-		doc->focus = NULL;
-		doc->focus_obj = NULL;
-	}
-
 	/* Remove the annot from the "Annots" array. */
 	annot_arr = pdf_dict_get(ctx, page->obj, PDF_NAME(Annots));
 	i = pdf_array_find(ctx, annot_arr, annot->obj);
@@ -500,7 +502,7 @@ pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 	 * removing it here may break files if multiple pages use the same annot. */
 
 	/* And free it. */
-	fz_drop_annot(ctx, &annot->super);
+	pdf_drop_annot(ctx, annot);
 
 	doc->dirty = 1;
 }
@@ -865,6 +867,34 @@ static void pdf_annot_color_imp(fz_context *ctx, pdf_obj *arr, int *n, float col
 	}
 }
 
+static int pdf_annot_color_rgb(fz_context *ctx, pdf_obj *arr, float rgb[3])
+{
+	float color[4];
+	int n;
+	pdf_annot_color_imp(ctx, arr, &n, color);
+	if (n == 0)
+	{
+		return 0;
+	}
+	else if (n == 1)
+	{
+		rgb[0] = rgb[1] = rgb[2] = color[0];
+	}
+	else if (n == 3)
+	{
+		rgb[0] = color[0];
+		rgb[1] = color[1];
+		rgb[2] = color[2];
+	}
+	else if (n == 4)
+	{
+		rgb[0] = 1 - fz_min(1, color[0] + color[3]);
+		rgb[1] = 1 - fz_min(1, color[1] + color[3]);
+		rgb[2] = 1 - fz_min(1, color[2] + color[3]);
+	}
+	return 1;
+}
+
 static void pdf_set_annot_color_imp(fz_context *ctx, pdf_annot *annot, pdf_obj *key, int n, const float color[4], pdf_obj **allowed)
 {
 	pdf_document *doc = annot->page->doc;
@@ -922,11 +952,25 @@ pdf_annot_MK_BG(fz_context *ctx, pdf_annot *annot, int *n, float color[4])
 	pdf_annot_color_imp(ctx, mk_bg, n, color);
 }
 
+int
+pdf_annot_MK_BG_rgb(fz_context *ctx, pdf_annot *annot, float rgb[3])
+{
+	pdf_obj *mk_bg = pdf_dict_get(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(MK)), PDF_NAME(BG));
+	return pdf_annot_color_rgb(ctx, mk_bg, rgb);
+}
+
 void
 pdf_annot_MK_BC(fz_context *ctx, pdf_annot *annot, int *n, float color[4])
 {
 	pdf_obj *mk_bc = pdf_dict_get(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(MK)), PDF_NAME(BC));
 	pdf_annot_color_imp(ctx, mk_bc, n, color);
+}
+
+int
+pdf_annot_MK_BC_rgb(fz_context *ctx, pdf_annot *annot, float rgb[3])
+{
+	pdf_obj *mk_bc = pdf_dict_get(ctx, pdf_dict_get(ctx, annot->obj, PDF_NAME(MK)), PDF_NAME(BC));
+	return pdf_annot_color_rgb(ctx, mk_bc, rgb);
 }
 
 void
@@ -1384,32 +1428,6 @@ pdf_add_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, fz_point p[])
 	pdf_array_push_drop(ctx, ink_list, stroke);
 
 	pdf_dirty_annot(ctx, annot);
-}
-
-/*
-	set the position on page for a text (sticky note) annotation.
-*/
-void
-pdf_set_text_annot_position(fz_context *ctx, pdf_annot *annot, fz_point pt)
-{
-	fz_matrix page_ctm, inv_page_ctm;
-	fz_rect rect;
-	int flags;
-
-	pdf_page_transform(ctx, annot->page, NULL, &page_ctm);
-	inv_page_ctm = fz_invert_matrix(page_ctm);
-
-	rect.x0 = pt.x;
-	rect.x1 = pt.x + TEXT_ANNOT_SIZE;
-	rect.y0 = pt.y;
-	rect.y1 = pt.y + TEXT_ANNOT_SIZE;
-	rect = fz_transform_rect(rect, inv_page_ctm);
-
-	pdf_dict_put_rect(ctx, annot->obj, PDF_NAME(Rect), rect);
-
-	flags = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(F));
-	flags |= (PDF_ANNOT_IS_NO_ZOOM|PDF_ANNOT_IS_NO_ROTATE);
-	pdf_dict_put_int(ctx, annot->obj, PDF_NAME(F), flags);
 }
 
 static void

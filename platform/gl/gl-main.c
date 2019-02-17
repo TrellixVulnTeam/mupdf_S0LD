@@ -4,6 +4,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#ifndef _WIN32
+#include <signal.h>
+#endif
 
 #include "mujs.h"
 
@@ -456,6 +459,8 @@ void load_page(void)
 	fz_irect area;
 
 	/* clear all editor selections */
+	if (selected_annot && pdf_annot_type(ctx, selected_annot) == PDF_ANNOT_WIDGET)
+		pdf_annot_event_blur(ctx, selected_annot);
 	selected_annot = NULL;
 
 	fz_drop_stext_page(ctx, page_text);
@@ -1552,6 +1557,16 @@ static void cleanup(void)
 	fz_drop_context(ctx);
 }
 
+int reloadrequested = 0;
+
+#ifndef _WIN32
+static void signal_handler(int signal)
+{
+	if (signal == SIGHUP)
+		reloadrequested = 1;
+}
+#endif
+
 #ifdef _MSC_VER
 int main_utf8(int argc, char **argv)
 #else
@@ -1560,6 +1575,10 @@ int main(int argc, char **argv)
 {
 	int aa_level = 8;
 	int c;
+
+#ifndef _WIN32
+	signal(SIGHUP, signal_handler);
+#endif
 
 	glutInit(&argc, argv);
 
