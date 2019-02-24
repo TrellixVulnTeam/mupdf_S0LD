@@ -198,8 +198,6 @@ static fz_draw_state *
 fz_knockout_begin(fz_context *ctx, fz_draw_device *dev)
 {
 	fz_irect bbox, ga_bbox;
-	fz_pixmap *dest, *shape;
-	fz_pixmap *ga = NULL;
 	fz_draw_state *state = &dev->stack[dev->top];
 	int isolated = state->blendmode & FZ_BLEND_ISOLATED;
 
@@ -209,69 +207,73 @@ fz_knockout_begin(fz_context *ctx, fz_draw_device *dev)
 	state = push_stack(ctx, dev);
 	STACK_PUSHED("knockout");
 
-	bbox = fz_pixmap_bbox(ctx, state->dest);
-	bbox = fz_intersect_irect(bbox, state->scissor);
-	dest = fz_new_pixmap_with_bbox(ctx, state->dest->colorspace, bbox, state->dest->seps, state->dest->alpha);
-	if (state[0].group_alpha)
+	fz_try(ctx)
 	{
-		ga_bbox = fz_pixmap_bbox(ctx, state->group_alpha);
-		ga_bbox = fz_intersect_irect(ga_bbox, state->scissor);
-		ga = fz_new_pixmap_with_bbox(ctx, state->group_alpha->colorspace, ga_bbox, state->group_alpha->seps, state->group_alpha->alpha);
-	}
-
-	if (isolated)
-	{
-		fz_clear_pixmap(ctx, dest);
-		if (ga)
-			fz_clear_pixmap(ctx, ga);
-	}
-	else
-	{
-		/* Find the last but one destination to copy */
-		int i = dev->top-1; /* i = the one on entry (i.e. the last one) */
-		fz_draw_state *prev = state;
-		while (i > 0)
+		bbox = fz_pixmap_bbox(ctx, state->dest);
+		bbox = fz_intersect_irect(bbox, state->scissor);
+		state[1].dest = fz_new_pixmap_with_bbox(ctx, state->dest->colorspace, bbox, state->dest->seps, state->dest->alpha);
+		if (state[0].group_alpha)
 		{
-			prev = &dev->stack[--i];
-			if (prev->dest != state->dest)
-				break;
+			ga_bbox = fz_pixmap_bbox(ctx, state->group_alpha);
+			ga_bbox = fz_intersect_irect(ga_bbox, state->scissor);
+			state[1].group_alpha = fz_new_pixmap_with_bbox(ctx, state->group_alpha->colorspace, ga_bbox, state->group_alpha->seps, state->group_alpha->alpha);
 		}
-		if (prev->dest)
+
+		if (isolated)
 		{
-			fz_copy_pixmap_rect(ctx, dest, prev->dest, bbox, dev->default_cs);
-			if (ga)
-			{
-				if (prev->group_alpha)
-					fz_copy_pixmap_rect(ctx, ga, prev->group_alpha, ga_bbox, dev->default_cs);
-				else
-					fz_clear_pixmap(ctx, ga);
-			}
+			fz_clear_pixmap(ctx, state[1].dest);
+			if (state[1].group_alpha)
+				fz_clear_pixmap(ctx, state[1].group_alpha);
 		}
 		else
 		{
-			fz_clear_pixmap(ctx, dest);
-			if (ga)
-				fz_clear_pixmap(ctx, ga);
+			/* Find the last but one destination to copy */
+			int i = dev->top-1; /* i = the one on entry (i.e. the last one) */
+			fz_draw_state *prev = state;
+			while (i > 0)
+			{
+				prev = &dev->stack[--i];
+				if (prev->dest != state->dest)
+					break;
+			}
+			if (prev->dest)
+			{
+				fz_copy_pixmap_rect(ctx, state[1].dest, prev->dest, bbox, dev->default_cs);
+				if (state[1].group_alpha)
+				{
+					if (prev->group_alpha)
+						fz_copy_pixmap_rect(ctx, state[1].group_alpha, prev->group_alpha, ga_bbox, dev->default_cs);
+					else
+						fz_clear_pixmap(ctx, state[1].group_alpha);
+				}
+			}
+			else
+			{
+				fz_clear_pixmap(ctx, state[1].dest);
+				if (state[1].group_alpha)
+					fz_clear_pixmap(ctx, state[1].group_alpha);
+			}
 		}
-	}
 
-	/* Knockout groups (and only knockout groups) rely on shape */
-	shape = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
-	fz_clear_pixmap(ctx, shape);
+		/* Knockout groups (and only knockout groups) rely on shape */
+		state[1].shape = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
+		fz_clear_pixmap(ctx, state[1].shape);
 #ifdef DUMP_GROUP_BLENDS
-	dump_spaces(dev->top-1, "");
-	fz_dump_blend(ctx, "Knockout begin: background is ", dest);
-	if (shape)
-		fz_dump_blend(ctx, "/S=", shape);
-	if (ga)
-		fz_dump_blend(ctx, "/GA=", ga);
-	printf("\n");
+		dump_spaces(dev->top-1, "");
+		fz_dump_blend(ctx, "Knockout begin: background is ", state[1].dest);
+		if (state[1].shape)
+			fz_dump_blend(ctx, "/S=", state[1].shape);
+		if (state[1].group_alpha)
+			fz_dump_blend(ctx, "/GA=", state[1].group_alpha);
+		printf("\n");
 #endif
-	state[1].group_alpha = ga;
-	state[1].scissor = bbox;
-	state[1].dest = dest;
-	state[1].shape = shape;
-	state[1].blendmode &= ~(FZ_BLEND_MODEMASK | FZ_BLEND_ISOLATED);
+		state[1].scissor = bbox;
+		state[1].blendmode &= ~(FZ_BLEND_MODEMASK | FZ_BLEND_ISOLATED);
+	}
+	fz_catch(ctx)
+	{
+		emergency_pop_stack(ctx, dev, state);
+	}
 
 	return &state[1];
 }
@@ -1144,7 +1146,6 @@ fz_draw_clip_text(fz_context *ctx, fz_device *devp, const fz_text *text, fz_matr
 	fz_draw_device *dev = (fz_draw_device*)devp;
 	fz_matrix ctm = fz_concat(in_ctm, dev->transform);
 	fz_irect bbox;
-	fz_pixmap *mask, *dest, *shape, *group_alpha;
 	fz_matrix tm, trm;
 	fz_glyph *glyph;
 	int i, gid;
@@ -1171,43 +1172,39 @@ fz_draw_clip_text(fz_context *ctx, fz_device *devp, const fz_text *text, fz_matr
 
 	fz_try(ctx)
 	{
-		mask = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
-		fz_clear_pixmap(ctx, mask);
+		state[1].mask = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
+		fz_clear_pixmap(ctx, state[1].mask);
 		/* When there is no alpha in the current destination (state[0].dest->alpha == 0)
 		 * we have a choice. We can either create the new destination WITH alpha, or
 		 * we can copy the old pixmap contents in. We opt for the latter here, but
 		 * may want to revisit this decision in the future. */
-		dest = fz_new_pixmap_with_bbox(ctx, model, bbox, state[0].dest->seps, state[0].dest->alpha);
+		state[1].dest = fz_new_pixmap_with_bbox(ctx, model, bbox, state[0].dest->seps, state[0].dest->alpha);
 		if (state[0].dest->alpha)
-			fz_clear_pixmap(ctx, dest);
+			fz_clear_pixmap(ctx, state[1].dest);
 		else
-			fz_copy_pixmap_rect(ctx, dest, state[0].dest, bbox, dev->default_cs);
+			fz_copy_pixmap_rect(ctx, state[1].dest, state[0].dest, bbox, dev->default_cs);
 		if (state->shape)
 		{
-			shape = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
-			fz_clear_pixmap(ctx, shape);
+			state[1].shape = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
+			fz_clear_pixmap(ctx, state[1].shape);
 		}
 		else
-			shape = NULL;
+			state[1].shape = NULL;
 		if (state->group_alpha)
 		{
-			group_alpha = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
-			fz_clear_pixmap(ctx, group_alpha);
+			state[1].group_alpha = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
+			fz_clear_pixmap(ctx, state[1].group_alpha);
 		}
 		else
-			group_alpha = NULL;
+			state[1].group_alpha = NULL;
 
 		state[1].blendmode |= FZ_BLEND_ISOLATED;
 		state[1].scissor = bbox;
-		state[1].dest = dest;
-		state[1].mask = mask;
-		state[1].shape = shape;
-		state[1].group_alpha = group_alpha;
 #ifdef DUMP_GROUP_BLENDS
 		dump_spaces(dev->top-1, "Clip (text) begin\n");
 #endif
 
-		if (!fz_is_empty_irect(bbox) && mask)
+		if (!fz_is_empty_irect(bbox) && state[1].mask)
 		{
 			for (span = text->head; span; span = span->next)
 			{
@@ -1228,7 +1225,7 @@ fz_draw_clip_text(fz_context *ctx, fz_device *devp, const fz_text *text, fz_matr
 					{
 						int x = (int)trm.e;
 						int y = (int)trm.f;
-						draw_glyph(NULL, mask, glyph, x, y, &bbox, 0);
+						draw_glyph(NULL, state[1].mask, glyph, x, y, &bbox, 0);
 						if (state[1].shape)
 							draw_glyph(NULL, state[1].shape, glyph, x, y, &bbox, 0);
 						if (state[1].group_alpha)
@@ -2928,11 +2925,17 @@ fz_draw_close_device(fz_context *ctx, fz_device *devp)
 	if (dev->resolve_spots && dev->top)
 	{
 		fz_draw_state *state = &dev->stack[--dev->top];
-		fz_copy_pixmap_area_converting_seps(ctx, state[0].dest, state[1].dest, fz_default_color_params(ctx)/* FIXME */, dev->proof_cs, dev->default_cs);
-		fz_drop_pixmap(ctx, state[1].dest);
-		assert(state[1].mask == NULL);
-		assert(state[1].shape == NULL);
-		assert(state[1].group_alpha == NULL);
+		fz_try(ctx)
+		{
+			fz_copy_pixmap_area_converting_seps(ctx, state[0].dest, state[1].dest, fz_default_color_params(ctx)/* FIXME */, dev->proof_cs, dev->default_cs);
+			assert(state[1].mask == NULL);
+			assert(state[1].shape == NULL);
+			assert(state[1].group_alpha == NULL);
+		}
+		fz_always(ctx)
+			fz_drop_pixmap(ctx, state[1].dest);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
 	}
 }
 

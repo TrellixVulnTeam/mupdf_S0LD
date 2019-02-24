@@ -1386,7 +1386,8 @@ pdf_init_document(fz_context *ctx, pdf_document *doc)
 		if (repaired)
 		{
 			/* pdf_repair_xref may access xref_index, so reset it properly */
-			memset(doc->xref_index, 0, sizeof(int) * doc->max_xref_len);
+			if (doc->xref_index)
+				memset(doc->xref_index, 0, sizeof(int) * doc->max_xref_len);
 			pdf_repair_xref(ctx, doc);
 			pdf_prime_xref_index(ctx, doc);
 		}
@@ -1407,7 +1408,7 @@ pdf_init_document(fz_context *ctx, pdf_document *doc)
 			hasroot = (pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root)) != NULL);
 			hasinfo = (pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Info)) != NULL);
 
-			for (i = 1; i < xref_len; i++)
+			for (i = 1; i < xref_len && !hasinfo && !hasroot; ++i)
 			{
 				pdf_xref_entry *entry = pdf_get_xref_entry(ctx, doc, i);
 				if (entry->type == 0 || entry->type == 'f')
@@ -1431,6 +1432,7 @@ pdf_init_document(fz_context *ctx, pdf_document *doc)
 					{
 						nobj = pdf_new_indirect(ctx, doc, i, 0);
 						pdf_dict_put_drop(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root), nobj);
+						hasroot = 1;
 					}
 				}
 
@@ -1440,6 +1442,7 @@ pdf_init_document(fz_context *ctx, pdf_document *doc)
 					{
 						nobj = pdf_new_indirect(ctx, doc, i, 0);
 						pdf_dict_put_drop(ctx, pdf_trailer(ctx, doc), PDF_NAME(Info), nobj);
+						hasinfo = 1;
 					}
 				}
 

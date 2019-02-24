@@ -275,6 +275,23 @@ void do_widget_canvas(fz_irect canvas_area)
 			glDisable(GL_BLEND);
 		}
 
+		if (ui.active == widget || (!ui.active && ui.hot == widget))
+		{
+			glLineStipple(1, 0xAAAA);
+			glEnable(GL_LINE_STIPPLE);
+			glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
+			glEnable(GL_BLEND);
+			glColor4f(1, 1, 1, 1);
+			glBegin(GL_LINE_LOOP);
+			glVertex2f(area.x0-0.5f, area.y0-0.5f);
+			glVertex2f(area.x1+0.5f, area.y0-0.5f);
+			glVertex2f(area.x1+0.5f, area.y1+0.5f);
+			glVertex2f(area.x0-0.5f, area.y1+0.5f);
+			glEnd();
+			glDisable(GL_BLEND);
+			glDisable(GL_LINE_STIPPLE);
+		}
+
 		if (ui.hot == widget && ui.active == widget && !ui.down)
 		{
 			pdf_annot_event_up(ctx, widget);
@@ -286,19 +303,19 @@ void do_widget_canvas(fz_irect canvas_area)
 			{
 			default:
 				break;
-			case PDF_WIDGET_TYPE_BTN_CHECK:
-			case PDF_WIDGET_TYPE_BTN_RADIO:
+			case PDF_WIDGET_TYPE_CHECKBOX:
+			case PDF_WIDGET_TYPE_RADIOBUTTON:
 				pdf_toggle_widget(ctx, widget);
 				break;
-			case PDF_WIDGET_TYPE_TX:
+			case PDF_WIDGET_TYPE_TEXT:
 				show_tx_dialog(widget);
 				break;
-			case PDF_WIDGET_TYPE_CH_COMBO:
-			case PDF_WIDGET_TYPE_CH_LIST:
+			case PDF_WIDGET_TYPE_COMBOBOX:
+			case PDF_WIDGET_TYPE_LISTBOX:
 				ui.dialog = ch_dialog;
 				ch_widget = widget;
 				break;
-			case PDF_WIDGET_TYPE_SIG:
+			case PDF_WIDGET_TYPE_SIGNATURE:
 				show_sig_dialog(widget);
 				break;
 			}

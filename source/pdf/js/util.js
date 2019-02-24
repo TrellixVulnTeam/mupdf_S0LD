@@ -209,8 +209,6 @@ var zoomtype = {
 	refW: 'ReflowWidth',
 };
 
-var util = {};
-
 util.printd = function (fmt, d) {
 	function padZeros(num, places) {
 		var s = String(num)
@@ -313,145 +311,6 @@ util.printx = function (fmt, val) {
 	return res;
 }
 
-util.printf = function () {
-	var i;
-
-	if (arguments.length < 1)
-		return '';
-
-	var res = '';
-	var arg_i = 1;
-	var regexp = /%[^dfsx]*[dfsx]|[^%]*/g;
-	var tokens = arguments[0].match(regexp);
-	var length = tokens ? tokens.length : 0;
-
-	for (i = 0; i < length; i++) {
-		var tok = tokens[i];
-		if (tok.match(/^%/)) {
-			if (arg_i < arguments.length) {
-				var val = arguments[arg_i++];
-				var fval = '';
-				var neg = false;
-				var decsep_re = /^,[0123]/;
-				var flags_re = /^[+ 0#]+/;
-				var width_re = /^\d+/;
-				var prec_re = /^\.\d+/;
-				var conv_re = /^[dfsx]/;
-
-				tok = tok.replace(/^%/, '');
-				var decsep = tok.match(decsep_re);
-				if (decsep)
-					decsep = decsep[0];
-				tok = tok.replace(decsep_re, '');
-				var flags = tok.match(flags_re);
-				if (flags)
-					flags = flags[0];
-				tok = tok.replace(flags_re, '');
-				var width = tok.match(width_re);
-				if (width)
-					width = width[0];
-				tok = tok.replace(width_re, '');
-				var prec = tok.match(prec_re);
-				if (prec)
-					prec = prec[0];
-				tok = tok.replace(prec_re, '');
-				var conv = tok.match(conv_re);
-				if (conv)
-					conv = conv[0];
-
-				prec = prec ? Number(prec.replace(/^\./, '')) : 0;
-				var poschar = (flags && flags.match(/[+ ]/)) ? flags.match(/[+ ]/)[0] : '';
-				var pad = (flags && flags.match(/0/)) ? '0' : ' ';
-
-				var point = '.';
-				var thou = '';
-
-				if (decsep) {
-					switch (decsep) {
-					case ',0': thou = ','; break;
-					case ',1': break;
-					case ',2': thou = '.'; point = ','; break;
-					case ',3': point = ','; break;
-					}
-				}
-
-				switch (conv) {
-				case 'x':
-					val = Math.floor(val);
-					neg = (val < 0);
-					if (neg)
-						val = -val;
-
-					// Convert to hex
-					while (val) {
-						fval = '0123456789ABCDEF'.charAt(val%16) + fval;
-						val = Math.floor(val/16);
-					}
-
-					if (neg)
-						fval = '-' + fval;
-					else
-						fval = poschar + fval;
-					break;
-
-				case 'd':
-					fval = String(Math.floor(val));
-					break;
-
-				case 's':
-					// Always pad strings with space
-					pad = ' ';
-					fval = String(val);
-					break;
-
-				case 'f':
-					fval = String(val);
-
-					if (prec) {
-						var frac = fval.match(/\.\d+/);
-						if (frac) {
-							frac = frac[0];
-							// Matched string includes the dot, so make it
-							// prec+1 in length
-							if (frac.length > prec+1)
-								frac = frac.substring(0, prec+1);
-							else if (frac.length < prec+1)
-								frac += new Array(prec+1-frac.length+1).join('0');
-
-							fval = fval.replace(/\.\d+/, frac);
-						}
-					}
-					break;
-				}
-
-				if (conv.match(/[fd]/)) {
-					if (fval >= 0)
-						fval = poschar + fval;
-
-					if (point !== '.')
-						fval.replace(/\./, point);
-
-					if (thou) {
-						var intpart = fval.match(/\d+/)[0];
-						intpart = new Array(2-(intpart.length+2)%3+1).join('0') + intpart;
-						intpart = intpart.match(/.../g).join(thou).replace(/^0*[,.]?/, '');
-						fval = fval.replace(/\d+/, intpart);
-					}
-				}
-
-				if (width && fval.length < width)
-					fval = new Array(width - fval.length + 1).join(pad) + fval;
-
-				res += fval;
-			}
-		} else {
-			res += tok;
-		}
-	}
-
-	return res;
-}
-
 function AFMergeChange(event) {
 	var prefix, postfix;
 	var value = event.value;
@@ -460,22 +319,34 @@ function AFMergeChange(event) {
 	if (event.selStart >= 0)
 		prefix = value.substring(0, event.selStart);
 	else
-		prefix = "";
+		prefix = '';
 	if (event.selEnd >= 0 && event.selEnd <= value.length)
 		postfix = value.substring(event.selEnd, value.length);
 	else
-		postfix = "";
+		postfix = '';
 	return prefix + event.change + postfix;
 }
 
-function AFMakeNumber(str) {
-	var nums = str.match(/\d+/g);
+function AFExtractNums(string) {
+	if (string.charAt(0) == '.' || string.charAt(0) == ',')
+		string = '0' + string;
+	return string.match(/\d+/g);
+}
+
+function AFMakeNumber(string) {
+	if (typeof string == 'number')
+		return string;
+	if (typeof string != 'string')
+		return null;
+	var nums = AFExtractNums(string);
 	if (!nums)
 		return null;
-	var res = nums.join('.');
-	if (str.match(/^[^0-9]*\./))
-		res = '0.'+res;
-	return res * (str.match(/-/) ? -1.0 : 1.0);
+	var result = nums.join('.');
+	if (string.indexOf('-.') >= 0)
+		result = '0.' + result;
+	if (string.indexOf('-') >= 0)
+		return -result;
+	return result;
 }
 
 function AFExtractTime(dt) {
@@ -573,12 +444,12 @@ function AFParseDateEx(d, fmt) {
 		// One number string, exactly matching the format string in length.
 		// Split it into separate strings to match the fmt
 		var num = nums[0];
-		nums = [""];
+		nums = [''];
 		for (i = 0; i < fmt.length; i++)
 		{
 			nums[nums.length-1] += num.charAt(i);
 			if (i+1 < fmt.length && fmt.charAt(i) != fmt.charAt(i+1))
-				nums.push("");
+				nums.push('');
 		}
 	}
 
@@ -822,78 +693,32 @@ function AFNumber_Keystroke(nDec, sepStyle, negStyle, currStyle, strCurrency, bC
 }
 
 function AFNumber_Format(nDec, sepStyle, negStyle, currStyle, strCurrency, bCurrencyPrepend) {
-	var val = event.value;
-	var fracpart;
-	var intpart;
-	var point = sepStyle&2 ? ',' : '.';
-	var separator = sepStyle&2 ? '.' : ',';
-
-	if (/^\D*\./.test(val))
-		val = '0'+val;
-
-	var groups = val.match(/\d+/g);
-
-	if (!groups)
+	var value = AFMakeNumber(event.value);
+	var fmt = '%,' + sepStyle + '.' + nDec + 'f';
+	console.println('AFNumber_Format', fmt, value);
+	if (value == null) {
+		event.value = '';
 		return;
-
-	switch (groups.length) {
-	case 0:
-		return;
-	case 1:
-		fracpart = '';
-		intpart = groups[0];
-		break;
-	default:
-		fracpart = groups.pop();
-		intpart = groups.join('');
-		break;
 	}
-
-	// Remove leading zeros
-	intpart = intpart.replace(/^0*/, '');
-	if (!intpart)
-		intpart = '0';
-
-	if ((sepStyle & 1) === 0) {
-		// Add the thousands sepearators: pad to length multiple of 3 with zeros,
-		// split into 3s, join with separator, and remove the leading zeros
-		intpart = new Array(2-(intpart.length+2)%3+1).join('0') + intpart;
-		intpart = intpart.match(/.../g).join(separator).replace(/^0*/, '');
-	}
-
-	if (!intpart)
-		intpart = '0';
-
-	// Adjust fractional part to correct number of decimal places
-	fracpart += new Array(nDec+1).join('0');
-	fracpart = fracpart.substring(0, nDec);
-
-	if (fracpart)
-		intpart += point+fracpart;
-
 	if (bCurrencyPrepend)
-		intpart = strCurrency+intpart;
+		fmt = strCurrency + fmt;
 	else
-		intpart += strCurrency;
-
-	if (/-/.test(val)) {
-		switch (negStyle) {
-		case 0:
-			intpart = '-'+intpart;
-			break;
-		case 1:
-			break;
-		case 2:
-		case 3:
-			intpart = '('+intpart+')';
-			break;
-		}
+		fmt = fmt + strCurrency;
+	if (value < 0) {
+		/* negStyle: 0=MinusBlack, 1=Red, 2=ParensBlack, 3=ParensRed */
+		value = Math.abs(value);
+		if (negStyle == 2 || negStyle == 3)
+			fmt = '(' + fmt + ')';
+		else if (negStyle == 0)
+			fmt = '-' + fmt;
+		if (negStyle == 1 || negStyle == 3)
+			event.target.textColor = color.red;
+		else
+			event.target.textColor = color.black;
+	} else {
+		event.target.textColor = color.black;
 	}
-
-	if (negStyle&1)
-		event.target.textColor = /-/.test(val) ? color.red : color.black;
-
-	event.value = intpart;
+	event.value = util.printf(fmt, value);
 }
 
 function AFPercent_Keystroke(nDec, sepStyle) {
@@ -967,7 +792,7 @@ Date.prototype.getYear = Date.prototype.getFullYear;
 Date.prototype.setYear = Date.prototype.setFullYear;
 Date.prototype.toGMTString = Date.prototype.toUTCString;
 
-console.clear = function() { console.println("--- clear console ---\n"); };
+console.clear = function() { console.println('--- clear console ---\n'); };
 console.show = function(){};
 console.hide = function(){};
 

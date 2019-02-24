@@ -413,6 +413,237 @@ static void console_println(js_State *J)
 	js_pushundefined(J);
 }
 
+static void util_printf_d(fz_context *ctx, fz_buffer *out, int ds, int sign, int pad, int w, int base, int value)
+{
+	static const char *digits = "0123456789abcdef";
+	char buf[50];
+	unsigned int a;
+	int i, m = 0;
+
+	if (value < 0)
+	{
+		sign = '-';
+		a = -value;
+	}
+	else
+	{
+		a = value;
+	}
+
+	i = 0;
+	do
+	{
+		buf[i++] = digits[a % base];
+		a /= base;
+		if (a > 0 && ++m == 3)
+		{
+			if (ds == 0) buf[i++] = ',';
+			if (ds == 2) buf[i++] = '.';
+			m = 0;
+		}
+	} while (a);
+
+	if (sign)
+	{
+		if (pad == '0')
+			while (i < w - 1)
+				buf[i++] = pad;
+		buf[i++] = sign;
+	}
+	while (i < w)
+		buf[i++] = pad;
+
+	while (i > 0)
+		fz_append_byte(ctx, out, buf[--i]);
+}
+
+static void util_printf_f(fz_context *ctx, fz_buffer *out, int ds, int sign, int pad, int special, int w, int p, double value)
+{
+	char buf[40], *point, *digits = buf;
+	int n = 0;
+	int m = 0;
+
+	fz_snprintf(buf, sizeof buf, "%.*f", p, value);
+
+	if (*digits == '-')
+	{
+		sign = '-';
+		++digits;
+	}
+
+	if (*digits != '.' && (*digits < '0' || *digits > '9'))
+	{
+		fz_append_string(ctx, out, "nan");
+		return;
+	}
+
+	n = strlen(digits);
+	if (sign)
+		++n;
+	point = strchr(digits, '.');
+	if (point)
+		m = 3 - (point - digits) % 3;
+	else
+	{
+		m = 3 - n % 3;
+		if (special)
+			++n;
+	}
+	if (m == 3)
+		m = 0;
+
+	if (pad == '0' && sign)
+		fz_append_byte(ctx, out, sign);
+	for (; n < w; ++n)
+		fz_append_byte(ctx, out, pad);
+	if (pad == ' ' && sign)
+		fz_append_byte(ctx, out, sign);
+
+	while (*digits && *digits != '.')
+	{
+		fz_append_byte(ctx, out, *digits++);
+		if (++m == 3 && *digits && *digits != '.')
+		{
+			if (ds == 0) fz_append_byte(ctx, out, ',');
+			if (ds == 2) fz_append_byte(ctx, out, '.');
+			m = 0;
+		}
+	}
+
+	if (*digits == '.' || special)
+	{
+		if (ds == 0 || ds == 1)
+			fz_append_byte(ctx, out, '.');
+		else
+			fz_append_byte(ctx, out, ',');
+	}
+
+	if (*digits == '.')
+	{
+		++digits;
+		while (*digits)
+			fz_append_byte(ctx, out, *digits++);
+	}
+}
+
+static void util_printf(js_State *J)
+{
+	pdf_js *js = js_getcontext(J);
+	fz_context *ctx = js->ctx;
+	const char *fmt = js_tostring(J, 1);
+	fz_buffer *out = NULL;
+	int ds, w, p, sign, pad, special;
+	int c, i = 1;
+	int failed = 0;
+	const char *str;
+
+	fz_var(out);
+	fz_try(ctx)
+	{
+		out = fz_new_buffer(ctx, 256);
+
+		while ((c = *fmt++) != 0)
+		{
+			if (c == '%')
+			{
+				c = *fmt++;
+
+				ds = 1;
+				if (c == ',')
+				{
+					c = *fmt++;
+					if (!c)
+						break;
+					ds = c - '0';
+				}
+
+				special = 0;
+				sign = 0;
+				pad = ' ';
+				while (c == ' ' || c == '+' || c == '0' || c == '#')
+				{
+					if (c == '+') sign = '+';
+					else if (c == ' ') sign = ' ';
+					else if (c == '0') pad = '0';
+					else if (c == '#') special = 1;
+					c = *fmt++;
+				}
+				if (!pad)
+					pad = ' ';
+				if (!c)
+					break;
+
+				w = 0;
+				while (c >= '0' && c <= '9')
+				{
+					w = w * 10 + (c - '0');
+					c = *fmt++;
+				}
+				if (!c)
+					break;
+
+				p = 0;
+				if (c == '.')
+				{
+					c = *fmt++;
+					while (c >= '0' && c <= '9')
+					{
+						p = p * 10 + (c - '0');
+						c = *fmt++;
+					}
+				}
+				else
+				{
+					special = 1;
+				}
+				if (!c)
+					break;
+
+				switch (c)
+				{
+				case '%':
+					fz_append_byte(ctx, out, '%');
+					break;
+				case 'x':
+					util_printf_d(ctx, out, ds, sign, pad, w, 16, js_tryinteger(J, ++i, 0));
+					break;
+				case 'd':
+					util_printf_d(ctx, out, ds, sign, pad, w, 10, js_tryinteger(J, ++i, 0));
+					break;
+				case 'f':
+					util_printf_f(ctx, out, ds, sign, pad, special, w, p, js_trynumber(J, ++i, 0));
+					break;
+				case 's':
+				default:
+					fz_append_string(ctx, out, js_trystring(J, ++i, ""));
+				}
+			}
+			else
+			{
+				fz_append_byte(ctx, out, c);
+			}
+		}
+
+		str = fz_string_from_buffer(ctx, out);
+		if (js_try(J))
+		{
+			failed = 1;
+		}
+		else
+		{
+			js_pushstring(J, str);
+			js_endtry(J);
+		}
+	}
+	fz_always(ctx)
+		fz_drop_buffer(ctx, out);
+	fz_catch(ctx)
+		rethrow(js);
+
+	if (failed)
+		js_throw(J);
+}
+
 static void addmethod(js_State *J, const char *name, js_CFunction fun, int n)
 {
 	const char *realname = strchr(name, '.');
@@ -438,6 +669,19 @@ static void declare_dom(pdf_js *js)
 	js_pushglobal(J);
 	js_defglobal(J, "global", JS_READONLY | JS_DONTCONF | JS_DONTENUM);
 
+	/* Create the 'event' object */
+	js_newobject(J);
+	js_defglobal(J, "event", JS_READONLY | JS_DONTCONF | JS_DONTENUM);
+
+	/* Create the 'util' object */
+	js_newobject(J);
+	{
+		// TODO: util.printd
+		// TODO: util.printx
+		addmethod(J, "util.printf", util_printf, 1);
+	}
+	js_defglobal(J, "util", JS_READONLY | JS_DONTCONF | JS_DONTENUM);
+
 	/* Create the 'app' object */
 	js_newobject(J);
 	{
@@ -456,10 +700,6 @@ static void declare_dom(pdf_js *js)
 		addmethod(J, "app.launchURL", app_launchURL, 2);
 	}
 	js_defglobal(J, "app", JS_READONLY | JS_DONTCONF | JS_DONTENUM);
-
-	/* Create the 'event' object */
-	js_newobject(J);
-	js_defglobal(J, "event", JS_READONLY | JS_DONTCONF | JS_DONTENUM);
 
 	/* Create the Field prototype object */
 	js_newobject(J);
@@ -609,9 +849,6 @@ void pdf_js_event_init(pdf_js *js, pdf_obj *target, const char *value, int willC
 {
 	if (js)
 	{
-		char *end;
-		double num;
-
 		js_getglobal(js->imp, "event");
 		{
 			js_pushboolean(js->imp, 1);
@@ -624,11 +861,7 @@ void pdf_js_event_init(pdf_js *js, pdf_obj *target, const char *value, int willC
 			js_newuserdata(js->imp, "Field", pdf_keep_obj(js->ctx, target), field_finalize);
 			js_setproperty(js->imp, -2, "target");
 
-			num = strtod(value, &end);
-			if (*value && *end == 0)
-				js_pushnumber(js->imp, num);
-			else
-				js_pushstring(js->imp, value);
+			js_pushstring(js->imp, value);
 			js_setproperty(js->imp, -2, "value");
 		}
 		js_pop(js->imp, 1);
