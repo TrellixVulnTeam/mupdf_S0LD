@@ -63,7 +63,7 @@ ifdef RANLIB
   RANLIB_CMD = $(QUIET_RANLIB) $(RANLIB) $@
 endif
 LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-TAGS_CMD = $(QUIET_TAGS) ctags $^
+TAGS_CMD = $(QUIET_TAGS) ctags -R
 WINDRES_CMD = $(QUIET_WINDRES) $(MKTGTDIR) ; $(WINDRES) $< $@
 OBJCOPY_CMD = $(QUIET_OBJCOPY) $(MKTGTDIR) ; $(LD) -r -b binary -o $@ $<
 
@@ -262,18 +262,6 @@ $(MURASTER_EXE) : $(MURASTER_OBJ) $(MUPDF_LIB) $(THIRD_LIB) $(THREAD_LIB)
 	$(LINK_CMD) $(THIRD_LIBS) $(THREADING_LIBS)
 EXTRA_APPS += $(MURASTER_EXE)
 
-MJSGEN_OBJ := $(OUT)/source/tools/mjsgen.o
-MJSGEN_EXE := $(OUT)/mjsgen
-$(MJSGEN_EXE) : $(MJSGEN_OBJ) $(MUPDF_LIB) $(THIRD_LIB)
-	$(LINK_CMD) $(THIRD_LIBS)
-EXTRA_APPS += $(MJSGEN_EXE)
-
-MUJSTEST_OBJ := $(addprefix $(OUT)/platform/x11/, jstest_main.o pdfapp.o)
-MUJSTEST_EXE := $(OUT)/mujstest
-$(MUJSTEST_EXE) : $(MUJSTEST_OBJ) $(MUPDF_LIB) $(THIRD_LIB) $(PKCS7_LIB)
-	$(LINK_CMD) $(THIRD_LIBS) $(LIBCRYPTO_LIBS)
-EXTRA_APPS += $(MUJSTEST_EXE)
-
 ifeq ($(HAVE_X11),yes)
 ifeq ($(HAVE_CURL),yes)
   MUVIEW_X11_CURL_EXE := $(OUT)/mupdf-x11-curl
@@ -382,7 +370,7 @@ java:
 wasm:
 	$(MAKE) -C platform/wasm
 
-tags: $(shell find include source platform thirdparty -name '*.[ch]' -or -name '*.cc' -or -name '*.hh' -or -name '*.java')
+tags:
 	$(TAGS_CMD)
 
 cscope.files: $(shell find include source platform -name '*.[ch]')
@@ -412,4 +400,4 @@ android: generate
 		APP_PLATFORM=android-16 \
 		APP_OPTIM=$(build)
 
-.PHONY: all clean nuke install third libs apps generate
+.PHONY: all clean nuke install third libs apps generate tags

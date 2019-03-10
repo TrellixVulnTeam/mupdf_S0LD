@@ -67,22 +67,6 @@ static void app_alert(js_State *J)
 	js_pushnumber(J, event.button_pressed);
 }
 
-static void app_execDialog(js_State *J)
-{
-	pdf_js *js = js_getcontext(J);
-	// monitor
-	// inheritDialog
-	// parentDoc
-
-	fz_try(js->ctx)
-		pdf_event_issue_exec_dialog(js->ctx, js->doc);
-	fz_catch(js->ctx)
-		rethrow(js);
-
-	// return "ok" or "cancel"
-	js_pushstring(J, "cancel");
-}
-
 static void app_execMenuItem(js_State *J)
 {
 	pdf_js *js = js_getcontext(J);
@@ -695,7 +679,6 @@ static void declare_dom(pdf_js *js)
 		js_defproperty(J, -2, "app.platform", JS_READONLY | JS_DONTENUM | JS_DONTCONF);
 
 		addmethod(J, "app.alert", app_alert, 4);
-		addmethod(J, "app.execDialog", app_execDialog, 0);
 		addmethod(J, "app.execMenuItem", app_execMenuItem, 1);
 		addmethod(J, "app.launchURL", app_launchURL, 2);
 	}
@@ -987,11 +970,11 @@ void pdf_drop_js(fz_context *ctx, pdf_js *js) { }
 void pdf_enable_js(fz_context *ctx, pdf_document *doc) { }
 void pdf_disable_js(fz_context *ctx, pdf_document *doc) { }
 int pdf_js_supported(fz_context *ctx, pdf_document *doc) { return 0; }
-void pdf_js_event_init(pdf_js *js, pdf_obj *target, const char *value) { }
-void pdf_js_event_init_keystroke(pdf_js *js, pdf_obj *target, const char *value, pdf_keystroke_event *evt) { }
-void pdf_js_event_result_keystroke(pdf_js *js, pdf_keystroke_event *evt) { }
+void pdf_js_event_init(pdf_js *js, pdf_obj *target, const char *value, int willCommit) { }
+void pdf_js_event_init_keystroke(pdf_js *js, pdf_obj *target, pdf_keystroke_event *event) { }
+int pdf_js_event_result_keystroke(pdf_js *js, pdf_keystroke_event *evt) { return 1; }
 int pdf_js_event_result(pdf_js *js) { return 1; }
 char *pdf_js_event_value(pdf_js *js) { return ""; }
-void pdf_js_execute(pdf_js *js, const char *name, char *code) { }
+void pdf_js_execute(pdf_js *js, const char *name, const char *source) { }
 
 #endif /* FZ_ENABLE_JS */
