@@ -892,10 +892,6 @@ static fz_font *load_noto_try(fz_context *ctx, const char *stem)
 
 enum { JP, KR, SC, TC };
 
-#define NOTO3(NAME1, NAME2, NAME3) load_noto3(ctx, NAME1 "-Regular", NAME2 "-Regular", NAME3 "-Regular")
-#define NOTO2(NAME1, NAME2) load_noto3(ctx, NAME1 "-Regular", NAME2 "-Regular", NULL)
-#define NOTO(NAME) load_noto_try(ctx, NAME)
-
 fz_font *load_droid_fallback_font(fz_context *ctx, int script, int language, int serif, int bold, int italic)
 {
 	switch (script)
@@ -5114,6 +5110,8 @@ FUN(Document_openNativeWithStream)(JNIEnv *env, jclass cls, jobject jstream, jst
 
 	fz_var(state);
 	fz_var(stm);
+	fz_var(stream);
+	fz_var(array);
 
 	if (jmimetype)
 	{
@@ -5530,7 +5528,7 @@ FUN(Page_finalize)(JNIEnv *env, jobject self)
 }
 
 JNIEXPORT jobject JNICALL
-FUN(Page_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs, jboolean alpha)
+FUN(Page_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs, jboolean alpha, jboolean showExtra)
 {
 	fz_context *ctx = get_context(env);
 	fz_page *page = from_Page(env, self);
@@ -5541,7 +5539,12 @@ FUN(Page_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs, jboolea
 	if (!ctx || !page) return NULL;
 
 	fz_try(ctx)
-		pixmap = fz_new_pixmap_from_page(ctx, page, ctm, cs, alpha);
+	{
+		if (showExtra)
+			pixmap = fz_new_pixmap_from_page(ctx, page, ctm, cs, alpha);
+		else
+			pixmap = fz_new_pixmap_from_page_contents(ctx, page, ctm, cs, alpha);
+	}
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -5615,6 +5618,56 @@ FUN(Page_runPageContents)(JNIEnv *env, jobject self, jobject jdev, jobject jctm,
 		return;
 	fz_try(ctx)
 		fz_run_page_contents(ctx, page, dev, ctm, cookie);
+	fz_always(ctx)
+		unlockNativeDevice(env, info);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(Page_runPageAnnots)(JNIEnv *env, jobject self, jobject jdev, jobject jctm, jobject jcookie)
+{
+	fz_context *ctx = get_context(env);
+	fz_page *page = from_Page(env, self);
+	fz_device *dev = from_Device(env, jdev);
+	fz_matrix ctm = from_Matrix(env, jctm);
+	fz_cookie *cookie = from_Cookie(env, jcookie);
+	NativeDeviceInfo *info;
+	int err;
+
+	if (!ctx || !page) return;
+	if (!dev) { jni_throw_arg(env, "device must not be null"); return; }
+
+	info = lockNativeDevice(env, jdev, &err);
+	if (err)
+		return;
+	fz_try(ctx)
+		fz_run_page_annots(ctx, page, dev, ctm, cookie);
+	fz_always(ctx)
+		unlockNativeDevice(env, info);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(Page_runPageWidgets)(JNIEnv *env, jobject self, jobject jdev, jobject jctm, jobject jcookie)
+{
+	fz_context *ctx = get_context(env);
+	fz_page *page = from_Page(env, self);
+	fz_device *dev = from_Device(env, jdev);
+	fz_matrix ctm = from_Matrix(env, jctm);
+	fz_cookie *cookie = from_Cookie(env, jcookie);
+	NativeDeviceInfo *info;
+	int err;
+
+	if (!ctx || !page) return;
+	if (!dev) { jni_throw_arg(env, "device must not be null"); return; }
+
+	info = lockNativeDevice(env, jdev, &err);
+	if (err)
+		return;
+	fz_try(ctx)
+		fz_run_page_widgets(ctx, page, dev, ctm, cookie);
 	fz_always(ctx)
 		unlockNativeDevice(env, info);
 	fz_catch(ctx)
@@ -5843,7 +5896,7 @@ FUN(Page_search)(JNIEnv *env, jobject self, jstring jneedle)
 }
 
 JNIEXPORT jobject JNICALL
-FUN(Page_toDisplayList)(JNIEnv *env, jobject self, jboolean no_annotations)
+FUN(Page_toDisplayList)(JNIEnv *env, jobject self, jboolean showExtra)
 {
 	fz_context *ctx = get_context(env);
 	fz_page *page = from_Page(env, self);
@@ -5852,10 +5905,10 @@ FUN(Page_toDisplayList)(JNIEnv *env, jobject self, jboolean no_annotations)
 	if (!ctx || !page) return NULL;
 
 	fz_try(ctx)
-		if (no_annotations)
-			list = fz_new_display_list_from_page_contents(ctx, page);
-		else
+		if (showExtra)
 			list = fz_new_display_list_from_page(ctx, page);
+		else
+			list = fz_new_display_list_from_page_contents(ctx, page);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -7553,6 +7606,8 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 
 	fz_var(state);
 	fz_var(out);
+	fz_var(stream);
+	fz_var(array);
 
 	if (joptions)
 	{
@@ -8303,6 +8358,8 @@ FUN(PDFObject_putDictionaryStringBoolean)(JNIEnv *env, jobject self, jstring jna
 		if (!name) return;
 	}
 
+	fz_var(key);
+
 	fz_try(ctx)
 	{
 		key = name ? pdf_new_name(ctx, name) : NULL;
@@ -8333,6 +8390,8 @@ FUN(PDFObject_putDictionaryStringInteger)(JNIEnv *env, jobject self, jstring jna
 		if (!name) return;
 	}
 
+	fz_var(key);
+
 	fz_try(ctx)
 	{
 		key = name ? pdf_new_name(ctx, name) : NULL;
@@ -8362,6 +8421,8 @@ FUN(PDFObject_putDictionaryStringFloat)(JNIEnv *env, jobject self, jstring jname
 		name = (*env)->GetStringUTFChars(env, jname, NULL);
 		if (!name) return;
 	}
+
+	fz_var(key);
 
 	fz_try(ctx)
 	{
@@ -8403,6 +8464,8 @@ FUN(PDFObject_putDictionaryStringString)(JNIEnv *env, jobject self, jstring jnam
 		}
 	}
 
+	fz_var(key);
+
 	fz_try(ctx)
 	{
 		key = name ? pdf_new_name(ctx, name) : NULL;
@@ -8438,6 +8501,8 @@ FUN(PDFObject_putDictionaryStringPDFObject)(JNIEnv *env, jobject self, jstring j
 		name = (*env)->GetStringUTFChars(env, jname, NULL);
 		if (!name) return;
 	}
+
+	fz_var(key);
 
 	fz_try(ctx)
 	{
@@ -9987,6 +10052,26 @@ FUN(PDFDocument_setJsEventListener)(JNIEnv *env, jobject self, jobject listener)
 		if (data)
 			(*env)->DeleteGlobalRef(env, data);
 		pdf_set_doc_event_callback(ctx, pdf, event_cb, (*env)->NewGlobalRef(env, listener));
+	}
+	fz_catch(ctx)
+	{
+		jni_rethrow(env, ctx);
+	}
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFDocument_calculate)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_document *pdf = from_PDFDocument_safe(env, self);
+
+	if (!ctx || !pdf)
+		return;
+
+	fz_try(ctx)
+	{
+		if (pdf->recalculate)
+			pdf_calculate_form(ctx, pdf);
 	}
 	fz_catch(ctx)
 	{
