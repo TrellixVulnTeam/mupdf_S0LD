@@ -22,9 +22,6 @@
 [submodule "thirdparty/zlib"]
 	path = thirdparty/zlib
 	url = https://github.com/TamirEvan/thirdparty-zlib.git
-[submodule "thirdparty/curl"]
-	path = thirdparty/curl
-	url = https://github.com/TamirEvan/thirdparty-curl.git
 [submodule "thirdparty/freeglut"]
 	path = thirdparty/freeglut
 	url = https://github.com/TamirEvan/thirdparty-freeglut.git
