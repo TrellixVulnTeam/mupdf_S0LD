@@ -1986,6 +1986,9 @@ static void fast_rgb_to_bgr(fz_context *ctx, fz_pixmap *dst, fz_pixmap *src, fz_
 }
 
 static void
+std_conv_pixmap(fz_context *ctx, fz_pixmap *dst, fz_pixmap *src, fz_colorspace *prf, const fz_default_colorspaces *default_cs, const fz_color_params *color_params, int copy_spots);
+
+static void
 icc_conv_pixmap(fz_context *ctx, fz_pixmap *dst, fz_pixmap *src, fz_colorspace *prf, const fz_default_colorspaces *default_cs, const fz_color_params *color_params, int copy_extras)
 {
 	fz_colorspace *srcs = src->colorspace;
@@ -2078,7 +2081,11 @@ icc_conv_pixmap(fz_context *ctx, fz_pixmap *dst, fz_pixmap *src, fz_colorspace *
 	}
 
 	if (!link)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot link ICC colorspace to destination colorspace (or their alternates)");
+	{
+		fz_warn(ctx, "cannot link ICC colorspace to destination colorspace (or their alternates)");
+		std_conv_pixmap(ctx, dst, src, prf, default_cs, color_params, copy_extras);
+		return;
+	}
 
 	fz_try(ctx)
 	{
@@ -2756,6 +2763,68 @@ cmyk2bgr(fz_context *ctx, fz_color_converter *cc, float *dv, const float *sv)
 	dv[2] = 1 - fz_min(sv[0] + sv[3], 1);
 }
 
+static fz_colorspace *
+fz_unmanaged_colorspace(fz_context *ctx, fz_colorspace *cs)
+{
+	switch (fz_colorspace_type(ctx, cs))
+	{
+	default: return NULL;
+	case FZ_COLORSPACE_GRAY: return default_gray;
+	case FZ_COLORSPACE_RGB: return default_rgb;
+	case FZ_COLORSPACE_BGR: return default_bgr;
+	case FZ_COLORSPACE_CMYK: return default_cmyk;
+	case FZ_COLORSPACE_LAB: return default_lab;
+	}
+}
+
+static void
+fz_find_unmanaged_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *dst, fz_colorspace *src)
+{
+	int ss = fz_colorspace_type(ctx, src);
+	int ds = fz_colorspace_type(ctx, dst);
+
+	cc->convert = std_conv_color;
+	cc->ss = fz_unmanaged_colorspace(ctx, src);
+	cc->ds = fz_unmanaged_colorspace(ctx, dst);
+	if (!cc->ss || !cc->ds)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "invalid colorspace for fallback color conversion");
+
+	if (ss == FZ_COLORSPACE_GRAY)
+	{
+		if ((ds == FZ_COLORSPACE_RGB) || (ds == FZ_COLORSPACE_BGR))
+			cc->convert = g2rgb;
+		else if (ds == FZ_COLORSPACE_CMYK)
+			cc->convert = g2cmyk;
+	}
+	else if (ss == FZ_COLORSPACE_RGB)
+	{
+		if (ds == FZ_COLORSPACE_GRAY)
+			cc->convert = rgb2g;
+		else if (ds == FZ_COLORSPACE_BGR)
+			cc->convert = rgb2bgr;
+		else if (ds == FZ_COLORSPACE_CMYK)
+			cc->convert = rgb2cmyk;
+	}
+	else if (ss == FZ_COLORSPACE_BGR)
+	{
+		if (ds == FZ_COLORSPACE_GRAY)
+			cc->convert = bgr2g;
+		else if (ds == FZ_COLORSPACE_RGB)
+			cc->convert = rgb2bgr;
+		else if (ds == FZ_COLORSPACE_CMYK)
+			cc->convert = bgr2cmyk;
+	}
+	else if (ss == FZ_COLORSPACE_CMYK)
+	{
+		if (ds == FZ_COLORSPACE_GRAY)
+			cc->convert = cmyk2g;
+		else if (ds == FZ_COLORSPACE_RGB)
+			cc->convert = cmyk2rgb;
+		else if (ds == FZ_COLORSPACE_BGR)
+			cc->convert = cmyk2bgr;
+	}
+}
+
 void fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *is, fz_colorspace *ds, fz_colorspace *ss, const fz_color_params *params)
 {
 	if (ds == NULL)
@@ -2875,7 +2944,10 @@ void fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorsp
 				}
 
 				if (!cc->link)
-					fz_throw(ctx, FZ_ERROR_GENERIC, "cannot link ICC colorspace to destination colorspace (or their alternates)");
+				{
+					fz_warn(ctx, "cannot link ICC colorspace to destination colorspace (or their alternates)");
+					fz_find_unmanaged_color_converter(ctx, cc, ds, ss);
+				}
 			}
 		}
 		else
