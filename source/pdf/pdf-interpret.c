@@ -175,7 +175,11 @@ pdf_process_extgstate(fz_context *ctx, pdf_processor *proc, pdf_csi *csi, pdf_ob
 	{
 		pdf_obj *font_ref = pdf_array_get(ctx, obj, 0);
 		pdf_obj *font_size = pdf_array_get(ctx, obj, 1);
-		pdf_font_desc *font = pdf_load_font(ctx, csi->doc, csi->rdb, font_ref);
+		pdf_font_desc *font;
+		if (pdf_is_dict(ctx, font_ref))
+			font = pdf_load_font(ctx, csi->doc, csi->rdb, font_ref);
+		else
+			font = pdf_load_hail_mary_font(ctx, csi->doc);
 		fz_try(ctx)
 			proc->op_Tf(ctx, proc, "ExtGState", font, pdf_to_real(ctx, font_size));
 		fz_always(ctx)
@@ -629,9 +633,10 @@ pdf_process_keyword(fz_context *ctx, pdf_processor *proc, pdf_csi *csi, fz_strea
 			pdf_font_desc *font;
 			fontres = pdf_dict_get(ctx, csi->rdb, PDF_NAME(Font));
 			fontobj = pdf_dict_gets(ctx, fontres, csi->name);
-			if (!fontobj)
-				fz_throw(ctx, FZ_ERROR_MINOR, "cannot find Font resource '%s'", csi->name);
-			font = pdf_load_font(ctx, csi->doc, csi->rdb, fontobj);
+			if (pdf_is_dict(ctx, fontobj))
+				font = pdf_load_font(ctx, csi->doc, csi->rdb, fontobj);
+			else
+				font = pdf_load_hail_mary_font(ctx, csi->doc);
 			fz_try(ctx)
 				proc->op_Tf(ctx, proc, csi->name, font, s[0]);
 			fz_always(ctx)
@@ -923,7 +928,6 @@ pdf_process_stream(fz_context *ctx, pdf_processor *proc, pdf_csi *csi, fz_stream
 		fz_catch(ctx)
 		{
 			int caught = fz_caught(ctx);
-
 			if (cookie)
 			{
 				if (caught == FZ_ERROR_ABORT)
@@ -1007,6 +1011,7 @@ pdf_process_contents(fz_context *ctx, pdf_processor *proc, pdf_document *doc, pd
 	}
 	fz_catch(ctx)
 	{
+		proc->close_processor = NULL; /* aborted run, don't warn about unclosed processor */
 		fz_rethrow(ctx);
 	}
 }
@@ -1079,6 +1084,11 @@ pdf_process_glyph(fz_context *ctx, pdf_processor *proc, pdf_document *doc, pdf_o
 	}
 	fz_catch(ctx)
 	{
+		/* Note: Any SYNTAX errors should have been swallowed
+		 * by pdf_process_stream, but in case any escape from other
+		 * functions, recast the error type here to be safe. */
+		if (fz_caught(ctx) == FZ_ERROR_SYNTAX)
+			fz_throw(ctx, FZ_ERROR_GENERIC, "syntax error in content stream");
 		fz_rethrow(ctx);
 	}
 }

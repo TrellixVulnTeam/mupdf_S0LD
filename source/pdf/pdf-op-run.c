@@ -144,13 +144,12 @@ begin_softmask(fz_context *ctx, pdf_run_processor *pr, softmask_save *save)
 		pdf_run_xobject(ctx, pr, softmask, save->page_resources, fz_identity, 1);
 		gstate = pr->gstate + pr->gtop;
 		gstate->blendmode = saved_blendmode;
+		fz_end_mask(ctx, pr->dev);
 	}
 	fz_always(ctx)
 		fz_drop_colorspace(ctx, mask_colorspace);
 	fz_catch(ctx)
 		fz_rethrow(ctx);
-
-	fz_end_mask(ctx, pr->dev);
 
 	pdf_tos_restore(ctx, &pr->tos, tos_save);
 
@@ -171,6 +170,9 @@ end_softmask(fz_context *ctx, pdf_run_processor *pr, softmask_save *save)
 	gstate->softmask = save->softmask;
 	gstate->softmask_resources = save->page_resources;
 	gstate->softmask_ctm = save->ctm;
+	save->softmask = NULL;
+	save->page_resources = NULL;
+
 	fz_pop_clip(ctx, pr->dev);
 }
 
@@ -1143,13 +1145,16 @@ pdf_run_xobject(fz_context *ctx, pdf_run_processor *proc, pdf_obj *xobj, pdf_obj
 	int transparency = 0;
 	pdf_document *doc;
 	fz_colorspace *cs = NULL;
-	fz_default_colorspaces *saved_def_cs = NULL;
+	fz_default_colorspaces *save_default_cs = NULL;
+	fz_default_colorspaces *xobj_default_cs = NULL;
 
 	/* Avoid infinite recursion */
 	if (xobj == NULL || pdf_mark_obj(ctx, xobj))
 		return;
 
 	fz_var(cs);
+	fz_var(save_default_cs);
+	fz_var(xobj_default_cs);
 
 	gparent_save = pr->gparent;
 	pr->gparent = pr->gtop;
@@ -1212,12 +1217,13 @@ pdf_run_xobject(fz_context *ctx, pdf_run_processor *proc, pdf_obj *xobj, pdf_obj
 		if (!resources)
 			resources = page_resources;
 
-		saved_def_cs = pr->default_cs;
-		pr->default_cs = NULL;
-		pr->default_cs = pdf_update_default_colorspaces(ctx, saved_def_cs, resources);
-
-		if (pr->default_cs != saved_def_cs)
-			fz_set_default_colorspaces(ctx, pr->dev, pr->default_cs);
+		save_default_cs = pr->default_cs;
+		xobj_default_cs = pdf_update_default_colorspaces(ctx, pr->default_cs, resources);
+		if (xobj_default_cs != save_default_cs)
+		{
+			fz_set_default_colorspaces(ctx, pr->dev, xobj_default_cs);
+			pr->default_cs = xobj_default_cs;
+		}
 
 		doc = pdf_get_bound_document(ctx, xobj);
 
@@ -1251,20 +1257,27 @@ pdf_run_xobject(fz_context *ctx, pdf_run_processor *proc, pdf_obj *xobj, pdf_obj
 		while (oldtop < pr->gtop)
 			pdf_grestore(ctx, pr);
 
-		if (saved_def_cs)
+		if (xobj_default_cs != save_default_cs)
 		{
-			fz_drop_default_colorspaces(ctx, pr->default_cs);
-			pr->default_cs = saved_def_cs;
-			fz_set_default_colorspaces(ctx, pr->dev, pr->default_cs);
+			fz_set_default_colorspaces(ctx, pr->dev, save_default_cs);
 		}
 	}
 	fz_always(ctx)
 	{
+		pr->default_cs = save_default_cs;
+		fz_drop_default_colorspaces(ctx, xobj_default_cs);
 		fz_drop_colorspace(ctx, cs);
 		pdf_unmark_obj(ctx, xobj);
 	}
 	fz_catch(ctx)
 	{
+		pdf_drop_obj(ctx, softmask.softmask);
+		pdf_drop_obj(ctx, softmask.page_resources);
+		/* Note: Any SYNTAX errors should have been swallowed
+		 * by pdf_process_contents, but in case any escape from other
+		 * functions, recast the error type here to be safe. */
+		if (fz_caught(ctx) == FZ_ERROR_SYNTAX)
+			fz_throw(ctx, FZ_ERROR_GENERIC, "syntax error in xobject");
 		fz_rethrow(ctx);
 	}
 }
