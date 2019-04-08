@@ -21,7 +21,8 @@ struct tiff
 	unsigned order;
 
 	/* offset of first ifd */
-	unsigned ifd_offset;
+	unsigned *ifd_offsets;
+	int ifds;
 
 	/* where we can find the strips of image data */
 	unsigned rowsperstrip;
@@ -188,7 +189,7 @@ static inline void tiff_putcomp(unsigned char *line, int x, int bpc, int value)
 static void
 tiff_unpredict_line(unsigned char *line, int width, int comps, int bits)
 {
-	unsigned char left[32];
+	unsigned char left[FZ_MAX_COLORS];
 	int i, k, v;
 
 	for (k = 0; k < comps; k++)
@@ -1001,13 +1002,16 @@ tiff_read_header(fz_context *ctx, struct tiff *tiff, const unsigned char *buf, s
 		fz_throw(ctx, FZ_ERROR_GENERIC, "not a TIFF file, wrong version marker");
 
 	/* get offset of IFD */
-	tiff->ifd_offset = tiff_readlong(tiff);
+	tiff->ifd_offsets = fz_malloc_array(ctx, 1, sizeof (unsigned));
+	tiff->ifd_offsets[0] = tiff_readlong(tiff);
+	tiff->ifds = 1;
 }
 
 static unsigned
 tiff_next_ifd(fz_context *ctx, struct tiff *tiff, unsigned offset)
 {
 	unsigned count;
+	int i;
 
 	if (offset > (unsigned)(tiff->ep - tiff->bp))
 		fz_throw(ctx, FZ_ERROR_GENERIC, "invalid IFD offset %u", offset);
@@ -1021,13 +1025,21 @@ tiff_next_ifd(fz_context *ctx, struct tiff *tiff, unsigned offset)
 	tiff->rp += count * 12;
 	offset = tiff_readlong(tiff);
 
+	for (i = 0; i < tiff->ifds; i++)
+		if (tiff->ifd_offsets[i] == offset)
+			fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in IFDs detected");
+
+	tiff->ifd_offsets = fz_resize_array(ctx, tiff->ifd_offsets, tiff->ifds + 1, sizeof (unsigned));
+	tiff->ifd_offsets[tiff->ifds] = offset;
+	tiff->ifds++;
+
 	return offset;
 }
 
 static void
 tiff_seek_ifd(fz_context *ctx, struct tiff *tiff, int subimage)
 {
-	unsigned offset = tiff->ifd_offset;
+	unsigned offset = tiff->ifd_offsets[0];
 
 	while (subimage--)
 	{
@@ -1040,7 +1052,7 @@ tiff_seek_ifd(fz_context *ctx, struct tiff *tiff, int subimage)
 	tiff->rp = tiff->bp + offset;
 
 	if (tiff->rp < tiff->bp || tiff->rp > tiff->ep)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "invalid IFD offset %u", tiff->ifd_offset);
+		fz_throw(ctx, FZ_ERROR_GENERIC, "invalid IFD offset %u", offset);
 }
 
 static void
@@ -1089,31 +1101,31 @@ tiff_ycc_to_rgb(fz_context *ctx, struct tiff *tiff)
 }
 
 static int
-tiff_components_from_photometric(int photometric)
+tiff_colorspace_type_from_photometric(int photometric)
 {
 	switch (photometric)
 	{
 	case 0: /* WhiteIsZero */
-		return 1;
 	case 1: /* BlackIsZero */
-		return 1;
+		return FZ_COLORSPACE_GRAY;
 	case 2: /* RGB */
-		return 3;
 	case 3: /* RGBPal */
-		return 3;
+		return FZ_COLORSPACE_RGB;
+	case 4: /* Transparency mask */
+		return FZ_COLORSPACE_NONE;
 	case 5: /* CMYK */
-		return 4;
-	case 6: /* YCbCr */
-		return 3;
+		return FZ_COLORSPACE_CMYK;
+	case 6: /* YCbCr, it's probably a jpeg ... we let jpeg convert to rgb */
+		return FZ_COLORSPACE_RGB;
 	case 8: /* Direct L*a*b* encoding. a*, b* signed values */
 	case 9: /* ICC Style L*a*b* encoding */
-		return 3;
+		return FZ_COLORSPACE_LAB;
 	case 32844: /* SGI CIE Log 2 L (16bpp Greyscale) */
-		return 1;
+		return FZ_COLORSPACE_GRAY;
 	case 32845: /* SGI CIE Log 2 L, u, v (24bpp or 32bpp) */
-		return 3;
+		return FZ_COLORSPACE_RGB;
 	default:
-		return 0;
+		return FZ_COLORSPACE_NONE;
 	}
 }
 
@@ -1160,6 +1172,9 @@ tiff_decode_ifd(fz_context *ctx, struct tiff *tiff)
 	case 3: /* RGBPal */
 		tiff->colorspace = fz_keep_colorspace(ctx, fz_device_rgb(ctx));
 		break;
+	case 4: /* Transparency mask */
+		tiff->colorspace = NULL;
+		break;
 	case 5: /* CMYK */
 		tiff->colorspace = fz_keep_colorspace(ctx, fz_device_cmyk(ctx));
 		break;
@@ -1197,19 +1212,34 @@ tiff_decode_ifd(fz_context *ctx, struct tiff *tiff)
 		{
 			buff = fz_new_buffer_from_copied_data(ctx, tiff->profile, tiff->profilesize);
 			icc = fz_new_icc_colorspace(ctx, fz_colorspace_type(ctx, tiff->colorspace), buff, tiff->colorspace);
-			if (fz_colorspace_n(ctx, tiff->colorspace) != tiff_components_from_photometric(tiff->photometric)) {
-				fz_drop_colorspace(ctx, icc);
-				fz_throw(ctx, FZ_ERROR_GENERIC, "embedded ICC profile colorspace mismatch");
+			if (fz_colorspace_type(ctx, icc) == tiff_colorspace_type_from_photometric(tiff->photometric))
+			{
+				fz_drop_colorspace(ctx, tiff->colorspace);
+				tiff->colorspace = icc;
 			}
-			fz_drop_colorspace(ctx, tiff->colorspace);
-			tiff->colorspace = icc;
+			else
+			{
+				fz_warn(ctx, "ignoring ICC profile that does not match photometric");
+				fz_drop_colorspace(ctx, icc);
+			}
 		}
 		fz_always(ctx)
 			fz_drop_buffer(ctx, buff);
 		fz_catch(ctx)
-			fz_warn(ctx, "Failed to read ICC Profile from tiff");
+		{
+			fz_warn(ctx, "ignoring broken ICC profile");
+		}
 	}
 #endif
+
+	if (tiff->samplesperpixel == 0 || tiff->samplesperpixel >= FZ_MAX_COLORS)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "components per pixel out of range");
+	if (!tiff->colorspace && tiff->samplesperpixel < 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too few components for transparency mask");
+	if (tiff->colorspace && tiff->colormap && tiff->samplesperpixel < 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too few components for RGBPal");
+	if (tiff->colorspace && !tiff->colormap && tiff->samplesperpixel < fz_colorspace_n(ctx, tiff->colorspace))
+		fz_throw(ctx, FZ_ERROR_GENERIC, "fewer components per pixel than indicated by colorspace");
 
 	switch (tiff->resolutionunit)
 	{
@@ -1370,7 +1400,7 @@ fz_load_tiff_subimage(fz_context *ctx, const unsigned char *buf, size_t len, int
 		tiff_decode_samples(ctx, &tiff);
 
 		/* Expand into fz_pixmap struct */
-		alpha = tiff.extrasamples != 0;
+		alpha = tiff.extrasamples != 0 || tiff.colorspace == NULL;
 		image = fz_new_pixmap(ctx, tiff.colorspace, tiff.imagewidth, tiff.imagelength, NULL, alpha);
 		image->xres = tiff.xresolution;
 		image->yres = tiff.yresolution;
@@ -1394,6 +1424,7 @@ fz_load_tiff_subimage(fz_context *ctx, const unsigned char *buf, size_t len, int
 		fz_free(ctx, tiff.data);
 		fz_free(ctx, tiff.samples);
 		fz_free(ctx, tiff.profile);
+		fz_free(ctx, tiff.ifd_offsets);
 	}
 	fz_catch(ctx)
 	{
@@ -1446,6 +1477,7 @@ fz_load_tiff_info_subimage(fz_context *ctx, const unsigned char *buf, size_t len
 		fz_free(ctx, tiff.data);
 		fz_free(ctx, tiff.samples);
 		fz_free(ctx, tiff.profile);
+		fz_free(ctx, tiff.ifd_offsets);
 	}
 	fz_catch(ctx)
 	{
@@ -1466,14 +1498,21 @@ fz_load_tiff_subimage_count(fz_context *ctx, const unsigned char *buf, size_t le
 	unsigned subimage_count = 0;
 	struct tiff tiff = { 0 };
 
-	tiff_read_header(ctx, &tiff, buf, len);
+	fz_try(ctx)
+	{
+		tiff_read_header(ctx, &tiff, buf, len);
 
-	offset = tiff.ifd_offset;
+		offset = tiff.ifd_offsets[0];
 
-	do {
-		subimage_count++;
-		offset = tiff_next_ifd(ctx, &tiff, offset);
-	} while (offset != 0);
+		do {
+			subimage_count++;
+			offset = tiff_next_ifd(ctx, &tiff, offset);
+		} while (offset != 0);
+	}
+	fz_always(ctx)
+		fz_free(ctx, tiff.ifd_offsets);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 
 	return subimage_count;
 }

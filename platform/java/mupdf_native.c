@@ -1941,7 +1941,6 @@ static inline pdf_obj *from_PDFObject(JNIEnv *env, jobject jobj)
 	pdf_obj *obj;
 	if (!jobj) return NULL;
 	obj = CAST(pdf_obj *, (*env)->GetLongField(env, jobj, fid_PDFObject_pointer));
-	if (!obj) jni_throw_null(env, "cannot use already destroyed PDFObject");
 	return obj;
 }
 
@@ -4919,7 +4918,7 @@ FUN(PDFAnnotation_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs
 	if (!ctx || !annot) return NULL;
 
 	fz_try(ctx)
-		pixmap = pdf_new_pixmap_from_annot(ctx, annot, ctm, cs, alpha);
+		pixmap = pdf_new_pixmap_from_annot(ctx, annot, ctm, cs, NULL, alpha);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -5538,9 +5537,9 @@ FUN(Page_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs, jboolea
 	fz_try(ctx)
 	{
 		if (showExtra)
-			pixmap = fz_new_pixmap_from_page(ctx, page, ctm, cs, alpha);
+			pixmap = fz_new_pixmap_from_page(ctx, page, ctm, cs, NULL, alpha);
 		else
-			pixmap = fz_new_pixmap_from_page_contents(ctx, page, ctm, cs, alpha);
+			pixmap = fz_new_pixmap_from_page_contents(ctx, page, ctm, cs, NULL, alpha);
 	}
 	fz_catch(ctx)
 	{
@@ -6133,7 +6132,7 @@ FUN(DisplayList_toPixmap)(JNIEnv *env, jobject self, jobject jctm, jobject jcs, 
 	if (!ctx || !list) return NULL;
 
 	fz_try(ctx)
-		pixmap = fz_new_pixmap_from_display_list(ctx, list, ctm, cs, alpha);
+		pixmap = fz_new_pixmap_from_display_list(ctx, list, ctm, cs, NULL, alpha);
 	fz_catch(ctx)
 	{
 		jni_rethrow(env, ctx);
@@ -7348,7 +7347,6 @@ FUN(PDFDocument_addStreamString)(JNIEnv *env, jobject self, jstring jbuf, jobjec
 	pdf_obj *obj = from_PDFObject(env, jobj);
 	fz_buffer *buf = NULL;
 	const char *sbuf = NULL;
-	unsigned char *data = NULL;
 	pdf_obj *ind = NULL;
 
 	if (!ctx || !pdf) return NULL;
@@ -7361,10 +7359,7 @@ FUN(PDFDocument_addStreamString)(JNIEnv *env, jobject self, jstring jbuf, jobjec
 
 	fz_try(ctx)
 	{
-		size_t len = strlen(sbuf);
-		data = fz_malloc(ctx, len);
-		memcpy(data, sbuf, len);
-		buf = fz_new_buffer_from_data(ctx, data, len);
+		buf = fz_new_buffer_from_copied_data(ctx, (const unsigned char *)sbuf, strlen(sbuf));
 		ind = pdf_add_stream(ctx, pdf, buf, obj, compressed);
 	}
 	fz_always(ctx)
@@ -7415,7 +7410,6 @@ FUN(PDFDocument_addPageString)(JNIEnv *env, jobject self, jobject jmediabox, jin
 	pdf_obj *resources = from_PDFObject(env, jresources);
 	const char *scontents = NULL;
 	fz_buffer *contents = NULL;
-	unsigned char *data = NULL;
 	pdf_obj *ind = NULL;
 
 	if (!ctx || !pdf) return NULL;
@@ -7429,9 +7423,7 @@ FUN(PDFDocument_addPageString)(JNIEnv *env, jobject self, jobject jmediabox, jin
 
 	fz_try(ctx)
 	{
-		size_t len = strlen(scontents);
-		data = fz_malloc(ctx, len);
-		contents = fz_new_buffer_from_data(ctx, data, len);
+		contents = fz_new_buffer_from_copied_data(ctx, (const unsigned char *)scontents, strlen(scontents));
 		ind = pdf_add_page(ctx, pdf, mediabox, rotate, resources, contents);
 	}
 	fz_always(ctx)
@@ -7588,7 +7580,7 @@ FUN(PDFDocument_canBeSavedIncrementally)(JNIEnv *env, jobject self)
 	return pdf_can_be_saved_incrementally(ctx, pdf) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jint JNICALL
+JNIEXPORT void JNICALL
 FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream, jstring joptions)
 {
 	fz_context *ctx = get_context(env);
@@ -7598,7 +7590,6 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 	jbyteArray array = NULL;
 	fz_output *out;
 	const char *options = NULL;
-	int errors = 0;
 	pdf_write_options pwo;
 
 	fz_var(state);
@@ -7610,7 +7601,7 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 	{
 		options = (*env)->GetStringUTFChars(env, joptions, NULL);
 		if (!options)
-			return 0;
+			return;
 	}
 
 	stream = (*env)->NewGlobalRef(env, jstream);
@@ -7618,7 +7609,7 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 	{
 		if (options)
 			(*env)->ReleaseStringUTFChars(env, joptions, options);
-		return 0;
+		return;
 	}
 
 	array = (*env)->NewByteArray(env, sizeof state->buffer);
@@ -7629,7 +7620,7 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 		if (options)
 			(*env)->ReleaseStringUTFChars(env, joptions, options);
 		(*env)->DeleteGlobalRef(env, stream);
-		return 0;
+		return;
 	}
 
 	fz_try(ctx)
@@ -7648,7 +7639,6 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 		array = NULL;
 
 		pdf_parse_write_options(ctx, &pwo, options);
-		pwo.errors = &errors;
 		pdf_write_document(ctx, pdf, out, &pwo);
 		fz_close_output(ctx, out);
 	}
@@ -7664,13 +7654,10 @@ FUN(PDFDocument_nativeSaveWithStream)(JNIEnv *env, jobject self, jobject jstream
 		if (array) (*env)->DeleteGlobalRef(env, array);
 		fz_free(ctx, state);
 		jni_rethrow(env, ctx);
-		return 0;
 	}
-
-	return errors;
 }
 
-JNIEXPORT jint JNICALL
+JNIEXPORT void JNICALL
 FUN(PDFDocument_save)(JNIEnv *env, jobject self, jstring jfilename, jstring joptions)
 {
 	fz_context *ctx = get_context(env);
@@ -7678,13 +7665,12 @@ FUN(PDFDocument_save)(JNIEnv *env, jobject self, jstring jfilename, jstring jopt
 	const char *filename = NULL;
 	const char *options = NULL;
 	pdf_write_options pwo;
-	int errors = 0;
 
-	if (!ctx || !pdf) return 0;
-	if (!jfilename) { jni_throw_arg(env, "filename must not be null"); return 0; }
+	if (!ctx || !pdf) return;
+	if (!jfilename) { jni_throw_arg(env, "filename must not be null"); return; }
 
 	filename = (*env)->GetStringUTFChars(env, jfilename, NULL);
-	if (!filename) return 0;
+	if (!filename) return;
 
 	if (joptions)
 	{
@@ -7692,14 +7678,13 @@ FUN(PDFDocument_save)(JNIEnv *env, jobject self, jstring jfilename, jstring jopt
 		if (!options)
 		{
 			(*env)->ReleaseStringUTFChars(env, jfilename, filename);
-			return 0;
+			return;
 		}
 	}
 
 	fz_try(ctx)
 	{
 		pdf_parse_write_options(ctx, &pwo, options);
-		pwo.errors = &errors;
 		pdf_save_document(ctx, pdf, filename, &pwo);
 	}
 	fz_always(ctx)
@@ -7710,8 +7695,6 @@ FUN(PDFDocument_save)(JNIEnv *env, jobject self, jstring jfilename, jstring jopt
 	}
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
-
-	return errors;
 }
 
 /* PDFObject interface */
@@ -7725,16 +7708,6 @@ FUN(PDFObject_finalize)(JNIEnv *env, jobject self)
 	if (!ctx || !obj) return;
 
 	pdf_drop_obj(ctx, obj);
-}
-
-JNIEXPORT jlong JNICALL
-FUN(PDFObject_newNull)(JNIEnv *env, jclass cls)
-{
-	fz_context *ctx = get_context(env);
-
-	if (!ctx) return 0;
-
-	return jlong_cast(PDF_NULL);
 }
 
 JNIEXPORT jint JNICALL
@@ -8096,7 +8069,6 @@ FUN(PDFObject_writeStreamString)(JNIEnv *env, jobject self, jstring jstr)
 	pdf_obj *obj = from_PDFObject(env, self);
 	pdf_document *pdf = pdf_get_bound_document(ctx, obj);
 	const char *str = NULL;
-	unsigned char *data = NULL;
 	fz_buffer *buf = NULL;
 
 	if (!ctx || !obj) return;
@@ -8110,10 +8082,7 @@ FUN(PDFObject_writeStreamString)(JNIEnv *env, jobject self, jstring jstr)
 
 	fz_try(ctx)
 	{
-		size_t len = strlen(str);
-		data = fz_malloc(ctx, len);
-		memcpy(data, str, len);
-		buf = fz_new_buffer_from_data(ctx, data, len);
+		buf = fz_new_buffer_from_copied_data(ctx, (const unsigned char *)str, strlen(str));
 		pdf_update_stream(ctx, pdf, obj, buf, 0);
 	}
 	fz_always(ctx)
@@ -8150,7 +8119,6 @@ FUN(PDFObject_writeRawStreamString)(JNIEnv *env, jobject self, jstring jstr)
 	pdf_obj *obj = from_PDFObject(env, self);
 	pdf_document *pdf = pdf_get_bound_document(ctx, obj);
 	const char *str = NULL;
-	unsigned char *data = NULL;
 	fz_buffer *buf = NULL;
 
 	if (!ctx || !obj) return;
@@ -8164,10 +8132,7 @@ FUN(PDFObject_writeRawStreamString)(JNIEnv *env, jobject self, jstring jstr)
 
 	fz_try(ctx)
 	{
-		size_t len = strlen(str);
-		data = fz_malloc(ctx, len);
-		memcpy(data, str, len);
-		buf = fz_new_buffer_from_data(ctx, data, len);
+		buf = fz_new_buffer_from_copied_data(ctx, (const unsigned char *)str, strlen(str));
 		pdf_update_stream(ctx, pdf, obj, buf, 1);
 	}
 	fz_always(ctx)

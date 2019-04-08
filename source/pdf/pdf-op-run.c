@@ -1153,12 +1153,13 @@ pdf_run_xobject(fz_context *ctx, pdf_run_processor *proc, pdf_obj *xobj, pdf_obj
 		return;
 
 	fz_var(cs);
-	fz_var(save_default_cs);
 	fz_var(xobj_default_cs);
 
 	gparent_save = pr->gparent;
 	pr->gparent = pr->gtop;
 	oldtop = pr->gtop;
+
+	save_default_cs = pr->default_cs;
 
 	fz_try(ctx)
 	{
@@ -1217,7 +1218,6 @@ pdf_run_xobject(fz_context *ctx, pdf_run_processor *proc, pdf_obj *xobj, pdf_obj
 		if (!resources)
 			resources = page_resources;
 
-		save_default_cs = pr->default_cs;
 		xobj_default_cs = pdf_update_default_colorspaces(ctx, pr->default_cs, resources);
 		if (xobj_default_cs != save_default_cs)
 		{
@@ -2145,28 +2145,28 @@ pdf_new_run_processor(fz_context *ctx, fz_device *dev, fz_matrix ctm, const char
 	proc->tos.tm = fz_identity;
 	proc->tos.text_mode = 0;
 
+	proc->gtop = -1;
+
 	fz_try(ctx)
 	{
 		proc->path = fz_new_path(ctx);
 
 		proc->gcap = 64;
-		proc->gstate = fz_malloc_array(ctx, proc->gcap, sizeof(pdf_gstate));
+		proc->gstate = fz_calloc(ctx, proc->gcap, sizeof(pdf_gstate));
 
+		proc->gtop = 0;
 		pdf_init_gstate(ctx, &proc->gstate[0], ctm);
+
 		if (gstate)
 		{
 			pdf_copy_gstate(ctx, &proc->gstate[0], gstate);
 			proc->gstate[0].clip_depth = 0;
 			proc->gstate[0].ctm = ctm;
 		}
-		proc->gtop = 0;
-		proc->gbot = 0;
-		proc->gparent = 0;
 	}
 	fz_catch(ctx)
 	{
-		fz_drop_default_colorspaces(ctx, proc->default_cs);
-		fz_drop_path(ctx, proc->path);
+		pdf_drop_run_processor(ctx, (pdf_processor *) proc);
 		fz_free(ctx, proc);
 		fz_rethrow(ctx);
 	}
