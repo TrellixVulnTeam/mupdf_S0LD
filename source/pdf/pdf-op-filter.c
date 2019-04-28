@@ -379,8 +379,9 @@ done_SC:
 		}
 		if (gstate->pending.text.scale != gstate->sent.text.scale)
 		{
+			/* The value of scale in the gstate is divided by 100 from what is written in the file */
 			if (p->chain->op_Tz)
-				p->chain->op_Tz(ctx, p->chain, gstate->pending.text.scale);
+				p->chain->op_Tz(ctx, p->chain, gstate->pending.text.scale*100);
 		}
 		if (gstate->pending.text.leading != gstate->sent.text.leading)
 		{
@@ -1069,6 +1070,8 @@ pdf_filter_Tw(fz_context *ctx, pdf_processor *proc, float wordspace)
 static void
 pdf_filter_Tz(fz_context *ctx, pdf_processor *proc, float scale)
 {
+	/* scale is as written in the file. It is 100 times smaller
+	 * in the gstate. */
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
 	filter_flush(ctx, p, 0);
 	p->gstate->pending.text.scale = scale / 100;
@@ -1303,7 +1306,7 @@ pdf_filter_SC_color(fz_context *ctx, pdf_processor *proc, int n, float *color)
 	gstate->pending.SC.shd = NULL;
 	gstate->pending.SC.n = n;
 	for (i = 0; i < n; ++i)
-		gstate->pending.SC.c[i] = fz_clamp(color[i], 0, 1);
+		gstate->pending.SC.c[i] = color[i];
 }
 
 static void
@@ -1317,7 +1320,7 @@ pdf_filter_sc_color(fz_context *ctx, pdf_processor *proc, int n, float *color)
 	gstate->pending.sc.shd = NULL;
 	gstate->pending.sc.n = n;
 	for (i = 0; i < n; ++i)
-		gstate->pending.sc.c[i] = fz_clamp(color[i], 0, 1);
+		gstate->pending.sc.c[i] = color[i];
 }
 
 static void

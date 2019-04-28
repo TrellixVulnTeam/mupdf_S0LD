@@ -63,16 +63,6 @@ static const unsigned char png_signature[8] =
 	137, 80, 78, 71, 13, 10, 26, 10
 };
 
-static void *zalloc_png(void *opaque, unsigned int items, unsigned int size)
-{
-	return fz_malloc_array_no_throw(opaque, items, size);
-}
-
-static void zfree_png(void *opaque, void *address)
-{
-	fz_free(opaque, address);
-}
-
 static inline int paeth(int a, int b, int c)
 {
 	/* The definitions of ac and bc are correct, not a typo. */
@@ -363,9 +353,18 @@ png_read_icc(fz_context *ctx, struct info *info, const unsigned char *p, unsigne
 		mstm = fz_open_memory(ctx, p + n + 2, size - n - 2);
 		zstm = fz_open_flated(ctx, mstm, 15);
 		cs = fz_new_icc_colorspace_from_stream(ctx, info->type, zstm);
-		/* drop old one in case we have multiple ICC profiles */
-		fz_drop_colorspace(ctx, info->cs);
-		info->cs = cs;
+		if ((fz_colorspace_type(ctx, cs) == FZ_COLORSPACE_GRAY && fz_colorspace_n(ctx, cs) == 1) ||
+			(fz_colorspace_type(ctx, cs) == FZ_COLORSPACE_RGB && fz_colorspace_n(ctx, cs) == 3))
+		{
+			/* drop old one in case we have multiple ICC profiles */
+			fz_drop_colorspace(ctx, info->cs);
+			info->cs = cs;
+		}
+		else
+		{
+			fz_warn(ctx, "invalid number of components in ICC profile in png image, ignoring ICC profile");
+			fz_drop_colorspace(ctx, cs);
+		}
 	}
 	fz_always(ctx)
 	{
@@ -457,8 +456,8 @@ png_read_image(fz_context *ctx, struct info *info, const unsigned char *p, size_
 
 		info->samples = fz_malloc(ctx, info->size);
 
-		stm.zalloc = zalloc_png;
-		stm.zfree = zfree_png;
+		stm.zalloc = fz_zlib_alloc;
+		stm.zfree = fz_zlib_free;
 		stm.opaque = ctx;
 
 		stm.next_out = info->samples;

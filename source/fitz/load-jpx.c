@@ -335,6 +335,13 @@ jpx_read_image(fz_context *ctx, fz_jpxd *state, const unsigned char *data, size_
 			{
 				fz_warn(ctx, "cannot load ICC profile: %s", fz_caught_message(ctx));
 			}
+
+			if (state->cs && fz_colorspace_n(ctx, state->cs) != n)
+			{
+				fz_warn(ctx, "invalid number of components in ICC profile, ignoring ICC profile");
+				fz_drop_colorspace(ctx, state->cs);
+				state->cs = NULL;
+			}
 		}
 #endif
 
@@ -815,6 +822,13 @@ jpx_read_image(fz_context *ctx, fz_jpxd *state, const unsigned char *data, size_
 		{
 			fz_warn(ctx, "cannot load ICC profile: %s", fz_caught_message(ctx));
 		}
+
+		if (state->cs && fz_colorspace_n(ctx, state->cs) != n)
+		{
+			fz_warn(ctx, "invalid number of components in ICC profile, ignoring ICC profile");
+			fz_drop_colorspace(ctx, state->cs);
+			state->cs = NULL;
+		}
 	}
 #endif
 
@@ -857,6 +871,9 @@ jpx_read_image(fz_context *ctx, fz_jpxd *state, const unsigned char *data, size_
 			opj_image_comp_t *comp = &(jpx->comps[k]);
 			int oy = comp->y0 * comp->dy - jpx->y0;
 			int ox = comp->x0 * comp->dx - jpx->x0;
+
+			if (comp->data == NULL)
+				fz_throw(ctx, FZ_ERROR_GENERIC, "No data for JP2 image component %d", k);
 
 			for (y = 0; y < comp->h; y++)
 			{
