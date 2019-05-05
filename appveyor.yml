@@ -50,7 +50,9 @@ build_script:
 after_build:
 - cmd: if [%TARGET%]==[msys2-mingw32-cross] (
     C:\msys64\usr\bin\bash -e -l -c "mkdir /c/projects/mupdf/mupdf-mingw &&
-        cp /home/appveyor/mupdf/release/*.exe
+        cp /home/appveyor/mupdf/release/mupdf-w32.exe
+            /home/appveyor/mupdf/release/mupdf-gl.exe
+            /home/appveyor/mupdf/release/mutool.exe
             /c/projects/mupdf/mupdf-mingw/ &&
         cp /c/projects/mupdf/README
             /c/projects/mupdf/mupdf-mingw/README.txt &&
