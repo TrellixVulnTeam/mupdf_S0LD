@@ -21,7 +21,7 @@ install:
         -P mingw64-i686-runtime
         -P mingw64-i686-gcc-g++ )
 - cmd: if [%TARGET%]==[msys2-mingw32-cross] (
-    C:\msys64\usr\bin\pacman --noconfirm -S mingw-w64-x86_64-toolchain &&
+    C:\msys64\usr\bin\pacman --noconfirm -S make &&
     C:\msys64\usr\bin\pacman --noconfirm -S mingw-w64-cross-toolchain &&
     C:\msys64\usr\bin\pacman --noconfirm -S p7zip )
 
