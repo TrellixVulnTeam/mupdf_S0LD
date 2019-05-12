@@ -21,9 +21,15 @@ install:
         -P mingw64-i686-runtime
         -P mingw64-i686-gcc-g++ )
 - cmd: if [%TARGET%]==[msys2-mingw32-cross] (
-    C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S make &&
-        pacman --noconfirm -S mingw-w64-cross-toolchain &&
-        pacman --noconfirm -S p7zip" )
+    C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S
+        bash
+        pacman
+        pacman-mirrors
+        msys2-runtime" &&
+    C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
+        make
+        mingw-w64-cross-toolchain
+        p7zip" )
 
 before_build:
 - cmd: git submodule update --init
