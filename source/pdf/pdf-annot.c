@@ -218,6 +218,7 @@ pdf_string_from_annot_type(fz_context *ctx, enum pdf_annot_type type)
 	case PDF_ANNOT_UNDERLINE: return "Underline";
 	case PDF_ANNOT_SQUIGGLY: return "Squiggly";
 	case PDF_ANNOT_STRIKE_OUT: return "StrikeOut";
+	case PDF_ANNOT_REDACT: return "Redact";
 	case PDF_ANNOT_STAMP: return "Stamp";
 	case PDF_ANNOT_CARET: return "Caret";
 	case PDF_ANNOT_INK: return "Ink";
@@ -250,6 +251,7 @@ pdf_annot_type_from_string(fz_context *ctx, const char *subtype)
 	if (!strcmp("Underline", subtype)) return PDF_ANNOT_UNDERLINE;
 	if (!strcmp("Squiggly", subtype)) return PDF_ANNOT_SQUIGGLY;
 	if (!strcmp("StrikeOut", subtype)) return PDF_ANNOT_STRIKE_OUT;
+	if (!strcmp("Redact", subtype)) return PDF_ANNOT_REDACT;
 	if (!strcmp("Stamp", subtype)) return PDF_ANNOT_STAMP;
 	if (!strcmp("Caret", subtype)) return PDF_ANNOT_CARET;
 	if (!strcmp("Ink", subtype)) return PDF_ANNOT_INK;
@@ -1182,6 +1184,7 @@ static pdf_obj *quad_point_subtypes[] = {
 	PDF_NAME(Squiggly),
 	PDF_NAME(StrikeOut),
 	PDF_NAME(Underline),
+	PDF_NAME(Redact),
 	NULL,
 };
 
@@ -1392,7 +1395,6 @@ pdf_clear_annot_ink_list(fz_context *ctx, pdf_annot *annot)
 void
 pdf_add_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, fz_point p[])
 {
-	pdf_document *doc = annot->page->doc;
 	fz_matrix page_ctm, inv_page_ctm;
 	pdf_obj *ink_list, *stroke;
 	int i;
@@ -1404,28 +1406,15 @@ pdf_add_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, fz_point p[])
 
 	ink_list = pdf_dict_get(ctx, annot->obj, PDF_NAME(InkList));
 	if (!pdf_is_array(ctx, ink_list))
-	{
-		ink_list = pdf_new_array(ctx, doc, 10);
-		pdf_dict_put_drop(ctx, annot->obj, PDF_NAME(InkList), ink_list);
-	}
+		ink_list = pdf_dict_put_array(ctx, annot->obj, PDF_NAME(InkList), 10);
 
-	stroke = pdf_new_array(ctx, doc, n * 2);
-	fz_try(ctx)
+	stroke = pdf_array_push_array(ctx, ink_list, n * 2);
+	for (i = 0; i < n; ++i)
 	{
-		for (i = 0; i < n; ++i)
-		{
-			fz_point tp = fz_transform_point(p[i], inv_page_ctm);
-			pdf_array_push_real(ctx, stroke, tp.x);
-			pdf_array_push_real(ctx, stroke, tp.y);
-		}
+		fz_point tp = fz_transform_point(p[i], inv_page_ctm);
+		pdf_array_push_real(ctx, stroke, tp.x);
+		pdf_array_push_real(ctx, stroke, tp.y);
 	}
-	fz_catch(ctx)
-	{
-		pdf_drop_obj(ctx, stroke);
-		fz_rethrow(ctx);
-	}
-
-	pdf_array_push_drop(ctx, ink_list, stroke);
 
 	pdf_dirty_annot(ctx, annot);
 }
@@ -1542,6 +1531,7 @@ static pdf_obj *markup_subtypes[] = {
 	PDF_NAME(Underline),
 	PDF_NAME(Squiggly),
 	PDF_NAME(StrikeOut),
+	PDF_NAME(Redact),
 	PDF_NAME(Stamp),
 	PDF_NAME(Caret),
 	PDF_NAME(Ink),

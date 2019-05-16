@@ -15,6 +15,7 @@ enum pdf_annot_type
 	PDF_ANNOT_UNDERLINE,
 	PDF_ANNOT_SQUIGGLY,
 	PDF_ANNOT_STRIKE_OUT,
+	PDF_ANNOT_REDACT,
 	PDF_ANNOT_STAMP,
 	PDF_ANNOT_CARET,
 	PDF_ANNOT_INK,
@@ -228,5 +229,7 @@ int pdf_toggle_widget(fz_context *ctx, pdf_widget *widget);
 fz_display_list *pdf_new_display_list_from_annot(fz_context *ctx, pdf_annot *annot);
 fz_pixmap *pdf_new_pixmap_from_annot(fz_context *ctx, pdf_annot *annot, fz_matrix ctm, fz_colorspace *cs, fz_separations *seps, int alpha);
 fz_stext_page *pdf_new_stext_page_from_annot(fz_context *ctx, pdf_annot *annot, const fz_stext_options *options);
+
+fz_layout_block *pdf_layout_text_widget(fz_context *ctx, pdf_annot *annot);
 
 #endif

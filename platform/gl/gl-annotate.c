@@ -114,6 +114,7 @@ static void new_annot(int type)
 	case PDF_ANNOT_UNDERLINE:
 	case PDF_ANNOT_STRIKE_OUT:
 	case PDF_ANNOT_SQUIGGLY:
+	case PDF_ANNOT_REDACT:
 		is_draw_mode = 1;
 		break;
 	}
@@ -199,7 +200,7 @@ static unsigned int hex_from_color(int n, float color[4])
 		b = color[2] * 255;
 		return 0xff000000 | (r<<16) | (g<<8) | b;
 	case 4:
-		fz_convert_color(ctx, NULL, NULL, fz_device_rgb(ctx), rgb, fz_device_cmyk(ctx), color);
+		fz_convert_color(ctx, fz_device_cmyk(ctx), color, fz_device_rgb(ctx), rgb, NULL, fz_default_color_params);
 		r = rgb[0] * 255;
 		g = rgb[1] * 255;
 		b = rgb[2] * 255;
@@ -366,11 +367,12 @@ void do_annotate_panel(void)
 	pdf_annot *annot;
 	int n;
 
+	int has_redact = 0;
 	int was_dirty = pdf->dirty;
 
 	ui_layout(T, X, NW, 2, 2);
 
-	if (ui_popup("CreateAnnotPopup", "Create...", 1, 14))
+	if (ui_popup("CreateAnnotPopup", "Create...", 1, 15))
 	{
 		if (ui_popup_item("Text")) new_annot(PDF_ANNOT_TEXT);
 		if (ui_popup_item("FreeText")) new_annot(PDF_ANNOT_FREE_TEXT);
@@ -386,6 +388,7 @@ void do_annotate_panel(void)
 		if (ui_popup_item("Underline")) new_annot(PDF_ANNOT_UNDERLINE);
 		if (ui_popup_item("StrikeOut")) new_annot(PDF_ANNOT_STRIKE_OUT);
 		if (ui_popup_item("Squiggly")) new_annot(PDF_ANNOT_SQUIGGLY);
+		if (ui_popup_item("Redact")) new_annot(PDF_ANNOT_REDACT);
 		ui_popup_end();
 	}
 
@@ -402,6 +405,8 @@ void do_annotate_panel(void)
 		fz_snprintf(buf, sizeof buf, "%d: %s", num, pdf_string_from_annot_type(ctx, subtype));
 		if (ui_list_item(&annot_list, annot->obj, buf, selected_annot == annot))
 			selected_annot = annot;
+		if (subtype == PDF_ANNOT_REDACT)
+			has_redact = 1;
 	}
 	ui_list_end(&annot_list);
 
@@ -630,11 +635,23 @@ void do_annotate_panel(void)
 	}
 
 	ui_layout(B, X, NW, 2, 2);
+
 	if (ui_button("Save PDF..."))
 	{
 		init_save_pdf_options();
 		ui_init_save_file(filename, pdf_filter);
 		ui.dialog = save_pdf_dialog;
+	}
+
+	if (has_redact)
+	{
+		if (ui_button("Redact"))
+		{
+			selected_annot = NULL;
+			pdf_redact_page(ctx, pdf, page, NULL);
+			load_page();
+			render_page();
+		}
 	}
 
 	if (was_dirty != pdf->dirty)
@@ -1094,6 +1111,7 @@ void do_annotate_canvas(fz_irect canvas_area)
 			case PDF_ANNOT_UNDERLINE:
 			case PDF_ANNOT_STRIKE_OUT:
 			case PDF_ANNOT_SQUIGGLY:
+			case PDF_ANNOT_REDACT:
 				if (is_draw_mode)
 					do_edit_quad_points();
 				break;

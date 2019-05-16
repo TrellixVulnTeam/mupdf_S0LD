@@ -249,17 +249,15 @@ static int ft_width(fz_context *ctx, pdf_font_desc *fontdesc, int cid)
 {
 	int mask = FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP | FT_LOAD_IGNORE_TRANSFORM;
 	int gid = ft_cid_to_gid(fontdesc, cid);
-	FT_Fixed adv;
+	FT_Fixed adv = 0;
 	int fterr;
 	FT_Face face = fontdesc->font->ft_face;
 	FT_UShort units_per_EM;
 
 	fterr = FT_Get_Advance(face, gid, mask, &adv);
-	if (fterr)
-	{
-		fz_warn(ctx, "freetype advance glyph (gid %d): %s", gid, ft_error_string(fterr));
-		return 0;
-	}
+	if (fterr && fterr != FT_Err_Invalid_Argument)
+		fz_warn(ctx, "FT_Get_Advance(%d): %s", gid, ft_error_string(fterr));
+
 	units_per_EM = face->units_per_EM;
 	if (units_per_EM == 0)
 		units_per_EM = 2048;
@@ -679,7 +677,7 @@ pdf_load_simple_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict)
 		else
 			fz_warn(ctx, "freetype could not find any cmaps");
 
-		etable = fz_malloc_array(ctx, 256, sizeof(unsigned short));
+		etable = fz_malloc_array(ctx, 256, unsigned short);
 		fontdesc->size += 256 * sizeof(unsigned short);
 		for (i = 0; i < 256; i++)
 		{
@@ -1047,7 +1045,7 @@ load_cid_font(fz_context *ctx, pdf_document *doc, pdf_obj *dict, pdf_obj *encodi
 
 			len = fz_buffer_storage(ctx, buf, &data);
 			fontdesc->cid_to_gid_len = len / 2;
-			fontdesc->cid_to_gid = fz_malloc_array(ctx, fontdesc->cid_to_gid_len, sizeof(unsigned short));
+			fontdesc->cid_to_gid = fz_malloc_array(ctx, fontdesc->cid_to_gid_len, unsigned short);
 			fontdesc->size += fontdesc->cid_to_gid_len * sizeof(unsigned short);
 			for (z = 0; z < fontdesc->cid_to_gid_len; z++)
 				fontdesc->cid_to_gid[z] = (data[z * 2] << 8) + data[z * 2 + 1];
@@ -1307,9 +1305,8 @@ pdf_make_width_table(fz_context *ctx, pdf_font_desc *fontdesc)
 	}
 
 	font->width_count = n + 1;
-	font->width_table = fz_malloc_array(ctx, font->width_count, sizeof(int));
-	memset(font->width_table, 0, font->width_count * sizeof(int));
-	fontdesc->size += font->width_count * sizeof(int);
+	font->width_table = fz_malloc_array(ctx, font->width_count, short);
+	fontdesc->size += font->width_count * sizeof(short);
 
 	font->width_default = fontdesc->dhmtx.w;
 	for (i = 0; i < font->width_count; i++)

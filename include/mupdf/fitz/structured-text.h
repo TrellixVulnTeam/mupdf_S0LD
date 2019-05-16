@@ -5,10 +5,45 @@
 #include "mupdf/fitz/context.h"
 #include "mupdf/fitz/geometry.h"
 #include "mupdf/fitz/font.h"
-#include "mupdf/fitz/colorspace.h"
 #include "mupdf/fitz/image.h"
 #include "mupdf/fitz/output.h"
 #include "mupdf/fitz/device.h"
+
+/*
+	Simple text layout (for use with annotation editing primarily).
+*/
+typedef struct fz_layout_char_s fz_layout_char;
+typedef struct fz_layout_line_s fz_layout_line;
+typedef struct fz_layout_block_s fz_layout_block;
+
+struct fz_layout_char_s
+{
+	float x, w;
+	const char *p; /* location in source text of character */
+	fz_layout_char *next;
+};
+
+struct fz_layout_line_s
+{
+	float x, y, h;
+	const char *p; /* location in source text of start of line */
+	fz_layout_char *text;
+	fz_layout_line *next;
+};
+
+struct fz_layout_block_s
+{
+	fz_pool *pool;
+	fz_matrix matrix;
+	fz_matrix inv_matrix;
+	fz_layout_line *head, **tailp;
+	fz_layout_char **text_tailp;
+};
+
+fz_layout_block *fz_new_layout(fz_context *ctx);
+void fz_drop_layout(fz_context *ctx, fz_layout_block *block);
+void fz_add_layout_line(fz_context *ctx, fz_layout_block *block, float x, float y, float h, const char *p);
+void fz_add_layout_char(fz_context *ctx, fz_layout_block *block, float x, float w, const char *p);
 
 /*
 	Text extraction device: Used for searching, format conversion etc.

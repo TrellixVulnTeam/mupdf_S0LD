@@ -405,7 +405,7 @@ static fz_image *load_html_image(fz_context *ctx, fz_archive *zip, const char *b
 		}
 #if FZ_ENABLE_SVG
 		if (strstr(src, ".svg"))
-			img = fz_new_image_from_svg(ctx, buf);
+			img = fz_new_image_from_svg(ctx, buf, base_uri, zip);
 		else
 #endif
 			img = fz_new_image_from_buffer(ctx, buf);
@@ -415,6 +415,16 @@ static fz_image *load_html_image(fz_context *ctx, fz_archive *zip, const char *b
 	fz_catch(ctx)
 		fz_warn(ctx, "html: cannot load image src='%s'", src);
 
+	return img;
+}
+
+static fz_image *load_svg_image(fz_context *ctx, fz_archive *zip, const char *base_uri, fz_xml *xml)
+{
+	fz_image *img = NULL;
+	fz_try(ctx)
+		img = fz_new_image_from_svg_xml(ctx, xml, base_uri, zip);
+	fz_catch(ctx)
+		fz_warn(ctx, "html: cannot load embedded svg document");
 	return img;
 }
 
@@ -686,6 +696,14 @@ generate_boxes(fz_context *ctx,
 					insert_inline_box(ctx, box, top, markup_dir, g);
 					generate_image(ctx, box, load_html_image(ctx, g->zip, g->base_uri, src), g);
 				}
+			}
+
+			else if (tag[0]=='s' && tag[1]=='v' && tag[2]=='g' && tag[3]==0)
+			{
+				box = new_box(ctx, g->pool, markup_dir);
+				fz_apply_css_style(ctx, g->set, &box->style, &match);
+				insert_inline_box(ctx, box, top, markup_dir, g);
+				generate_image(ctx, box, load_svg_image(ctx, g->zip, g->base_uri, node), g);
 			}
 
 			else if (g->is_fb2 && tag[0]=='i' && tag[1]=='m' && tag[2]=='a' && tag[3]=='g' && tag[4]=='e' && tag[5]==0)
@@ -1108,7 +1126,7 @@ detect_flow_directionality(fz_context *ctx, fz_pool *pool, uni_buf *buffer, fz_b
 				while (newcap < buffer->len + len)
 					newcap = (newcap * 3) / 2;
 
-				buffer->data = fz_resize_array(ctx, buffer->data, newcap, sizeof(uint32_t));
+				buffer->data = fz_realloc_array(ctx, buffer->data, newcap, uint32_t);
 				buffer->cap = newcap;
 			}
 

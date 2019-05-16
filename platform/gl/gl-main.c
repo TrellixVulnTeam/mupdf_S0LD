@@ -114,6 +114,26 @@ static int zoom_out(int oldres)
 	return zoom_list[0];
 }
 
+static const char *paper_size_name(int w, int h)
+{
+	/* ISO A */
+	if (w == 2384 && h == 3370) return "A0";
+	if (w == 1684 && h == 2384) return "A1";
+	if (w == 1191 && h == 1684) return "A2";
+	if (w == 842 && h == 1191) return "A3";
+	if (w == 595 && h == 842) return "A4";
+	if (w == 420 && h == 595) return "A5";
+	if (w == 297 && h == 420) return "A6";
+
+	/* US */
+	if (w == 612 && h == 792) return "Letter";
+	if (w == 612 && h == 1008) return "Legal";
+	if (w == 792 && h == 1224) return "Ledger";
+	if (w == 1224 && h == 792) return "Tabloid";
+
+	return NULL;
+}
+
 #define MINRES (zoom_list[0])
 #define MAXRES (zoom_list[nelem(zoom_list)-1])
 #define DEFRES 96
@@ -148,6 +168,7 @@ static int annotate_w = 12; /* to be scaled by lineheight */
 
 static int oldtint = 0, currenttint = 0;
 static int oldinvert = 0, currentinvert = 0;
+static int oldicc = 1, currenticc = 1;
 static int oldseparations = 0, currentseparations = 0;
 static int oldpage = 0, currentpage = 0;
 static float oldzoom = DEFRES, currentzoom = DEFRES;
@@ -481,6 +502,11 @@ void load_page(void)
 	links = fz_load_links(ctx, fzpage);
 	page_text = fz_new_stext_page_from_page(ctx, fzpage, NULL);
 
+	if (currenticc)
+		fz_enable_icc(ctx);
+	else
+		fz_disable_icc(ctx);
+
 	if (currentseparations)
 	{
 		seps = fz_page_separations(ctx, &page->super);
@@ -529,7 +555,8 @@ void render_page(void)
 void render_page_if_changed(void)
 {
 	if (oldpage != currentpage || oldzoom != currentzoom || oldrotate != currentrotate ||
-		oldinvert != currentinvert || oldtint != currenttint || oldseparations != currentseparations)
+		oldinvert != currentinvert || oldtint != currenttint ||
+		oldicc != currenticc || oldseparations != currentseparations)
 	{
 		render_page();
 		oldpage = currentpage;
@@ -537,6 +564,7 @@ void render_page_if_changed(void)
 		oldrotate = currentrotate;
 		oldinvert = currentinvert;
 		oldtint = currenttint;
+		oldicc = currenticc;
 		oldseparations = currentseparations;
 	}
 }
@@ -1078,6 +1106,7 @@ static void do_app(void)
 		case 'C': currenttint = !currenttint; break;
 		case 'I': currentinvert = !currentinvert; break;
 		case 'e': currentseparations = !currentseparations; break;
+		case 'E': currenticc = !currenticc; break;
 		case 'f': toggle_fullscreen(); break;
 		case 'w': shrinkwrap(); break;
 		case 'W': auto_zoom_w(); break;
@@ -1193,7 +1222,7 @@ static void do_info(void)
 {
 	char buf[100];
 
-	ui_dialog_begin(500, 12 * ui.lineheight);
+	ui_dialog_begin(500, 14 * ui.lineheight);
 	ui_layout(T, X, W, 0, 0);
 
 	if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_TITLE, buf, sizeof buf) > 0)
@@ -1226,6 +1255,18 @@ static void do_info(void)
 		ui_label("Permissions: %s", buf);
 	}
 	ui_label("Page: %d / %d", currentpage + 1, fz_count_pages(ctx, doc));
+	{
+		int w = (int)(page_bounds.x1 - page_bounds.x0 + 0.5f);
+		int h = (int)(page_bounds.y1 - page_bounds.y0 + 0.5f);
+		const char *size = paper_size_name(w, h);
+		if (!size)
+			size = paper_size_name(h, w);
+		if (size)
+			ui_label("Size: %d x %d (%s)", w, h, size);
+		else
+			ui_label("Size: %d x %d", w, h);
+	}
+	ui_label("ICC rendering: %s.", currenticc ? "on" : "off");
 	ui_label("Spot rendering: %s.", currentseparations ? "on" : "off");
 
 	ui_dialog_end();
@@ -1482,7 +1523,7 @@ void do_main(void)
 	if (showoutline)
 		do_outline(outline);
 
-	if (oldpage != currentpage || oldseparations != currentseparations)
+	if (oldpage != currentpage || oldseparations != currentseparations || oldicc != currenticc)
 	{
 		load_page();
 		update_title();
