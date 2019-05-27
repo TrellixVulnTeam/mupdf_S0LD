@@ -252,6 +252,14 @@ int fz_colorspace_device_n_has_cmyk(fz_context *ctx, fz_colorspace *cs)
 	return cs && (cs->flags & FZ_COLORSPACE_HAS_CMYK);
 }
 
+int fz_is_valid_blend_colorspace(fz_context *ctx, fz_colorspace *cs)
+{
+	return cs == NULL ||
+		cs->type == FZ_COLORSPACE_GRAY ||
+		cs->type == FZ_COLORSPACE_RGB ||
+		cs->type == FZ_COLORSPACE_CMYK;
+}
+
 fz_colorspace *
 fz_keep_colorspace(fz_context *ctx, fz_colorspace *cs)
 {
@@ -922,6 +930,11 @@ fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *
 #if FZ_ENABLE_ICC
 	cc->link = NULL;
 #endif
+
+	if (ds->type == FZ_COLORSPACE_INDEXED)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "Cannot convert into Indexed colorspace.");
+	if (ds->type == FZ_COLORSPACE_SEPARATION)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "Cannot convert into Separation colorspace.");
 
 	if (ss->type == FZ_COLORSPACE_INDEXED)
 	{
