@@ -26,25 +26,88 @@ static int pdf_filter(const char *fn)
 static void init_save_pdf_options(void)
 {
 	memset(&save_opts, 0, sizeof save_opts);
+	save_opts.do_compress = 1;
+	save_opts.do_compress_images = 1;
+	save_opts.do_compress_fonts = 1;
 }
+
+static const char *cryptalgo_names[] = {
+	"None",
+	"RC4, 40 bit",
+	"RC4, 128 bit",
+	"AES, 128 bit",
+	"AES, 256 bit",
+};
 
 static void save_pdf_options(void)
 {
+	const char *cryptalgo = cryptalgo_names[save_opts.do_encrypt];
+	static int last_do_encrypt = PDF_ENCRYPT_NONE;
+	static struct input opwinput;
+	static struct input upwinput;
+	int choice;
+
 	ui_layout(T, X, NW, 2, 2);
 	ui_label("PDF write options:");
 	ui_layout(T, X, NW, 4, 2);
+
 	ui_checkbox("Incremental", &save_opts.do_incremental);
+	ui_spacer();
 	ui_checkbox("Pretty-print", &save_opts.do_pretty);
 	ui_checkbox("Ascii", &save_opts.do_ascii);
+	ui_checkbox("Decompress", &save_opts.do_decompress);
 	ui_checkbox("Compress", &save_opts.do_compress);
 	ui_checkbox("Compress images", &save_opts.do_compress_images);
 	ui_checkbox("Compress fonts", &save_opts.do_compress_fonts);
-	ui_checkbox("Decompress", &save_opts.do_decompress);
-	ui_checkbox("Decrypt", &save_opts.do_decrypt);
-	ui_checkbox("Garbage collect", &save_opts.do_garbage);
-	ui_checkbox("Linearize", &save_opts.do_linear);
-	ui_checkbox("Clean syntax", &save_opts.do_clean);
-	ui_checkbox("Sanitize syntax", &save_opts.do_sanitize);
+	if (save_opts.do_incremental)
+	{
+		save_opts.do_decrypt = 0;
+		save_opts.do_garbage = 0;
+		save_opts.do_linear = 0;
+		save_opts.do_clean = 0;
+		save_opts.do_sanitize = 0;
+		save_opts.do_encrypt = 0;
+	}
+	else
+	{
+		ui_spacer();
+		ui_checkbox("Linearize", &save_opts.do_linear);
+		ui_checkbox("Garbage collect", &save_opts.do_garbage);
+		ui_checkbox("Clean syntax", &save_opts.do_clean);
+		ui_checkbox("Sanitize syntax", &save_opts.do_sanitize);
+
+		ui_checkbox("Decrypt", &save_opts.do_decrypt);
+		if (save_opts.do_decrypt)
+		{
+			save_opts.do_encrypt = 0;
+		}
+		else
+		{
+			ui_spacer();
+			ui_label("Encryption:");
+			choice = ui_select("Encryption", cryptalgo, cryptalgo_names, nelem(cryptalgo_names));
+			if (choice != -1)
+				save_opts.do_encrypt = choice;
+		}
+	}
+
+	if ((last_do_encrypt && !save_opts.do_encrypt) ||
+			(!last_do_encrypt && save_opts.do_encrypt))
+	{
+		last_do_encrypt = save_opts.do_encrypt;
+		ui_input_init(&opwinput, "");
+		ui_input_init(&upwinput, "");
+	}
+	if (save_opts.do_encrypt)
+	{
+		ui_spacer();
+		ui_label("User password:");
+		if (ui_input(&upwinput, 32, 1) >= UI_INPUT_EDIT)
+			fz_strlcpy(save_opts.upwd_utf8, upwinput.text, nelem(save_opts.upwd_utf8));
+		ui_label("Owner password:");
+		if (ui_input(&opwinput, 32, 1) >= UI_INPUT_EDIT)
+			fz_strlcpy(save_opts.opwd_utf8, opwinput.text, nelem(save_opts.opwd_utf8));
+	}
 }
 
 static void save_pdf_dialog(void)

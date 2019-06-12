@@ -181,6 +181,7 @@ struct fz_page_s
 {
 	int refs;
 	int number; /* page number */
+	int incomplete; /* incomplete from progressive loading; don't cache! */
 	fz_page_drop_page_fn *drop_page;
 	fz_page_bound_page_fn *bound_page;
 	fz_page_run_page_fn *run_page_contents;
@@ -335,8 +336,5 @@ fz_colorspace *fz_document_output_intent(fz_context *ctx, fz_document *doc);
 fz_separations *fz_page_separations(fz_context *ctx, fz_page *page);
 
 int fz_page_uses_overprint(fz_context *ctx, fz_page *page);
-
-void fz_save_gproof(fz_context *ctx, const char *doc_filename, fz_document *doc, const char *filename, int res,
-	const char *print_profile, const char *display_profile);
 
 #endif
