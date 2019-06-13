@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #include <windows.h>
 #else
 #include <unistd.h> /* for getcwd */
@@ -40,6 +40,8 @@ enum
 #ifdef HAVE_CURL
 static void pdfapp_sleep(int ms)
 {
+//TODO(MinGW): Do we use usleep() that we have, or Sleep()
+//	(and include <windows.h>), for our mupdf-curl?
 #ifdef _WIN32
 	Sleep(ms);
 #else
