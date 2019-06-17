@@ -1,7 +1,6 @@
 #include "mupdf/fitz.h"
 #include "mupdf/ucdn.h"
 #include "fitz-imp.h"
-#include "font-imp.h"
 #include "draw-imp.h"
 
 #include <ft2build.h>
@@ -318,7 +317,7 @@ struct fz_font_context_s
 	fz_font *base14[14];
 	fz_font *cjk[4];
 	struct { fz_font *serif, *sans; } fallback[256];
-	fz_font *symbol1, *symbol2;
+	fz_font *symbol1, *symbol2, *math, *music;
 	fz_font *emoji;
 };
 
@@ -562,6 +561,32 @@ fz_font *fz_load_fallback_font(fz_context *ctx, int script, int language, int se
 	}
 
 	return *fontp;
+}
+
+static fz_font *fz_load_fallback_math_font(fz_context *ctx)
+{
+	const unsigned char *data;
+	int size;
+	if (!ctx->font->math)
+	{
+		data = fz_lookup_noto_math_font(ctx, &size);
+		if (data)
+			ctx->font->math = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
+	}
+	return ctx->font->math;
+}
+
+static fz_font *fz_load_fallback_music_font(fz_context *ctx)
+{
+	const unsigned char *data;
+	int size;
+	if (!ctx->font->music)
+	{
+		data = fz_lookup_noto_music_font(ctx, &size);
+		if (data)
+			ctx->font->music = fz_new_font_from_memory(ctx, NULL, data, size, 0, 0);
+	}
+	return ctx->font->music;
 }
 
 static fz_font *fz_load_fallback_symbol1_font(fz_context *ctx)
@@ -1572,6 +1597,12 @@ fz_prepare_t3_glyph(fz_context *ctx, fz_font *font, int gid)
 			FZ_DEVFLAG_LINEJOIN_UNDEFINED |
 			FZ_DEVFLAG_MITERLIMIT_UNDEFINED |
 			FZ_DEVFLAG_LINEWIDTH_UNDEFINED;
+
+	/* Avoid cycles in glyph content streams referring to the glyph itself.
+	 * Remember to restore the content stream below, regardless of exceptions
+	 * or a sucessful run of the glyph. */
+	font->t3procs[gid] = NULL;
+
 	fz_try(ctx)
 	{
 		font->t3run(ctx, font->t3doc, font->t3resources, contents, dev, fz_identity, NULL, NULL);
@@ -1580,7 +1611,10 @@ fz_prepare_t3_glyph(fz_context *ctx, fz_font *font, int gid)
 		d1_rect = dev->d1_rect;
 	}
 	fz_always(ctx)
+	{
 		fz_drop_device(ctx, dev);
+		font->t3procs[gid] = contents;
+	}
 	fz_catch(ctx)
 		fz_rethrow(ctx);
 	if (fz_display_list_is_empty(ctx, font->t3lists[gid]))
@@ -1752,8 +1786,20 @@ fz_render_t3_glyph_direct(fz_context *ctx, fz_device *dev, fz_font *font, int gi
 		fz_warn(ctx, "type3 glyph doesn't specify masked or colored");
 	}
 
-	ctm = fz_concat(font->t3matrix, trm);
-	font->t3run(ctx, font->t3doc, font->t3resources, contents, dev, ctm, gstate, def_cs);
+	/* Avoid cycles in glyph content streams referring to the glyph itself.
+	 * Remember to restore the content stream below, regardless of exceptions
+	 * or a sucessful run of the glyph. */
+	font->t3procs[gid] = NULL;
+
+	fz_try(ctx)
+	{
+		ctm = fz_concat(font->t3matrix, trm);
+		font->t3run(ctx, font->t3doc, font->t3resources, contents, dev, ctm, gstate, def_cs);
+	}
+	fz_always(ctx)
+		font->t3procs[gid] = contents;
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 }
 
 /*
@@ -1848,7 +1894,15 @@ fz_advance_ft_glyph(fz_context *ctx, fz_font *font, int gid, int wmode)
 	fterr = FT_Get_Advance(font->ft_face, gid, mask, &adv);
 	fz_unlock(ctx, FZ_LOCK_FREETYPE);
 	if (fterr && fterr != FT_Err_Invalid_Argument)
+	{
 		fz_warn(ctx, "FT_Get_Advance(%s,%d): %s", font->name, gid, ft_error_string(fterr));
+		if (font->width_table)
+		{
+			if (gid < font->width_count)
+				return font->width_table[gid] / 1000.0f;
+			return font->width_default / 1000.0f;
+		}
+	}
 	return (float) adv / ((FT_Face)font->ft_face)->units_per_EM;
 }
 
@@ -1968,6 +2022,36 @@ fz_encode_character(fz_context *ctx, fz_font *font, int ucs)
 	return ucs;
 }
 
+/* Encode character, preferring small-caps variant if available. */
+int
+fz_encode_character_sc(fz_context *ctx, fz_font *font, int unicode)
+{
+	if (font->ft_face)
+	{
+		int cat = ucdn_get_general_category(unicode);
+		if (cat == UCDN_GENERAL_CATEGORY_LL || cat == UCDN_GENERAL_CATEGORY_LT)
+		{
+			int glyph;
+			const char *name;
+			char buf[20];
+
+			name = fz_glyph_name_from_unicode_sc(unicode);
+			if (name)
+			{
+				glyph = FT_Get_Name_Index(font->ft_face, (char*)name);
+				if (glyph > 0)
+					return glyph;
+			}
+
+			sprintf(buf, "uni%04X.sc", unicode);
+			glyph = FT_Get_Name_Index(font->ft_face, buf);
+			if (glyph > 0)
+				return glyph;
+		}
+	}
+	return fz_encode_character(ctx, font, unicode);
+}
+
 int
 fz_encode_character_by_glyph_name(fz_context *ctx, fz_font *font, const char *glyphname)
 {
@@ -2073,6 +2157,22 @@ fz_encode_character_with_fallback(fz_context *ctx, fz_font *user_font, int unico
 		}
 	}
 #endif
+
+	font = fz_load_fallback_math_font(ctx);
+	if (font)
+	{
+		gid = fz_encode_character(ctx, font, unicode);
+		if (gid > 0)
+			return *out_font = font, gid;
+	}
+
+	font = fz_load_fallback_music_font(ctx);
+	if (font)
+	{
+		gid = fz_encode_character(ctx, font, unicode);
+		if (gid > 0)
+			return *out_font = font, gid;
+	}
 
 	font = fz_load_fallback_symbol1_font(ctx);
 	if (font)

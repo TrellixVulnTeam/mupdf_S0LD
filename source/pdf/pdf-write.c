@@ -14,6 +14,11 @@
 
 #define SIG_EXTRAS_SIZE (1024)
 
+#define SLASH_BYTE_RANGE ("/ByteRange")
+#define SLASH_CONTENTS ("/Contents")
+#define SLASH_FILTER ("/Filter")
+
+
 typedef struct pdf_write_state_s pdf_write_state;
 
 /*
@@ -2704,22 +2709,27 @@ static void complete_signatures(fz_context *ctx, pdf_document *doc, pdf_write_st
 				for (usig = xref->unsaved_sigs; usig; usig = usig->next)
 				{
 					char *bstr, *cstr, *fstr;
+					int bytes_read;
 					int pnum = pdf_obj_parent_num(ctx, pdf_dict_getl(ctx, usig->field, PDF_NAME(V), PDF_NAME(ByteRange), NULL));
 					fz_seek(ctx, stm, opts->ofs_list[pnum], SEEK_SET);
-					(void)fz_read(ctx, stm, (unsigned char *)buf, buf_size);
-					buf[buf_size-1] = 0;
+					/* SIG_EXTRAS_SIZE is an arbitrary value and its addition above to buf_size
+					 * could cause an attempt to read off the end of the file. That's not an
+					 * error, but we need to keep track of how many bytes are read and search
+					 * for markers only in defined data */
+					bytes_read = fz_read(ctx, stm, (unsigned char *)buf, buf_size);
+					assert(bytes_read <= buf_size);
 
-					bstr = strstr(buf, "/ByteRange");
-					cstr = strstr(buf, "/Contents");
-					fstr = strstr(buf, "/Filter");
+					bstr = fz_memmem(buf, bytes_read, SLASH_BYTE_RANGE, sizeof(SLASH_BYTE_RANGE)-1);
+					cstr = fz_memmem(buf, bytes_read, SLASH_CONTENTS, sizeof(SLASH_CONTENTS)-1);
+					fstr = fz_memmem(buf, bytes_read, SLASH_FILTER, sizeof(SLASH_FILTER)-1);
 
-					if (bstr && cstr && fstr && bstr < cstr && cstr < fstr)
-					{
-						usig->byte_range_start = bstr - buf + 10 + opts->ofs_list[pnum];
-						usig->byte_range_end = cstr - buf + opts->ofs_list[pnum];
-						usig->contents_start = cstr - buf + 9 + opts->ofs_list[pnum];
-						usig->contents_end = fstr - buf + opts->ofs_list[pnum];
-					}
+					if (!(bstr && cstr && fstr && bstr < cstr && cstr < fstr))
+						fz_throw(ctx, FZ_ERROR_GENERIC, "Failed to determine byte ranges while writing signature");
+
+					usig->byte_range_start = bstr - buf + sizeof(SLASH_BYTE_RANGE)-1 + opts->ofs_list[pnum];
+					usig->byte_range_end = cstr - buf + opts->ofs_list[pnum];
+					usig->contents_start = cstr - buf + sizeof(SLASH_CONTENTS)-1 + opts->ofs_list[pnum];
+					usig->contents_end = fstr - buf + opts->ofs_list[pnum];
 				}
 
 				fz_drop_stream(ctx, stm);
@@ -2870,6 +2880,26 @@ static void finalise_write_state(fz_context *ctx, pdf_write_state *opts)
 	page_objects_list_destroy(ctx, opts->page_object_lists);
 }
 
+const pdf_write_options pdf_default_write_options = {
+	0, /* do_incremental */
+	0, /* do_pretty */
+	0, /* do_ascii */
+	0, /* do_compress */
+	0, /* do_compress_images */
+	0, /* do_compress_fonts */
+	0, /* do_decompress */
+	0, /* do_garbage */
+	0, /* do_linear */
+	0, /* do_clean */
+	0, /* do_sanitize */
+	0, /* do_decrypt */
+	0, /* do_appearance */
+	0, /* do_encrypt */
+	~0, /* permissions */
+	"", /* opwd_utf8[128] */
+	"", /* upwd_utf8[128] */
+};
+
 const char *fz_pdf_write_options_usage =
 	"PDF output options:\n"
 	"\tdecompress: decompress all streams (except compress-fonts/images)\n"
@@ -2886,6 +2916,11 @@ const char *fz_pdf_write_options_usage =
 	"\tcontinue-on-error: continue saving the document even if there is an error\n"
 	"\tor garbage=compact: ... and compact cross reference table\n"
 	"\tor garbage=deduplicate: ... and remove duplicate objects\n"
+	"\tdecrypt: write unencrypted document\n"
+	"\tencrypt=rc4-40|rc4-128|aes-128|aes-256: write encrypted document\n"
+	"\tpermissions=NUMBER: document permissions to grant when encrypting\n"
+	"\tuser-password=PASSWORD: password required to read document\n"
+	"\towner-password=PASSWORD: password required to edit document\n"
 	"\n";
 
 /*
@@ -2930,7 +2965,7 @@ pdf_parse_write_options(fz_context *ctx, pdf_write_options *opts, const char *ar
 		opts->do_decrypt = fz_option_eq(val, "yes");
 	if (fz_has_option(ctx, args, "encrypt", &val))
 	{
-		opts->do_encrypt = PDF_ENCRYPT_NONE;
+		opts->do_encrypt = PDF_ENCRYPT_UNKNOWN;
 		if (fz_option_eq(val, "rc4-40") || fz_option_eq(val, "yes"))
 			opts->do_encrypt = PDF_ENCRYPT_RC4_40;
 		if (fz_option_eq(val, "rc4-128"))
@@ -2940,9 +2975,9 @@ pdf_parse_write_options(fz_context *ctx, pdf_write_options *opts, const char *ar
 		if (fz_option_eq(val, "aes-256"))
 			opts->do_encrypt = PDF_ENCRYPT_AES_256;
 	}
-	if (fz_has_option(ctx, args, "ownerpassword", &val))
+	if (fz_has_option(ctx, args, "owner-password", &val))
 		fz_copy_option(ctx, val, opts->opwd_utf8, nelem(opts->opwd_utf8));
-	if (fz_has_option(ctx, args, "userpassword", &val))
+	if (fz_has_option(ctx, args, "user-password", &val))
 		fz_copy_option(ctx, val, opts->upwd_utf8, nelem(opts->upwd_utf8));
 	if (fz_has_option(ctx, args, "permissions", &val))
 		opts->permissions = fz_atoi(val);
@@ -3331,7 +3366,7 @@ int pdf_has_unsaved_sigs(fz_context *ctx, pdf_document *doc)
 */
 void pdf_write_document(fz_context *ctx, pdf_document *doc, fz_output *out, pdf_write_options *in_opts)
 {
-	pdf_write_options opts_defaults = { 0 };
+	pdf_write_options opts_defaults = pdf_default_write_options;
 	pdf_write_state opts = { 0 };
 
 	if (!doc)
@@ -3363,7 +3398,7 @@ void pdf_write_document(fz_context *ctx, pdf_document *doc, fz_output *out, pdf_
 */
 void pdf_save_document(fz_context *ctx, pdf_document *doc, const char *filename, pdf_write_options *in_opts)
 {
-	pdf_write_options opts_defaults = { 0 };
+	pdf_write_options opts_defaults = pdf_default_write_options;
 	pdf_write_state opts = { 0 };
 
 	if (!doc)

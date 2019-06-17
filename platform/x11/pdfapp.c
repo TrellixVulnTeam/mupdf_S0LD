@@ -150,9 +150,9 @@ void pdfapp_init(fz_context *ctx, pdfapp_t *app)
 	app->resolution = 72;
 	app->ctx = ctx;
 
-	app->layout_w = 450;
-	app->layout_h = 600;
-	app->layout_em = 12;
+	app->layout_w = FZ_DEFAULT_LAYOUT_W;
+	app->layout_h = FZ_DEFAULT_LAYOUT_H;
+	app->layout_em = FZ_DEFAULT_LAYOUT_EM;
 	app->layout_css = NULL;
 	app->layout_use_doc_css = 1;
 
@@ -561,7 +561,7 @@ static int pdfapp_save(pdfapp_t *app)
 
 	if (wingetsavepath(app, buf, PATH_MAX))
 	{
-		pdf_write_options opts = { 0 };
+		pdf_write_options opts = pdf_default_write_options;
 
 		opts.do_incremental = pdf_can_be_saved_incrementally(app->ctx, idoc);
 
