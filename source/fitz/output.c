@@ -159,9 +159,7 @@ static void
 file_seek(fz_context *ctx, void *opaque, int64_t off, int whence)
 {
 	FILE *file = opaque;
-#ifdef __MINGW32__
-	int n = fseeko64(file, off, whence);
-#elif defined(_WIN32)
+#ifdef _WIN32
 	int n = _fseeki64(file, off, whence);
 #else
 	int n = fseeko(file, off, whence);
@@ -174,9 +172,7 @@ static int64_t
 file_tell(fz_context *ctx, void *opaque)
 {
 	FILE *file = opaque;
-#ifdef __MINGW32__
-	int64_t off = ftello64(file);
-#elif defined(_WIN32)
+#ifdef _WIN32
 	int64_t off = _ftelli64(file);
 #else
 	int64_t off = ftello(file);
