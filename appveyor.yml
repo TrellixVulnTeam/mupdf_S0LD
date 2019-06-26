@@ -6,8 +6,12 @@ environment:
 
 install:
 - cmd: if [%TARGET%]==[mingw] (
-    C:\MinGW\bin\mingw-get update &&
-    C:\MinGW\bin\mingw-get upgrade )
+    C:\MinGW\msys\1.0\bin\bash -e -l -c
+    "sed 's,http://prdownloads.sourceforge.net/mingw/%%F.xml.lzma?download,http://osdn.net/dl/mingw/%%F.xml.lzma,'
+        </mingw/var/lib/mingw-get/data/defaults.xml
+        >/mingw/var/lib/mingw-get/data/profile.xml &&
+    mingw-get update &&
+    mingw-get upgrade" )
 - cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
     curl -fsS https://cygwin.com/setup-x86.exe > C:\cygwin\setup-x86.exe &&
     C:\cygwin\setup-x86.exe -qnNd -l C:\cygwin\var\cache\setup -R c:\cygwin
