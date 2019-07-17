@@ -115,7 +115,7 @@ enum pdf_signature_error
 	PDF_SIGNATURE_ERROR_OKAY,
 	PDF_SIGNATURE_ERROR_NO_SIGNATURES,
 	PDF_SIGNATURE_ERROR_NO_CERTIFICATE,
-	PDF_SIGNATURE_ERROR_DOCUMENT_CHANGED,
+	PDF_SIGNATURE_ERROR_DIGEST_FAILURE,
 	PDF_SIGNATURE_ERROR_SELF_SIGNED,
 	PDF_SIGNATURE_ERROR_SELF_SIGNED_IN_CHAIN,
 	PDF_SIGNATURE_ERROR_NOT_TRUSTED,
@@ -339,9 +339,8 @@ struct pdf_write_options_s
 	int do_linear; /* Write linearised. */
 	int do_clean; /* Clean content streams. */
 	int do_sanitize; /* Sanitize content streams. */
-	int do_decrypt; /* Save without decryption. */
 	int do_appearance; /* (Re)create appearance streams. */
-	int do_encrypt; /* Save with encrypion. */
+	int do_encrypt; /* Encryption method to use: keep, none, rc4-40, etc. */
 	int permissions; /* Document encryption permissions. */
 	char opwd_utf8[128]; /* Owner password. */
 	char upwd_utf8[128]; /* User password. */

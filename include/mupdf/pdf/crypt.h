@@ -3,6 +3,7 @@
 
 enum
 {
+	PDF_ENCRYPT_KEEP,
 	PDF_ENCRYPT_NONE,
 	PDF_ENCRYPT_RC4_40,
 	PDF_ENCRYPT_RC4_128,
@@ -54,13 +55,17 @@ enum
 
 int pdf_document_permissions(fz_context *ctx, pdf_document *doc);
 
-int pdf_signature_widget_byte_range(fz_context *ctx, pdf_document *doc, pdf_widget *widget, fz_range *byte_range);
+int pdf_signature_byte_range(fz_context *ctx, pdf_document *doc, pdf_obj *signtature, fz_range *byte_range);
 
-fz_stream *pdf_signature_widget_hash_bytes(fz_context *ctx, pdf_document *doc, pdf_widget *widget);
+fz_stream *pdf_signature_hash_bytes(fz_context *ctx, pdf_document *doc, pdf_obj *signature);
 
-int pdf_signature_widget_contents(fz_context *ctx, pdf_document *doc, pdf_widget *widget, char **contents);
+int pdf_signature_incremental_change_since_signing(fz_context *ctx, pdf_document *doc, pdf_obj *signature);
+
+int pdf_signature_contents(fz_context *ctx, pdf_document *doc, pdf_obj *signature, char **contents);
 
 void pdf_sign_signature(fz_context *ctx, pdf_document *doc, pdf_widget *widget, pdf_pkcs7_signer *signer);
+
+void pdf_clear_signature(fz_context *ctx, pdf_document *doc, pdf_widget *widget);
 
 void pdf_encrypt_data(fz_context *ctx, pdf_crypt *crypt, int num, int gen, void (*fmt_str_out)(fz_context *, void *, const unsigned char *, int), void *arg, const unsigned char *s, int n);
 

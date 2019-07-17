@@ -12,7 +12,6 @@ typedef struct fz_tuning_context_s fz_tuning_context;
 typedef struct fz_store_s fz_store;
 typedef struct fz_glyph_cache_s fz_glyph_cache;
 typedef struct fz_document_handler_context_s fz_document_handler_context;
-typedef struct fz_output_context_s fz_output_context;
 typedef struct fz_context_s fz_context;
 
 typedef struct fz_alloc_context_s fz_alloc_context;
@@ -37,14 +36,18 @@ struct fz_error_context_s
 	fz_error_stack_slot *top;
 	fz_error_stack_slot stack[256];
 	int errcode;
+	void *print_user;
+	void (*print)(void *user, const char *message);
 	char message[256];
 };
 
 typedef struct fz_warn_context_s fz_warn_context;
 struct fz_warn_context_s
 {
-	char message[256];
+	void *print_user;
+	void (*print)(void *user, const char *message);
 	int count;
+	char message[256];
 };
 
 typedef struct fz_aa_context_s fz_aa_context;
@@ -150,7 +153,6 @@ struct fz_context_s
 #endif
 
 	/* TODO: should these be unshared? */
-	fz_output_context *output;
 	fz_document_handler_context *handler;
 	fz_style_context *style;
 	fz_tuning_context *tuning;
@@ -187,6 +189,12 @@ void fz_drop_context(fz_context *ctx);
 void fz_set_user_context(fz_context *ctx, void *user);
 
 void *fz_user_context(fz_context *ctx);
+
+void fz_default_error_callback(void *user, const char *message);
+void fz_default_warning_callback(void *user, const char *message);
+
+void fz_set_error_callback(fz_context *ctx, void (*print)(void *user, const char *message), void *user);
+void fz_set_warning_callback(fz_context *ctx, void (*print)(void *user, const char *message), void *user);
 
 /*
 	In order to tune MuPDF's behaviour, certain functions can

@@ -14,6 +14,8 @@ static int is_draw_mode = 0;
 
 static char save_filename[PATH_MAX];
 static pdf_write_options save_opts;
+static struct input opwinput;
+static struct input upwinput;
 
 static int pdf_filter(const char *fn)
 {
@@ -32,6 +34,7 @@ static void init_save_pdf_options(void)
 }
 
 static const char *cryptalgo_names[] = {
+	"Keep",
 	"None",
 	"RC4, 40 bit",
 	"RC4, 128 bit",
@@ -42,9 +45,6 @@ static const char *cryptalgo_names[] = {
 static void save_pdf_options(void)
 {
 	const char *cryptalgo = cryptalgo_names[save_opts.do_encrypt];
-	static int last_do_encrypt = PDF_ENCRYPT_NONE;
-	static struct input opwinput;
-	static struct input upwinput;
 	int choice;
 
 	ui_layout(T, X, NW, 2, 2);
@@ -61,12 +61,11 @@ static void save_pdf_options(void)
 	ui_checkbox("Compress fonts", &save_opts.do_compress_fonts);
 	if (save_opts.do_incremental)
 	{
-		save_opts.do_decrypt = 0;
 		save_opts.do_garbage = 0;
 		save_opts.do_linear = 0;
 		save_opts.do_clean = 0;
 		save_opts.do_sanitize = 0;
-		save_opts.do_encrypt = 0;
+		save_opts.do_encrypt = PDF_ENCRYPT_KEEP;
 	}
 	else
 	{
@@ -76,29 +75,14 @@ static void save_pdf_options(void)
 		ui_checkbox("Clean syntax", &save_opts.do_clean);
 		ui_checkbox("Sanitize syntax", &save_opts.do_sanitize);
 
-		ui_checkbox("Decrypt", &save_opts.do_decrypt);
-		if (save_opts.do_decrypt)
-		{
-			save_opts.do_encrypt = 0;
-		}
-		else
-		{
-			ui_spacer();
-			ui_label("Encryption:");
-			choice = ui_select("Encryption", cryptalgo, cryptalgo_names, nelem(cryptalgo_names));
-			if (choice != -1)
-				save_opts.do_encrypt = choice;
-		}
+		ui_spacer();
+		ui_label("Encryption:");
+		choice = ui_select("Encryption", cryptalgo, cryptalgo_names, nelem(cryptalgo_names));
+		if (choice != -1)
+			save_opts.do_encrypt = choice;
 	}
 
-	if ((last_do_encrypt && !save_opts.do_encrypt) ||
-			(!last_do_encrypt && save_opts.do_encrypt))
-	{
-		last_do_encrypt = save_opts.do_encrypt;
-		ui_input_init(&opwinput, "");
-		ui_input_init(&upwinput, "");
-	}
-	if (save_opts.do_encrypt)
+	if (save_opts.do_encrypt >= PDF_ENCRYPT_RC4_40)
 	{
 		ui_spacer();
 		ui_label("User password:");
@@ -112,6 +96,9 @@ static void save_pdf_options(void)
 
 static void save_pdf_dialog(void)
 {
+	ui_input_init(&opwinput, "");
+	ui_input_init(&upwinput, "");
+
 	if (ui_save_file(save_filename, save_pdf_options))
 	{
 		ui.dialog = NULL;
@@ -427,6 +414,7 @@ static int should_edit_icolor(enum pdf_annot_type subtype)
 void do_annotate_panel(void)
 {
 	static struct list annot_list;
+	enum pdf_annot_type subtype;
 	pdf_annot *annot;
 	int n;
 
@@ -464,7 +452,7 @@ void do_annotate_panel(void)
 	{
 		char buf[256];
 		int num = pdf_to_num(ctx, annot->obj);
-		enum pdf_annot_type subtype = pdf_annot_type(ctx, annot);
+		subtype = pdf_annot_type(ctx, annot);
 		fz_snprintf(buf, sizeof buf, "%d: %s", num, pdf_string_from_annot_type(ctx, subtype));
 		if (ui_list_item(&annot_list, annot->obj, buf, selected_annot == annot))
 			selected_annot = annot;
@@ -473,16 +461,12 @@ void do_annotate_panel(void)
 	}
 	ui_list_end(&annot_list);
 
-	if (selected_annot)
+	if (selected_annot && (subtype = pdf_annot_type(ctx, selected_annot)) != PDF_ANNOT_WIDGET)
 	{
-		enum pdf_annot_type subtype = pdf_annot_type(ctx, selected_annot);
 		fz_rect rect;
 		fz_irect irect;
 		int n, choice;
 		pdf_obj *obj;
-
-		if (subtype == PDF_ANNOT_WIDGET)
-			return;
 
 		if (ui_button("Delete"))
 		{
@@ -727,7 +711,7 @@ static void do_edit_icon(fz_irect canvas_area, fz_irect area, fz_rect *rect)
 	static float w, h;
 	static int moving = 0;
 
-	if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&area))
+	if (ui_mouse_inside(canvas_area) && ui_mouse_inside(area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active && ui.down)
@@ -788,7 +772,7 @@ static void do_edit_rect(fz_irect canvas_area, fz_irect area, fz_rect *rect)
 	static int state = ER_NONE;
 
 	area = fz_expand_irect(area, 5);
-	if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&area))
+	if (ui_mouse_inside(canvas_area) && ui_mouse_inside(area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active && ui.down)
@@ -843,7 +827,7 @@ static void do_edit_line(fz_irect canvas_area, fz_irect area, fz_rect *rect)
 	float lw;
 
 	area = fz_expand_irect(area, 5);
-	if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&area))
+	if (ui_mouse_inside(canvas_area) && ui_mouse_inside(area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active && ui.down)
@@ -857,8 +841,8 @@ static void do_edit_line(fz_irect canvas_area, fz_irect area, fz_rect *rect)
 			a_grab = fz_expand_irect(a_grab, 10);
 			b_grab = fz_expand_irect(b_grab, 10);
 			state = EL_NONE;
-			if (ui_mouse_inside(&a_grab)) state |= EL_A;
-			if (ui_mouse_inside(&b_grab)) state |= EL_B;
+			if (ui_mouse_inside(a_grab)) state |= EL_A;
+			if (ui_mouse_inside(b_grab)) state |= EL_B;
 			if (!state) state = EL_MOVE;
 		}
 	}
@@ -906,7 +890,7 @@ static void do_edit_polygon(fz_irect canvas_area, int close)
 	static int drawing = 0;
 	fz_point a, p;
 
-	if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&view_page_area))
+	if (ui_mouse_inside(canvas_area) && ui_mouse_inside(view_page_area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active || ui.active == selected_annot)
@@ -966,7 +950,7 @@ static void do_edit_ink(fz_irect canvas_area)
 	static int n, last_x, last_y;
 	int i;
 
-	if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&view_page_area))
+	if (ui_mouse_inside(canvas_area) && ui_mouse_inside(view_page_area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active || ui.active == selected_annot)
@@ -1030,7 +1014,7 @@ static void do_edit_quad_points(void)
 	fz_quad hits[1000];
 	int i, n;
 
-	if (ui_mouse_inside(&view_page_area))
+	if (ui_mouse_inside(view_page_area))
 	{
 		ui.hot = selected_annot;
 		if (!ui.active || ui.active == selected_annot)
@@ -1105,7 +1089,7 @@ void do_annotate_canvas(fz_irect canvas_area)
 		bounds = fz_transform_rect(bounds, view_page_ctm);
 		area = fz_irect_from_rect(bounds);
 
-		if (ui_mouse_inside(&canvas_area) && ui_mouse_inside(&area))
+		if (ui_mouse_inside(canvas_area) && ui_mouse_inside(area))
 		{
 			ui.hot = annot;
 			if (!ui.active && ui.down)
@@ -1203,7 +1187,7 @@ void do_annotate_canvas(fz_irect canvas_area)
 		}
 	}
 
-	if (ui_mouse_inside(&canvas_area) && ui.down)
+	if (ui_mouse_inside(canvas_area) && ui.down)
 	{
 		if (!ui.active && ui.hot == nothing)
 			selected_annot = NULL;

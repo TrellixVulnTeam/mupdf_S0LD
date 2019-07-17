@@ -10,6 +10,7 @@
 
 #ifdef _MSC_VER
 #include <windows.h>
+#include <direct.h> /* for getcwd */
 #else
 #include <unistd.h> /* for getcwd */
 #endif
