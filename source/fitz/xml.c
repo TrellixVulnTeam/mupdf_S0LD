@@ -346,7 +346,7 @@ static void xml_emit_open_tag(fz_context *ctx, struct parser *parser, char *a, c
 	char *ns;
 
 	/* skip namespace prefix */
-	for (ns = a; ns < b; ++ns)
+	for (ns = a; ns < b - 1; ++ns)
 		if (*ns == ':')
 			a = ns + 1;
 
@@ -726,10 +726,11 @@ fz_parse_xml(fz_context *ctx, fz_buffer *buf, int preserve_white)
 	fz_xml root, *node;
 	char *p = NULL;
 	char *error;
-	int dofree;
+	int dofree = 0;
 	unsigned char *s;
 	size_t n;
 
+	fz_var(dofree);
 	fz_var(p);
 
 	/* ensure we are zero-terminated */

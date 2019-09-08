@@ -30,7 +30,7 @@ The formula shown above is a simplification of the following formula:
 
  Ar * Cr = [(1-As)*Ab*Cb] + [(1-Ab)*As*Cs] + [Ab*As*B(Cb, Cs)]
 
-At first glange this always appears to be a mistake to me, as it looks
+At first glance this always appears to be a mistake to me, as it looks
 like they have make a mistake in the division.
 
 However, if we consider the result alpha equation:
@@ -492,7 +492,7 @@ fz_blend_nonseparable(byte * FZ_RESTRICT bp, int bal, const byte * FZ_RESTRICT s
 
 				/* ugh, division to get non-premul components */
 				int invsa = sa ? 255 * 256 / sa : 0;
-				int invba = ba ? 255 * 256 / ba : 0;
+				int invba = 255 * 256 / ba;
 
 				int sr = (sp[0] * invsa) >> 8;
 				int sg = (sp[1] * invsa) >> 8;
