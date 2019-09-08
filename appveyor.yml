@@ -44,17 +44,20 @@ build_script:
 - cmd: if [%TARGET%]==[mingw] (
     C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
     make OUT=/home/appveyor/mupdf/release
-    XLIBS+=-static-libgcc" )
+    XLIBS+=-static-libgcc
+    XCFLAGS+=-DHAVE_MKGMTIME" )
 - cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
     C:\cygwin\bin\bash -e -l -c "cd /cygdrive/c/projects/mupdf &&
     make OUT=/home/appveyor/mupdf/release
     OS=mingw32-cross
-    XLIBS+=-static-libgcc" )
+    XLIBS+=-static-libgcc
+    XCFLAGS+=-DHAVE_MKGMTIME" )
 - cmd: if [%TARGET%]==[msys2-mingw32-cross] (
     C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
     make OUT=/home/appveyor/mupdf/release
     OS=mingw32-cross
     XLIBS+=-static-libgcc
+    XCFLAGS+=-DHAVE_MKGMTIME
     2>&1 | tee -a mupdf-$(git describe --tags)-build.log" )
 
 after_build:
