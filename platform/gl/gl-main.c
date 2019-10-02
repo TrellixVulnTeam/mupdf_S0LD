@@ -16,6 +16,8 @@
 
 #ifndef _MSC_VER
 #include <unistd.h> /* for fork, exec, and getcwd */
+#else
+#include <direct.h> /* for getcwd */
 #endif
 
 #ifdef _WIN32

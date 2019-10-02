@@ -209,14 +209,19 @@ struct fz_html_box_s
 	unsigned int heading : 3; /* h1..h6 */
 	unsigned int list_item : 23;
 	float x, y, w, b; /* content */
-	float padding[4];
-	float margin[4];
-	float border[4];
 	float em;
-	fz_html_box *up, *down, *last, *next;
+	/* During construction, 'next' plays double duty; as well
+	 * as its normal meaning of 'next sibling', the last sibling
+	 * has next meaning "the last of my children". We correct
+	 * this as a post-processing pass after construction. */
+	fz_html_box *up, *down, *next;
 	fz_html_flow *flow_head, **flow_tail;
 	char *id, *href;
 	fz_css_style style;
+	/* Only BOX_BLOCK and BOX_TABLE actually use the following */
+	float padding[4];
+	float margin[4];
+	float border[4];
 };
 
 enum

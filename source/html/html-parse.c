@@ -477,7 +477,6 @@ static void init_box(fz_context *ctx, fz_html_box *box, fz_bidi_direction markup
 	box->w = box->b = 0;
 
 	box->up = NULL;
-	box->last = NULL;
 	box->down = NULL;
 	box->next = NULL;
 
@@ -515,6 +514,13 @@ static fz_html_box *new_box(fz_context *ctx, fz_pool *pool, fz_bidi_direction ma
 	return box;
 }
 
+static fz_html_box *new_short_box(fz_context *ctx, fz_pool *pool, fz_bidi_direction markup_dir)
+{
+	fz_html_box *box = fz_pool_alloc(ctx, pool, offsetof(fz_html_box, padding));
+	init_box(ctx, box, markup_dir);
+	return box;
+}
+
 static void insert_box(fz_context *ctx, fz_html_box *box, int type, fz_html_box *top)
 {
 	box->type = type;
@@ -523,14 +529,17 @@ static void insert_box(fz_context *ctx, fz_html_box *box, int type, fz_html_box 
 
 	if (top)
 	{
-		if (!top->last)
+		/* Here 'next' really means 'last of my children'. This will
+		 * be fixed up in a pass at the end of parsing. */
+		if (!top->next)
 		{
-			top->down = top->last = box;
+			top->down = top->next = box;
 		}
 		else
 		{
-			top->last->next = box;
-			top->last = box;
+			top->next->next = box;
+			/* Here next actually means next */
+			top->next = box;
 		}
 	}
 }
@@ -625,14 +634,15 @@ static void insert_inline_box(fz_context *ctx, fz_html_box *box, fz_html_box *to
 		while (top->type != BOX_BLOCK && top->type != BOX_TABLE_CELL)
 			top = top->up;
 
-		if (top->last && top->last->type == BOX_FLOW)
+		/* Here 'next' actually means 'last of my children' */
+		if (top->next && top->next->type == BOX_FLOW)
 		{
-			insert_box(ctx, box, BOX_INLINE, top->last);
+			insert_box(ctx, box, BOX_INLINE, top->next);
 		}
 		else
 		{
-			fz_html_box *flow = new_box(ctx, g->pool, markup_dir);
-			flow->is_first_flow = !top->last;
+			fz_html_box *flow = new_short_box(ctx, g->pool, markup_dir);
+			flow->is_first_flow = !top->next;
 			insert_box(ctx, flow, BOX_FLOW, top);
 			insert_box(ctx, box, BOX_INLINE, flow);
 			g->at_bol = 1;
@@ -679,7 +689,7 @@ generate_boxes(fz_context *ctx,
 				}
 				else
 				{
-					box = new_box(ctx, g->pool, markup_dir);
+					box = new_short_box(ctx, g->pool, markup_dir);
 					fz_apply_css_style(ctx, g->set, &box->style, &match);
 					top = insert_break_box(ctx, box, top);
 				}
@@ -694,7 +704,7 @@ generate_boxes(fz_context *ctx,
 					int w, h;
 					const char *w_att = fz_xml_att(node, "width");
 					const char *h_att = fz_xml_att(node, "height");
-					box = new_box(ctx, g->pool, markup_dir);
+					box = new_short_box(ctx, g->pool, markup_dir);
 					fz_apply_css_style(ctx, g->set, &box->style, &match);
 					if (w_att && (w = fz_atoi(w_att)) > 0)
 					{
@@ -713,7 +723,7 @@ generate_boxes(fz_context *ctx,
 
 			else if (tag[0]=='s' && tag[1]=='v' && tag[2]=='g' && tag[3]==0)
 			{
-				box = new_box(ctx, g->pool, markup_dir);
+				box = new_short_box(ctx, g->pool, markup_dir);
 				fz_apply_css_style(ctx, g->set, &box->style, &match);
 				insert_inline_box(ctx, box, top, markup_dir, g);
 				generate_image(ctx, box, load_svg_image(ctx, g->zip, g->base_uri, node), g);
@@ -733,14 +743,14 @@ generate_boxes(fz_context *ctx,
 						box = new_box(ctx, g->pool, markup_dir);
 						fz_apply_css_style(ctx, g->set, &box->style, &match);
 						top = insert_block_box(ctx, box, top);
-						imgbox = new_box(ctx, g->pool, markup_dir);
+						imgbox = new_short_box(ctx, g->pool, markup_dir);
 						fz_apply_css_style(ctx, g->set, &imgbox->style, &match);
 						insert_inline_box(ctx, imgbox, box, markup_dir, g);
 						generate_image(ctx, imgbox, fz_keep_image(ctx, img), g);
 					}
 					else if (display == DIS_INLINE)
 					{
-						box = new_box(ctx, g->pool, markup_dir);
+						box = new_short_box(ctx, g->pool, markup_dir);
 						fz_apply_css_style(ctx, g->set, &box->style, &match);
 						insert_inline_box(ctx, box, top, markup_dir, g);
 						generate_image(ctx, box, fz_keep_image(ctx, img), g);
@@ -771,7 +781,10 @@ generate_boxes(fz_context *ctx,
 				if (lang)
 					child_lang = fz_text_language_from_string(lang);
 
-				box = new_box(ctx, g->pool, child_dir);
+				if (display == DIS_INLINE)
+					box = new_short_box(ctx, g->pool, child_dir);
+				else
+					box = new_box(ctx, g->pool, child_dir);
 				fz_apply_css_style(ctx, g->set, &box->style, &match);
 
 				id = fz_xml_att(node, "id");
@@ -869,7 +882,7 @@ generate_boxes(fz_context *ctx,
 				if (top->type != BOX_INLINE)
 				{
 					/* Create anonymous inline box, with the same style as the top block box. */
-					box = new_box(ctx, g->pool, markup_dir);
+					box = new_short_box(ctx, g->pool, markup_dir);
 					insert_inline_box(ctx, box, top, markup_dir, g);
 					box->style = top->style;
 					/* Make sure not to recursively multiply font sizes. */
@@ -1201,6 +1214,25 @@ detect_directionality(fz_context *ctx, fz_pool *pool, fz_html_box *box)
 		fz_rethrow(ctx);
 }
 
+/* Here we look for places where box->next actually means
+ * 'the last of my children', and correct it by setting
+ * next == NULL. We can spot these because box->next->up == box. */
+static void
+fix_nexts(fz_html_box *box)
+{
+	while (box)
+	{
+		if (box->down)
+			fix_nexts(box->down);
+		if (box->next && box->next->up == box)
+		{
+			box->next = NULL;
+			break;
+		}
+		box = box->next;
+	}
+}
+
 fz_html *
 fz_parse_html(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const char *base_uri, fz_buffer *buf, const char *user_css)
 {
@@ -1288,6 +1320,7 @@ fz_parse_html(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const cha
 		// TODO: transfer page margins out of this hacky box
 
 		generate_boxes(ctx, root, html->root, &match, 0, 0, DEFAULT_DIR, FZ_LANG_UNSET, &g);
+		fix_nexts(html->root);
 
 		detect_directionality(ctx, g.pool, html->root);
 
