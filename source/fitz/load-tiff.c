@@ -343,7 +343,7 @@ tiff_decode_data(fz_context *ctx, struct tiff *tiff, const unsigned char *rp, un
 			stm = fz_open_faxd(ctx, encstm,
 					tiff->compression == 4 ? -1 :
 					tiff->compression == 2 ? 0 :
-					tiff->g3opts & 1,
+					(int) (tiff->g3opts & 1),
 					0,
 					tiff->compression == 2,
 					tiff->imagewidth,
@@ -882,7 +882,7 @@ tiff_read_tag(fz_context *ctx, struct tiff *tiff, unsigned offset)
 
 	case JPEGTables:
 		/* Check both value and value + count to allow for overflow */
-		if (value > tiff->ep - tiff->bp || value + count > tiff->ep - tiff->bp)
+		if (value > (size_t)(tiff->ep - tiff->bp) || value + count > (size_t)(tiff->ep - tiff->bp))
 			fz_throw(ctx, FZ_ERROR_GENERIC, "TIFF JPEG tables out of range");
 		tiff->jpegtables = tiff->bp + value;
 		tiff->jpegtableslen = count;
@@ -1208,7 +1208,7 @@ tiff_decode_ifd(fz_context *ctx, struct tiff *tiff)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "too few components for transparency mask");
 	if (tiff->colorspace && tiff->colormap && tiff->samplesperpixel < 1)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "too few components for RGBPal");
-	if (tiff->colorspace && !tiff->colormap && tiff->samplesperpixel < fz_colorspace_n(ctx, tiff->colorspace))
+	if (tiff->colorspace && !tiff->colormap && tiff->samplesperpixel < (unsigned) fz_colorspace_n(ctx, tiff->colorspace))
 		fz_throw(ctx, FZ_ERROR_GENERIC, "fewer components per pixel than indicated by colorspace");
 
 	switch (tiff->resolutionunit)
