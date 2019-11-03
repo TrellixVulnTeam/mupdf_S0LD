@@ -1,9 +1,10 @@
-#include "mupdf/fitz.h"
+#include "../fitz/fitz-imp.h"
 #include "mupdf/ucdn.h"
 #include "html-imp.h"
 
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 enum { T, R, B, L };
 
@@ -109,6 +110,7 @@ struct genstate
 	int at_bol;
 	int emit_white;
 	int last_brk_cls;
+	fz_css_style_splay *styles;
 };
 
 static int iswhite(int c)
@@ -141,9 +143,10 @@ static void fz_drop_html_flow(fz_context *ctx, fz_html_flow *flow)
 	}
 }
 
-static fz_html_flow *add_flow(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box, int type)
+static fz_html_flow *add_flow(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box, int type, int extras)
 {
-	fz_html_flow *flow = fz_pool_alloc(ctx, pool, sizeof *flow);
+	size_t size = (type == FLOW_IMAGE ? sizeof(fz_html_flow) : offsetof(fz_html_flow, content) + extras);
+	fz_html_flow *flow = fz_pool_alloc(ctx, pool, size);
 	flow->type = type;
 	flow->expand = 0;
 	flow->bidi_level = 0;
@@ -157,29 +160,28 @@ static fz_html_flow *add_flow(fz_context *ctx, fz_pool *pool, fz_html_box *top, 
 
 static void add_flow_space(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box)
 {
-	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_SPACE);
+	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_SPACE, 0);
 	flow->expand = 1;
 }
 
 static void add_flow_break(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box)
 {
-	(void)add_flow(ctx, pool, top, inline_box, FLOW_BREAK);
+	(void)add_flow(ctx, pool, top, inline_box, FLOW_BREAK, 0);
 }
 
 static void add_flow_sbreak(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box)
 {
-	(void)add_flow(ctx, pool, top, inline_box, FLOW_SBREAK);
+	(void)add_flow(ctx, pool, top, inline_box, FLOW_SBREAK, 0);
 }
 
 static void add_flow_shyphen(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box)
 {
-	(void)add_flow(ctx, pool, top, inline_box, FLOW_SHYPHEN);
+	(void)add_flow(ctx, pool, top, inline_box, FLOW_SHYPHEN, 0);
 }
 
 static void add_flow_word(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box, const char *a, const char *b, int lang)
 {
-	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_WORD);
-	flow->content.text = fz_pool_alloc(ctx, pool, b - a + 1);
+	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_WORD, b - a + 1);
 	memcpy(flow->content.text, a, b - a);
 	flow->content.text[b - a] = 0;
 	flow->markup_lang = lang;
@@ -187,13 +189,13 @@ static void add_flow_word(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_h
 
 static void add_flow_image(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box, fz_image *img)
 {
-	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_IMAGE);
+	fz_html_flow *flow = add_flow(ctx, pool, top, inline_box, FLOW_IMAGE, 0);
 	flow->content.image = fz_keep_image(ctx, img);
 }
 
 static void add_flow_anchor(fz_context *ctx, fz_pool *pool, fz_html_box *top, fz_html_box *inline_box)
 {
-	(void)add_flow(ctx, pool, top, inline_box, FLOW_ANCHOR);
+	(void)add_flow(ctx, pool, top, inline_box, FLOW_ANCHOR, 0);
 }
 
 static fz_html_flow *split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *flow, size_t offset)
@@ -202,13 +204,10 @@ static fz_html_flow *split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *fl
 	char *text;
 	size_t len;
 
+	assert(flow->type == FLOW_WORD);
+
 	if (offset == 0)
 		return flow;
-	new_flow = fz_pool_alloc(ctx, pool, sizeof *flow);
-	*new_flow = *flow;
-	new_flow->next = flow->next;
-	flow->next = new_flow;
-
 	text = flow->content.text;
 	while (*text && offset)
 	{
@@ -217,7 +216,10 @@ static fz_html_flow *split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *fl
 		offset--;
 	}
 	len = strlen(text);
-	new_flow->content.text = fz_pool_alloc(ctx, pool, len+1);
+	new_flow = fz_pool_alloc(ctx, pool, offsetof(fz_html_flow, content) + len+1);
+	memcpy(new_flow, flow, offsetof(fz_html_flow, content));
+	new_flow->next = flow->next;
+	flow->next = new_flow;
 	strcpy(new_flow->content.text, text);
 	*text = 0;
 	return new_flow;
@@ -226,7 +228,7 @@ static fz_html_flow *split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *fl
 static void flush_space(fz_context *ctx, fz_html_box *flow, fz_html_box *inline_box, int lang, struct genstate *g)
 {
 	static const char *space = " ";
-	int bsp = inline_box->style.white_space & WS_ALLOW_BREAK_SPACE;
+	int bsp = inline_box->style->white_space & WS_ALLOW_BREAK_SPACE;
 	fz_pool *pool = g->pool;
 	if (g->emit_white)
 	{
@@ -281,9 +283,9 @@ static void generate_text(fz_context *ctx, fz_html_box *box, const char *text, i
 {
 	fz_html_box *flow;
 	fz_pool *pool = g->pool;
-	int collapse = box->style.white_space & WS_COLLAPSE;
-	int bsp = box->style.white_space & WS_ALLOW_BREAK_SPACE;
-	int bnl = box->style.white_space & WS_FORCE_BREAK_NEWLINE;
+	int collapse = box->style->white_space & WS_COLLAPSE;
+	int bsp = box->style->white_space & WS_ALLOW_BREAK_SPACE;
+	int bnl = box->style->white_space & WS_FORCE_BREAK_NEWLINE;
 
 	static const char *space = " ";
 
@@ -483,8 +485,7 @@ static void init_box(fz_context *ctx, fz_html_box *box, fz_bidi_direction markup
 	box->flow_head = NULL;
 	box->flow_tail = &box->flow_head;
 	box->markup_dir = markup_dir;
-
-	fz_default_css_style(ctx, &box->style);
+	box->style = NULL;
 }
 
 static void fz_drop_html_box(fz_context *ctx, fz_html_box *box)
@@ -498,13 +499,23 @@ static void fz_drop_html_box(fz_context *ctx, fz_html_box *box)
 	}
 }
 
+static void fz_drop_html_imp(fz_context *ctx, fz_storable *stor)
+{
+	fz_html *html = (fz_html *)stor;
+	fz_drop_html_box(ctx, html->root);
+	fz_drop_pool(ctx, html->pool);
+}
+
 void fz_drop_html(fz_context *ctx, fz_html *html)
 {
-	if (html)
-	{
-		fz_drop_html_box(ctx, html->root);
-		fz_drop_pool(ctx, html->pool);
-	}
+	fz_defer_reap_start(ctx);
+	fz_drop_storable(ctx, &html->storable);
+	fz_defer_reap_end(ctx);
+}
+
+fz_html *fz_keep_html(fz_context *ctx, fz_html *html)
+{
+	return fz_keep_storable(ctx, &html->storable);
 }
 
 static fz_html_box *new_box(fz_context *ctx, fz_pool *pool, fz_bidi_direction markup_dir)
@@ -641,8 +652,11 @@ static void insert_inline_box(fz_context *ctx, fz_html_box *box, fz_html_box *to
 		}
 		else
 		{
+			fz_css_style style;
 			fz_html_box *flow = new_short_box(ctx, g->pool, markup_dir);
 			flow->is_first_flow = !top->next;
+			fz_default_css_style(ctx, &style);
+			flow->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 			insert_box(ctx, flow, BOX_FLOW, top);
 			insert_box(ctx, box, BOX_INLINE, flow);
 			g->at_bol = 1;
@@ -665,6 +679,7 @@ generate_boxes(fz_context *ctx,
 	fz_html_box *box, *last_top;
 	const char *tag;
 	int display;
+	fz_css_style style;
 
 	while (node)
 	{
@@ -690,7 +705,8 @@ generate_boxes(fz_context *ctx,
 				else
 				{
 					box = new_short_box(ctx, g->pool, markup_dir);
-					fz_apply_css_style(ctx, g->set, &box->style, &match);
+					fz_apply_css_style(ctx, g->set, &style, &match);
+					box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 					top = insert_break_box(ctx, box, top);
 				}
 				g->at_bol = 1;
@@ -705,17 +721,18 @@ generate_boxes(fz_context *ctx,
 					const char *w_att = fz_xml_att(node, "width");
 					const char *h_att = fz_xml_att(node, "height");
 					box = new_short_box(ctx, g->pool, markup_dir);
-					fz_apply_css_style(ctx, g->set, &box->style, &match);
+					fz_apply_css_style(ctx, g->set, &style, &match);
 					if (w_att && (w = fz_atoi(w_att)) > 0)
 					{
-						box->style.width.value = w;
-						box->style.width.unit = strchr(w_att, '%') ? N_PERCENT : N_LENGTH;
+						style.width.value = w;
+						style.width.unit = strchr(w_att, '%') ? N_PERCENT : N_LENGTH;
 					}
 					if (h_att && (h = fz_atoi(h_att)) > 0)
 					{
-						box->style.height.value = h;
-						box->style.height.unit = strchr(h_att, '%') ? N_PERCENT : N_LENGTH;
+						style.height.value = h;
+						style.height.unit = strchr(h_att, '%') ? N_PERCENT : N_LENGTH;
 					}
+					box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 					insert_inline_box(ctx, box, top, markup_dir, g);
 					generate_image(ctx, box, load_html_image(ctx, g->zip, g->base_uri, src), g);
 				}
@@ -724,7 +741,8 @@ generate_boxes(fz_context *ctx,
 			else if (tag[0]=='s' && tag[1]=='v' && tag[2]=='g' && tag[3]==0)
 			{
 				box = new_short_box(ctx, g->pool, markup_dir);
-				fz_apply_css_style(ctx, g->set, &box->style, &match);
+				fz_apply_css_style(ctx, g->set, &style, &match);
+				box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 				insert_inline_box(ctx, box, top, markup_dir, g);
 				generate_image(ctx, box, load_svg_image(ctx, g->zip, g->base_uri, node), g);
 			}
@@ -741,17 +759,21 @@ generate_boxes(fz_context *ctx,
 					{
 						fz_html_box *imgbox;
 						box = new_box(ctx, g->pool, markup_dir);
-						fz_apply_css_style(ctx, g->set, &box->style, &match);
+						fz_default_css_style(ctx, &style);
+						fz_apply_css_style(ctx, g->set, &style, &match);
+						box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 						top = insert_block_box(ctx, box, top);
 						imgbox = new_short_box(ctx, g->pool, markup_dir);
-						fz_apply_css_style(ctx, g->set, &imgbox->style, &match);
+						fz_apply_css_style(ctx, g->set, &style, &match);
+						imgbox->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 						insert_inline_box(ctx, imgbox, box, markup_dir, g);
 						generate_image(ctx, imgbox, fz_keep_image(ctx, img), g);
 					}
 					else if (display == DIS_INLINE)
 					{
 						box = new_short_box(ctx, g->pool, markup_dir);
-						fz_apply_css_style(ctx, g->set, &box->style, &match);
+						fz_apply_css_style(ctx, g->set, &style, &match);
+						box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 						insert_inline_box(ctx, box, top, markup_dir, g);
 						generate_image(ctx, box, fz_keep_image(ctx, img), g);
 					}
@@ -785,7 +807,9 @@ generate_boxes(fz_context *ctx,
 					box = new_short_box(ctx, g->pool, child_dir);
 				else
 					box = new_box(ctx, g->pool, child_dir);
-				fz_apply_css_style(ctx, g->set, &box->style, &match);
+				fz_default_css_style(ctx, &style);
+				fz_apply_css_style(ctx, g->set, &style, &match);
+				box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 
 				id = fz_xml_att(node, "id");
 				if (id)
@@ -872,7 +896,7 @@ generate_boxes(fz_context *ctx,
 		else
 		{
 			const char *text = fz_xml_text(node);
-			int collapse = top->style.white_space & WS_COLLAPSE;
+			int collapse = top->style->white_space & WS_COLLAPSE;
 			if (collapse && is_all_white(text))
 			{
 				g->emit_white = 1;
@@ -882,12 +906,16 @@ generate_boxes(fz_context *ctx,
 				if (top->type != BOX_INLINE)
 				{
 					/* Create anonymous inline box, with the same style as the top block box. */
+					fz_css_style style;
 					box = new_short_box(ctx, g->pool, markup_dir);
+					fz_default_css_style(ctx, &style);
+					box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 					insert_inline_box(ctx, box, top, markup_dir, g);
-					box->style = top->style;
+					style = *top->style;
 					/* Make sure not to recursively multiply font sizes. */
-					box->style.font_size.value = 1;
-					box->style.font_size.unit = N_SCALE;
+					style.font_size.value = 1;
+					style.font_size.unit = N_SCALE;
+					box->style = fz_css_enlist(ctx, &style, &g->styles, g->pool);
 					generate_text(ctx, box, text, markup_lang, g);
 				}
 				else
@@ -1185,6 +1213,7 @@ detect_flow_directionality(fz_context *ctx, fz_pool *pool, uni_buf *buffer, fz_b
 		data.flow = flow;
 		data.buffer = buffer;
 		fz_bidi_fragment_text(ctx, buffer->data, buffer->len, &bidi_dir, fragment_cb, &data, 0 /* Flags */);
+		flow = end;
 	}
 	return bidi_dir;
 }
@@ -1253,6 +1282,7 @@ fz_parse_html(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const cha
 	g.at_bol = 0;
 	g.emit_white = 0;
 	g.last_brk_cls = UCDN_LINEBREAK_CLASS_OP;
+	g.styles = NULL;
 
 	xml = fz_parse_xml(ctx, buf, 1);
 	root = fz_xml_root(xml);
@@ -1308,15 +1338,23 @@ fz_parse_html(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const cha
 
 	fz_try(ctx)
 	{
+		fz_css_style style;
+
 		g.pool = fz_new_pool(ctx);
 		html = fz_pool_alloc(ctx, g.pool, sizeof *html);
+		FZ_INIT_STORABLE(html, 1, fz_drop_html_imp);
 		html->pool = g.pool;
 		html->root = new_box(ctx, g.pool, DEFAULT_DIR);
+		html->layout_w = 0;
+		html->layout_h = 0;
+		html->layout_em = 0;
+		fz_default_css_style(ctx, &style);
 
 		match.up = NULL;
 		match.count = 0;
 		fz_match_css_at_page(ctx, &match, g.css);
-		fz_apply_css_style(ctx, g.set, &html->root->style, &match);
+		fz_apply_css_style(ctx, g.set, &style, &match);
+		html->root->style = fz_css_enlist(ctx, &style, &g.styles, g.pool);
 		// TODO: transfer page margins out of this hacky box
 
 		generate_boxes(ctx, root, html->root, &match, 0, 0, DEFAULT_DIR, FZ_LANG_UNSET, &g);
@@ -1378,18 +1416,18 @@ fz_debug_html_flow(fz_context *ctx, fz_html_flow *flow, int level)
 			}
 			sbox = flow->box;
 			indent(level);
-			printf("span em=%g font='%s'", sbox->em, fz_font_name(ctx, sbox->style.font));
-			if (fz_font_is_serif(ctx, sbox->style.font))
+			printf("span em=%g font='%s'", sbox->em, fz_font_name(ctx, sbox->style->font));
+			if (fz_font_is_serif(ctx, sbox->style->font))
 				printf(" serif");
 			else
 				printf(" sans");
-			if (fz_font_is_monospaced(ctx, sbox->style.font))
+			if (fz_font_is_monospaced(ctx, sbox->style->font))
 				printf(" monospaced");
-			if (fz_font_is_bold(ctx, sbox->style.font))
+			if (fz_font_is_bold(ctx, sbox->style->font))
 				printf(" bold");
-			if (fz_font_is_italic(ctx, sbox->style.font))
+			if (fz_font_is_italic(ctx, sbox->style->font))
 				printf(" italic");
-			if (sbox->style.small_caps)
+			if (sbox->style->small_caps)
 				printf(" small-caps");
 			printf("\n");
 			indent(level);
@@ -1480,4 +1518,122 @@ void
 fz_debug_html(fz_context *ctx, fz_html_box *box)
 {
 	fz_debug_html_box(ctx, box, 0);
+}
+
+static size_t
+fz_html_size(fz_context *ctx, fz_html *html)
+{
+	return html ? fz_pool_size(ctx, html->pool) : 0;
+}
+
+/* Magic to make html storable. */
+typedef struct {
+	int refs;
+	void *doc;
+	int chapter_num;
+} fz_html_key;
+
+static int
+fz_make_hash_html_key(fz_context *ctx, fz_store_hash *hash, void *key_)
+{
+	fz_html_key *key = (fz_html_key *)key_;
+	hash->u.pi.ptr = key->doc;
+	hash->u.pi.i = key->chapter_num;
+	return 1;
+}
+
+static void *
+fz_keep_html_key(fz_context *ctx, void *key_)
+{
+	fz_html_key *key = (fz_html_key *)key_;
+	return fz_keep_imp(ctx, key, &key->refs);
+}
+
+static void
+fz_drop_html_key(fz_context *ctx, void *key_)
+{
+	fz_html_key *key = (fz_html_key *)key_;
+	if (fz_drop_imp(ctx, key, &key->refs))
+	{
+		fz_free(ctx, key);
+	}
+}
+
+static int
+fz_cmp_html_key(fz_context *ctx, void *k0_, void *k1_)
+{
+	fz_html_key *k0 = (fz_html_key *)k0_;
+	fz_html_key *k1 = (fz_html_key *)k1_;
+	return k0->doc == k1->doc && k0->chapter_num == k1->chapter_num;
+}
+
+static void
+fz_format_html_key(fz_context *ctx, char *s, int n, void *key_)
+{
+	fz_html_key *key = (fz_html_key *)key_;
+	fz_snprintf(s, n, "(html doc=%p, ch=%d)", key->doc, key->chapter_num);
+}
+
+static const fz_store_type fz_html_store_type =
+{
+	fz_make_hash_html_key,
+	fz_keep_html_key,
+	fz_drop_html_key,
+	fz_cmp_html_key,
+	fz_format_html_key,
+	NULL
+};
+
+fz_html *fz_store_html(fz_context *ctx, fz_html *html, void *doc, int chapter)
+{
+	fz_html_key *key = NULL;
+	fz_html *other_html;
+
+	/* Stick the parsed html in the store */
+	fz_var(key);
+
+	fz_try(ctx)
+	{
+		key = fz_malloc_struct(ctx, fz_html_key);
+		key->refs = 1;
+		key->doc = doc;
+		key->chapter_num = chapter;
+		other_html = fz_store_item(ctx, key, html, fz_html_size(ctx, html), &fz_html_store_type);
+		if (other_html)
+		{
+			fz_drop_html(ctx, html);
+			html = other_html;
+		}
+	}
+	fz_always(ctx)
+		fz_drop_html_key(ctx, key);
+	fz_catch(ctx)
+	{
+		/* Do nothing */
+	}
+
+	return html;
+}
+
+fz_html *fz_find_html(fz_context *ctx, void *doc, int chapter)
+{
+	fz_html_key key;
+
+	key.refs = 1;
+	key.doc = doc;
+	key.chapter_num = chapter;
+	return fz_find_item(ctx, &fz_drop_html_imp, &key, &fz_html_store_type);
+}
+
+static int
+html_filter_store(fz_context *ctx, void *doc, void *key_)
+{
+	fz_html_key *key = (fz_html_key *)key_;
+
+	return (doc == key->doc);
+}
+
+void fz_purge_stored_html(fz_context *ctx, void *doc)
+{
+	fz_filter_store(ctx, html_filter_store, doc, &fz_html_store_type);
 }

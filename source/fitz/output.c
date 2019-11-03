@@ -390,6 +390,12 @@ fz_write_byte(fz_context *ctx, fz_output *out, unsigned char x)
 	}
 }
 
+void
+fz_write_char(fz_context *ctx, fz_output *out, char x)
+{
+	fz_write_byte(ctx, out, (unsigned char)x);
+}
+
 /*
 	Write data to output.
 
@@ -455,6 +461,12 @@ fz_write_int32_be(fz_context *ctx, fz_output *out, int x)
 }
 
 void
+fz_write_uint32_be(fz_context *ctx, fz_output *out, unsigned int x)
+{
+	fz_write_int32_be(ctx, out, (unsigned int)x);
+}
+
+void
 fz_write_int32_le(fz_context *ctx, fz_output *out, int x)
 {
 	char data[4];
@@ -465,6 +477,12 @@ fz_write_int32_le(fz_context *ctx, fz_output *out, int x)
 	data[3] = x>>24;
 
 	fz_write_data(ctx, out, data, 4);
+}
+
+void
+fz_write_uint32_le(fz_context *ctx, fz_output *out, unsigned int x)
+{
+	fz_write_int32_le(ctx, out, (int)x);
 }
 
 void
@@ -479,6 +497,12 @@ fz_write_int16_be(fz_context *ctx, fz_output *out, int x)
 }
 
 void
+fz_write_uint16_be(fz_context *ctx, fz_output *out, unsigned int x)
+{
+	fz_write_int16_be(ctx, out, (int)x);
+}
+
+void
 fz_write_int16_le(fz_context *ctx, fz_output *out, int x)
 {
 	char data[2];
@@ -487,6 +511,28 @@ fz_write_int16_le(fz_context *ctx, fz_output *out, int x)
 	data[1] = x>>8;
 
 	fz_write_data(ctx, out, data, 2);
+}
+
+void
+fz_write_uint16_le(fz_context *ctx, fz_output *out, unsigned int x)
+{
+	fz_write_int16_le(ctx, out, (int)x);
+}
+
+void
+fz_write_float_le(fz_context *ctx, fz_output *out, float f)
+{
+	union {float f; int32_t i;} u;
+	u.f = f;
+	fz_write_int32_le(ctx, out, u.i);
+}
+
+void
+fz_write_float_be(fz_context *ctx, fz_output *out, float f)
+{
+	union {float f; int32_t i;} u;
+	u.f = f;
+	fz_write_int32_be(ctx, out, u.i);
 }
 
 /*
