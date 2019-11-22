@@ -13,8 +13,11 @@
 #define stat _stat
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <windows.h>
+#endif
+
+#ifdef _MSC_VER
 #include <direct.h> /* for getcwd */
 #else
 #include <unistd.h> /* for getcwd */
