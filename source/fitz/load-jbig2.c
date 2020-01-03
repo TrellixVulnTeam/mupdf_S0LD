@@ -25,7 +25,7 @@ static void * JB2_Callback
 jbig2_alloc(unsigned long size, void *userdata)
 {
 	struct info *state = userdata;
-	return fz_malloc(state->ctx, size);
+	return Memento_label(fz_malloc(state->ctx, size), "jbig2_alloc");
 }
 
 static JB2_Error JB2_Callback
@@ -45,7 +45,7 @@ jbig2_message(const char *msg, JB2_Message_Level level, void *userdata)
 		switch (level)
 		{
 		case cJB2_Message_Information:
-#ifndef NDEBUG
+#ifdef JBIG2_DEBUG
 			fz_warn(state->ctx, "luratech jbig2 info: %s", msg);
 #endif
 			break;
@@ -154,7 +154,7 @@ jbig2_read_image(fz_context *ctx, struct info *jbig2, const unsigned char *buf, 
 		if (!only_metadata)
 		{
 			state->stride = (state->width + 7) >> 3;
-			state->output = fz_malloc(state->ctx, state->stride * state->height);
+			state->output = Memento_label(fz_malloc(state->ctx, state->stride * state->height), "jbig2_image");
 
 			err = JB2_Document_Decompress_Page(state->doc, scale, rect, jbig2_write, state);
 			if (err != cJB2_Error_OK)
@@ -253,7 +253,7 @@ error_callback(void *data, const char *msg, Jbig2Severity severity, int32_t seg_
 		fz_warn(ctx, "jbig2dec error: %s (segment %d)", msg, seg_idx);
 	else if (severity == JBIG2_SEVERITY_WARNING)
 		fz_warn(ctx, "jbig2dec warning: %s (segment %d)", msg, seg_idx);
-#ifndef NDEBUG
+#ifdef JBIG2_DEBUG
 	else if (severity == JBIG2_SEVERITY_INFO)
 		fz_warn(ctx, "jbig2dec info: %s (segment %d)", msg, seg_idx);
 	else if (severity == JBIG2_SEVERITY_DEBUG)
@@ -282,8 +282,8 @@ static void *fz_jbig2_realloc(Jbig2Allocator *allocator, void *p, size_t size)
 		return NULL;
 	}
 	if (p == NULL)
-		return fz_malloc(ctx, size);
-	return fz_realloc_no_throw(ctx, p, size);
+		return Memento_label(fz_malloc(ctx, size), "jbig2_realloc");
+	return Memento_label(fz_realloc_no_throw(ctx, p, size), "jbig2_realloc");
 }
 
 static fz_pixmap *

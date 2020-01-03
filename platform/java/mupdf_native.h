@@ -437,26 +437,34 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_Document_finalize
 /*
  * Class:     com_artifex_mupdf_fitz_Document
  * Method:    openNativeWithPath
- * Signature: (Ljava/lang/String;)Lcom/artifex/mupdf/fitz/Document;
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)Lcom/artifex/mupdf/fitz/Document;
  */
 JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Document_openNativeWithPath
-  (JNIEnv *, jclass, jstring);
+  (JNIEnv *, jclass, jstring, jstring);
 
 /*
  * Class:     com_artifex_mupdf_fitz_Document
  * Method:    openNativeWithBuffer
- * Signature: ([BLjava/lang/String;)Lcom/artifex/mupdf/fitz/Document;
+ * Signature: (Ljava/lang/String;[B[B)Lcom/artifex/mupdf/fitz/Document;
  */
 JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Document_openNativeWithBuffer
-  (JNIEnv *, jclass, jbyteArray, jstring);
+  (JNIEnv *, jclass, jstring, jbyteArray, jbyteArray);
 
 /*
  * Class:     com_artifex_mupdf_fitz_Document
  * Method:    openNativeWithStream
- * Signature: (Lcom/artifex/mupdf/fitz/SeekableInputStream;Ljava/lang/String;)Lcom/artifex/mupdf/fitz/Document;
+ * Signature: (Ljava/lang/String;Lcom/artifex/mupdf/fitz/SeekableInputStream;Lcom/artifex/mupdf/fitz/SeekableInputStream;)Lcom/artifex/mupdf/fitz/Document;
  */
 JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Document_openNativeWithStream
-  (JNIEnv *, jclass, jobject, jstring);
+  (JNIEnv *, jclass, jstring, jobject, jobject);
+
+/*
+ * Class:     com_artifex_mupdf_fitz_Document
+ * Method:    openNativeWithPathAndStream
+ * Signature: (Ljava/lang/String;Lcom/artifex/mupdf/fitz/SeekableInputStream;)Lcom/artifex/mupdf/fitz/Document;
+ */
+JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Document_openNativeWithPathAndStream
+  (JNIEnv *, jclass, jstring, jobject);
 
 /*
  * Class:     com_artifex_mupdf_fitz_Document
@@ -465,6 +473,22 @@ JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Document_openNativeWithStr
  */
 JNIEXPORT jboolean JNICALL Java_com_artifex_mupdf_fitz_Document_recognize
   (JNIEnv *, jclass, jstring);
+
+/*
+ * Class:     com_artifex_mupdf_fitz_Document
+ * Method:    saveAccelerator
+ * Signature: (Ljava/lang/String;)V
+ */
+JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_Document_saveAccelerator
+  (JNIEnv *, jobject, jstring);
+
+/*
+ * Class:     com_artifex_mupdf_fitz_Document
+ * Method:    outputAccelerator
+ * Signature: (Lcom/artifex/mupdf/fitz/SeekableOutputStream;)V
+ */
+JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_Document_outputAccelerator
+  (JNIEnv *, jobject, jobject);
 
 /*
  * Class:     com_artifex_mupdf_fitz_Document
@@ -1510,10 +1534,10 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_addInkListStrok
 
 /*
  * Class:     com_artifex_mupdf_fitz_PDFAnnotation
- * Method:    addInkListVertex
+ * Method:    addInkListStrokeVertex
  * Signature: (FF)V
  */
-JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_addInkListVertex
+JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_addInkListStrokeVertex
   (JNIEnv *, jobject, jfloat, jfloat);
 
 /*

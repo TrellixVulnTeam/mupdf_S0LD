@@ -274,7 +274,7 @@ static void epub_load_accelerator(fz_context *ctx, epub_document *doc, fz_stream
 			}
 
 			acc = fz_malloc_struct(ctx, epub_accelerator);
-			acc->pages_in_chapter = fz_malloc_array(ctx, num_chapters, int);
+			acc->pages_in_chapter = Memento_label(fz_malloc_array(ctx, num_chapters, int), "accel_pages_in_chapter");
 			acc->max_chapters = acc->num_chapters = num_chapters;
 			acc->layout_w = w;
 			acc->layout_h = h;
@@ -636,7 +636,7 @@ epub_parse_ncx(fz_context *ctx, epub_document *doc, const char *path)
 	{
 		fz_dirname(base_uri, path, sizeof base_uri);
 		buf = fz_read_archive_entry(ctx, zip, path);
-		ncx = fz_parse_xml(ctx, buf, 0);
+		ncx = fz_parse_xml(ctx, buf, 0, 0);
 		doc->outline = epub_parse_ncx_imp(ctx, doc, fz_xml_find_down(fz_xml_root(ncx), "navMap"), base_uri);
 	}
 	fz_always(ctx)
@@ -687,7 +687,7 @@ epub_parse_header(fz_context *ctx, epub_document *doc)
 		/* parse META-INF/container.xml to find OPF */
 
 		buf = fz_read_archive_entry(ctx, zip, "META-INF/container.xml");
-		container_xml = fz_parse_xml(ctx, buf, 0);
+		container_xml = fz_parse_xml(ctx, buf, 0, 0);
 		fz_drop_buffer(ctx, buf);
 		buf = NULL;
 
@@ -703,7 +703,7 @@ epub_parse_header(fz_context *ctx, epub_document *doc)
 		/* parse OPF to find NCX and spine */
 
 		buf = fz_read_archive_entry(ctx, zip, full_path);
-		content_opf = fz_parse_xml(ctx, buf, 0);
+		content_opf = fz_parse_xml(ctx, buf, 0, 0);
 		fz_drop_buffer(ctx, buf);
 		buf = NULL;
 
@@ -818,7 +818,6 @@ epub_init(fz_context *ctx, fz_archive *zip, fz_stream *accel)
 
 	doc = fz_new_derived_document(ctx, epub_document);
 	doc->zip = zip;
-	doc->set = fz_new_html_font_set(ctx);
 
 	doc->super.drop_document = epub_drop_document;
 	doc->super.layout = epub_layout;
@@ -833,15 +832,13 @@ epub_init(fz_context *ctx, fz_archive *zip, fz_stream *accel)
 	doc->super.output_accelerator = epub_output_accelerator;
 	doc->super.is_reflowable = 1;
 
-	doc->css_sum = user_css_sum(ctx);
-
 	fz_try(ctx)
 	{
+		doc->set = fz_new_html_font_set(ctx);
+		doc->css_sum = user_css_sum(ctx);
 		epub_load_accelerator(ctx, doc, accel);
 		epub_parse_header(ctx, doc);
 	}
-	fz_always(ctx)
-		fz_drop_stream(ctx, accel);
 	fz_catch(ctx)
 	{
 		fz_drop_document(ctx, &doc->super);
@@ -861,21 +858,32 @@ static fz_document *
 epub_open_document(fz_context *ctx, const char *filename, const char *accel)
 {
 	fz_stream *afile = NULL;
+	fz_document *doc;
 
 	if (accel)
 		afile = fz_open_file(ctx, accel);
-	if (strstr(filename, "META-INF/container.xml") || strstr(filename, "META-INF\\container.xml"))
-	{
-		char dirname[2048], *p;
-		fz_strlcpy(dirname, filename, sizeof dirname);
-		p = strstr(dirname, "META-INF");
-		*p = 0;
-		if (!dirname[0])
-			fz_strlcpy(dirname, ".", sizeof dirname);
-		return epub_init(ctx, fz_open_directory(ctx, dirname), afile);
-	}
 
-	return epub_init(ctx, fz_open_zip_archive(ctx, filename), afile);
+	fz_try(ctx)
+	{
+		if (strstr(filename, "META-INF/container.xml") || strstr(filename, "META-INF\\container.xml"))
+		{
+			char dirname[2048], *p;
+			fz_strlcpy(dirname, filename, sizeof dirname);
+			p = strstr(dirname, "META-INF");
+			*p = 0;
+			if (!dirname[0])
+				fz_strlcpy(dirname, ".", sizeof dirname);
+			doc = epub_init(ctx, fz_open_directory(ctx, dirname), afile);
+		}
+		else
+			doc = epub_init(ctx, fz_open_zip_archive(ctx, filename), afile);
+	}
+	fz_always(ctx)
+		fz_drop_stream(ctx, afile);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return doc;
 }
 
 static int

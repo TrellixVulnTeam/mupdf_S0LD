@@ -941,7 +941,7 @@ static char *concat_text(fz_context *ctx, fz_xml *root)
 		const char *text = fz_xml_text(node);
 		n += text ? strlen(text) : 0;
 	}
-	s = fz_malloc(ctx, n);
+	s = Memento_label(fz_malloc(ctx, n), "concat_html");
 	for (node = fz_xml_down(root); node; node = fz_xml_next(node))
 	{
 		const char *text = fz_xml_text(node);
@@ -1284,7 +1284,7 @@ fz_parse_html(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const cha
 	g.last_brk_cls = UCDN_LINEBREAK_CLASS_OP;
 	g.styles = NULL;
 
-	xml = fz_parse_xml(ctx, buf, 1);
+	xml = fz_parse_xml(ctx, buf, 1, 1);
 	root = fz_xml_root(xml);
 
 	fz_try(ctx)

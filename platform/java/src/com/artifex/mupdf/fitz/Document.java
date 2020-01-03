@@ -24,27 +24,46 @@ public class Document
 		pointer = p;
 	}
 
-	protected native static Document openNativeWithPath(String filename);
-	protected native static Document openNativeWithBuffer(byte[] buffer, String magic);
-	protected native static Document openNativeWithStream(SeekableInputStream stream, String mimeType);
+	protected native static Document openNativeWithPath(String filename, String accelerator);
+	protected native static Document openNativeWithBuffer(String magic, byte[] buffer, byte[] accelerator);
+	protected native static Document openNativeWithStream(String magic, SeekableInputStream stream, SeekableInputStream accelerator);
+	protected native static Document openNativeWithPathAndStream(String filename, SeekableInputStream accelerator);
 
 	public static Document openDocument(String filename) {
-		return openNativeWithPath(filename);
+		return openNativeWithPath(filename, null);
+	}
+
+	public static Document openDocument(String filename, String accelerator) {
+		return openNativeWithPath(filename, accelerator);
+	}
+
+	public static Document openDocument(String filename, SeekableInputStream accelerator) {
+		return openNativeWithPathAndStream(filename, accelerator);
 	}
 
 	public static Document openDocument(byte[] buffer, String magic) {
-		return openNativeWithBuffer(buffer, magic);
+		return openNativeWithBuffer(magic, buffer, null);
+	}
+
+	public static Document openDocument(byte[] buffer, String magic, byte[] accelerator) {
+		return openNativeWithBuffer(magic, buffer, accelerator);
 	}
 
 	public static Document openDocument(SeekableInputStream stream, String magic) {
-		return openNativeWithStream(stream, magic);
+		return openNativeWithStream(magic, stream, null);
+	}
+
+	public static Document openDocument(SeekableInputStream stream, String magic, SeekableInputStream accelerator) {
+		return openNativeWithStream(magic, stream, accelerator);
 	}
 
 	public static native boolean recognize(String magic);
 
+	public native void saveAccelerator(String filename);
+	public native void outputAccelerator(SeekableOutputStream stream);
+
 	public native boolean needsPassword();
 	public native boolean authenticatePassword(String password);
-
 
 	public native int countChapters();
 	public native int countPages(int chapter);
@@ -129,7 +148,7 @@ public class Document
 				return new Location(i, number - start);
 			start += np;
 		}
-		return new Location(start, np - 1);
+		return new Location(i - 1, np - 1);
 	}
 
 	public int pageNumberFromLocation(Location loc) {

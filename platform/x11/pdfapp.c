@@ -166,7 +166,7 @@ static int zoom_out(int oldres)
 	return zoomlist[0];
 }
 
-static void pdfapp_warn(pdfapp_t *app, const char *fmt, ...)
+void pdfapp_warn(pdfapp_t *app, const char *fmt, ...)
 {
 	char buf[1024];
 	va_list ap;
@@ -177,7 +177,7 @@ static void pdfapp_warn(pdfapp_t *app, const char *fmt, ...)
 	winwarn(app, buf);
 }
 
-static void pdfapp_error(pdfapp_t *app, char *msg)
+void pdfapp_error(pdfapp_t *app, char *msg)
 {
 	winerror(app, msg);
 }
@@ -685,7 +685,7 @@ static int pdfapp_save(pdfapp_t *app)
 
 		if (strcmp(buf, app->docpath) != 0)
 		{
-			wincopyfile(app->docpath, buf);
+			wincopyfile(app, app->docpath, buf);
 			pdf_save_document(app->ctx, idoc, buf, &opts);
 			pdfapp_close(app);
 			pdfapp_open(app, buf, 1);
@@ -698,7 +698,7 @@ static int pdfapp_save(pdfapp_t *app)
 
 			fz_try(app->ctx)
 			{
-				wincopyfile(app->docpath, buf);
+				wincopyfile(app, app->docpath, buf);
 				pdf_save_document(app->ctx, idoc, buf, &opts);
 				written = 1;
 			}
@@ -711,7 +711,7 @@ static int pdfapp_save(pdfapp_t *app)
 				char buf2[PATH_MAX];
 				fz_strlcpy(buf2, app->docpath, PATH_MAX);
 				pdfapp_close(app);
-				winreplacefile(buf, buf2);
+				winreplacefile(app, buf, buf2);
 				pdfapp_open(app, buf2, 1);
 
 				return written;
