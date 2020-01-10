@@ -1,5 +1,9 @@
 environment:
   matrix:
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+    TARGET: VS2019
+    platform: Win32
+    configuration: Release
   - TARGET: mingw
   - TARGET: cygwin-mingw32-cross
   - TARGET: msys2-mingw32-cross
@@ -11,6 +15,14 @@ before_build:
     make version"
 
 for:
+- 
+    matrix:
+        only: 
+            - TARGET: VS2019
+    build:          
+        project: platform\win32\mupdf.sln
+    after_build: 
+        cmd: dir C:\projects\mupdf\platform\win32\Release\*.exe
 - 
     matrix:
         only: 
