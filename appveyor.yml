@@ -4,81 +4,90 @@ environment:
   - TARGET: cygwin-mingw32-cross
   - TARGET: msys2-mingw32-cross
 
-install:
-- cmd: if [%TARGET%]==[mingw] (
-    del /f /q /s C:\MinGW\ >NUL &&
-    rmdir /q /s C:\MinGW\ &&
-    curl -fsSL -o C:\mingw-get.zip https://osdn.net/dl/mingw/mingw-get-0.6.3-mingw32-pre-20170905-1-bin.zip &&
-    7z x C:\mingw-get.zip -oC:\MinGW &&
-    C:\MinGW\bin\mingw-get update &&
-    C:\MinGW\bin\mingw-get install msys-base mingw32-base gcc-c++-bin )
-- cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
-    curl -fsS https://cygwin.com/setup-x86.exe > C:\cygwin\setup-x86.exe &&
-    C:\cygwin\setup-x86.exe -qnNd -l C:\cygwin\var\cache\setup -R c:\cygwin
-        -P gcc-core
-        -P binutils
-        -P w32api-headers
-        -P w32api-runtime
-        -P mingw64-i686-gcc-core
-        -P mingw64-i686-binutils
-        -P mingw64-i686-headers
-        -P mingw64-i686-runtime
-        -P mingw64-i686-gcc-g++ )
-- cmd: if [%TARGET%]==[msys2-mingw32-cross] (
-    C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S
-        bash
-        pacman
-        pacman-mirrors
-        msys2-runtime" &&
-    C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
-        make
-        mingw-w64-cross-toolchain
-        p7zip" )
 
 before_build:
 - cmd: git submodule update --init
 - cmd: C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
     make version"
 
-build_script:
-- cmd: if [%TARGET%]==[mingw] (
-    C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
-    make OUT=/home/appveyor/mupdf/release
-    XLIBS+=-static-libgcc
-    XCFLAGS+=-DHAVE_MKGMTIME" )
-- cmd: if [%TARGET%]==[cygwin-mingw32-cross] (
-    C:\cygwin\bin\bash -e -l -c "cd /cygdrive/c/projects/mupdf &&
-    make OUT=/home/appveyor/mupdf/release
-    OS=mingw32-cross
-    XLIBS+=-static-libgcc
-    XCFLAGS+=-DHAVE_MKGMTIME" )
-- cmd: if [%TARGET%]==[msys2-mingw32-cross] (
-    C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
-    make OUT=/home/appveyor/mupdf/release
-    OS=mingw32-cross
-    XLIBS+=-static-libgcc
-    XCFLAGS+=-DHAVE_MKGMTIME
-    2>&1 | tee -a mupdf-$(git describe --tags)-build.log" )
-
-after_build:
-- cmd: if [%TARGET%]==[msys2-mingw32-cross] (
-    C:\msys64\usr\bin\bash -e -l -c "mkdir /c/projects/mupdf/mupdf-mingw &&
-        cp /home/appveyor/mupdf/release/mupdf-w32.exe
-            /home/appveyor/mupdf/release/mupdf-gl.exe
-            /home/appveyor/mupdf/release/mutool.exe
-            /c/projects/mupdf/mupdf-mingw/ &&
-        cp /c/projects/mupdf/README
-            /c/projects/mupdf/mupdf-mingw/README.txt &&
-        cp /c/projects/mupdf/CHANGES
-            /c/projects/mupdf/mupdf-mingw/CHANGES.txt &&
-        cp /c/projects/mupdf/COPYING
-            /c/projects/mupdf/mupdf-mingw/COPYING.txt &&
-        cd /c/projects/mupdf/mupdf-mingw &&
-        sed -i -e 's/\r*$/\r/' *.txt &&
-        cd .. &&
-        7z a mupdf-$(git describe --tags).zip mupdf-mingw &&
-        scripts/archive.sh &&
-        appveyor PushArtifact mupdf-$(git describe --tags).zip &&
-        appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.gz &&
-        appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.xz &&
-        appveyor PushArtifact mupdf-$(git describe --tags)-build.log" )
+for:
+- 
+    matrix:
+        only: 
+            - TARGET: mingw
+    install:
+    - cmd: del /f /q /s C:\MinGW\ >NUL &&
+        rmdir /q /s C:\MinGW\ &&
+        curl -fsSL -o C:\mingw-get.zip https://osdn.net/dl/mingw/mingw-get-0.6.3-mingw32-pre-20170905-1-bin.zip &&
+        7z x C:\mingw-get.zip -oC:\MinGW &&
+        C:\MinGW\bin\mingw-get update &&
+        C:\MinGW\bin\mingw-get install msys-base mingw32-base gcc-c++-bin
+    build_script:
+    - cmd: C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
+        make OUT=/home/appveyor/mupdf/release
+        XLIBS+=-static-libgcc
+        XCFLAGS+=-DHAVE_MKGMTIME"
+- 
+    matrix:
+        only: 
+            - TARGET: cygwin-mingw32-cross
+    install:
+    - cmd: curl -fsS https://cygwin.com/setup-x86.exe > C:\cygwin\setup-x86.exe &&
+        C:\cygwin\setup-x86.exe -qnNd -l C:\cygwin\var\cache\setup -R c:\cygwin
+            -P gcc-core
+            -P binutils
+            -P w32api-headers
+            -P w32api-runtime
+            -P mingw64-i686-gcc-core
+            -P mingw64-i686-binutils
+            -P mingw64-i686-headers
+            -P mingw64-i686-runtime
+            -P mingw64-i686-gcc-g++
+    build_script:
+    - cmd: C:\cygwin\bin\bash -e -l -c "cd /cygdrive/c/projects/mupdf &&
+        make OUT=/home/appveyor/mupdf/release
+        OS=mingw32-cross
+        XLIBS+=-static-libgcc
+        XCFLAGS+=-DHAVE_MKGMTIME"
+- 
+    matrix:
+        only: 
+            - TARGET: msys2-mingw32-cross
+    install:
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S
+            bash
+            pacman
+            pacman-mirrors
+            msys2-runtime" &&
+        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
+            make
+            mingw-w64-cross-toolchain
+            p7zip"
+    build_script:
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
+        make OUT=/home/appveyor/mupdf/release
+        OS=mingw32-cross
+        XLIBS+=-static-libgcc
+        XCFLAGS+=-DHAVE_MKGMTIME
+        2>&1 | tee -a mupdf-$(git describe --tags)-build.log"
+    after_build:
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "mkdir /c/projects/mupdf/mupdf-mingw &&
+            cp /home/appveyor/mupdf/release/mupdf-w32.exe
+                /home/appveyor/mupdf/release/mupdf-gl.exe
+                /home/appveyor/mupdf/release/mutool.exe
+                /c/projects/mupdf/mupdf-mingw/ &&
+            cp /c/projects/mupdf/README
+                /c/projects/mupdf/mupdf-mingw/README.txt &&
+            cp /c/projects/mupdf/CHANGES
+                /c/projects/mupdf/mupdf-mingw/CHANGES.txt &&
+            cp /c/projects/mupdf/COPYING
+                /c/projects/mupdf/mupdf-mingw/COPYING.txt &&
+            cd /c/projects/mupdf/mupdf-mingw &&
+            sed -i -e 's/\r*$/\r/' *.txt &&
+            cd .. &&
+            7z a mupdf-$(git describe --tags).zip mupdf-mingw &&
+            scripts/archive.sh &&
+            appveyor PushArtifact mupdf-$(git describe --tags).zip &&
+            appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.gz &&
+            appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.xz &&
+            appveyor PushArtifact mupdf-$(git describe --tags)-build.log"
