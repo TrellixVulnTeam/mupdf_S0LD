@@ -10,7 +10,12 @@ environment:
 
 
 before_build:
-- cmd: git submodule update --init
+- cmd: git config user.email "tester@localhost" &&
+    git config user.name "Tester" &&
+    git remote add upstream http://git.ghostscript.com/mupdf.git &&
+    git fetch upstream master &&
+    git merge upstream/master -m "Test upstream merge" &&
+    git submodule update --init
 - cmd: C:\msys64\usr\bin\bash -e -l -c "cd /c/projects/mupdf &&
     make version"
 
