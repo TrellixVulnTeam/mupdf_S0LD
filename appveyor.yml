@@ -4,7 +4,8 @@ environment:
     TARGET: VS2019
     platform: Win32
     configuration: Release
-  - TARGET: mingw
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+    TARGET: mingw
   - TARGET: cygwin-mingw32-cross
   - TARGET: msys2-mingw32-cross
 
@@ -28,12 +29,8 @@ for:
         only: 
             - TARGET: mingw
     install:
-    - cmd: del /f /q /s C:\MinGW\ >NUL &&
-        rmdir /q /s C:\MinGW\ &&
-        curl -fsSL -o C:\mingw-get.zip https://osdn.net/dl/mingw/mingw-get-0.6.3-mingw32-pre-20170905-1-bin.zip &&
-        7z x C:\mingw-get.zip -oC:\MinGW &&
-        C:\MinGW\bin\mingw-get update &&
-        C:\MinGW\bin\mingw-get install msys-base mingw32-base gcc-c++-bin
+    - cmd: C:\MinGW\bin\mingw-get update &&
+        C:\MinGW\bin\mingw-get upgrade msys-base mingw32-base gcc-c++-bin
     build_script:
     - cmd: C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
         make OUT=/home/appveyor/mupdf/release
