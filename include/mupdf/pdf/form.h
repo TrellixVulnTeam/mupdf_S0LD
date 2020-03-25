@@ -45,6 +45,8 @@ void pdf_choice_widget_set_value(fz_context *ctx, pdf_widget *tw, int n, const c
 int pdf_choice_field_option_count(fz_context *ctx, pdf_obj *field);
 const char *pdf_choice_field_option(fz_context *ctx, pdf_obj *field, int exportval, int i);
 
+int pdf_widget_is_signed(fz_context *ctx, pdf_widget *widget);
+
 /* Field flags */
 enum
 {
@@ -101,6 +103,8 @@ int pdf_set_choice_field_value(fz_context *ctx, pdf_widget *widget, const char *
 
 int pdf_signature_is_signed(fz_context *ctx, pdf_document *doc, pdf_obj *field);
 void pdf_signature_set_value(fz_context *ctx, pdf_document *doc, pdf_obj *field, pdf_pkcs7_signer *signer, int64_t stime);
+
+int pdf_count_signatures(fz_context *ctx, pdf_document *doc);
 
 void pdf_field_reset(fz_context *ctx, pdf_document *doc, pdf_obj *field);
 
