@@ -1015,7 +1015,10 @@ html_load_css(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const cha
 		{
 			char *s = concat_text(ctx, node);
 			fz_try(ctx)
+			{
 				fz_parse_css(ctx, css, s, "<style>");
+				fz_add_css_font_faces(ctx, set, zip, base_uri, css);
+			}
 			fz_catch(ctx)
 				fz_warn(ctx, "ignoring inline stylesheet");
 			fz_free(ctx, s);
@@ -1568,7 +1571,7 @@ fz_cmp_html_key(fz_context *ctx, void *k0_, void *k1_)
 }
 
 static void
-fz_format_html_key(fz_context *ctx, char *s, int n, void *key_)
+fz_format_html_key(fz_context *ctx, char *s, size_t n, void *key_)
 {
 	fz_html_key *key = (fz_html_key *)key_;
 	fz_snprintf(s, n, "(html doc=%p, ch=%d)", key->doc, key->chapter_num);

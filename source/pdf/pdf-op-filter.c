@@ -86,6 +86,7 @@ typedef struct pdf_filter_processor_s
 	pdf_text_object_state tos;
 	int Tm_pending;
 	int BT_pending;
+	int in_BT;
 	float Tm_adjust;
 	void *font_name;
 	tag_record *current_tags;
@@ -434,6 +435,7 @@ done_SC:
 			if (p->chain->op_BT)
 				p->chain->op_BT(ctx, p->chain);
 			p->BT_pending = 0;
+			p->in_BT = 1;
 		}
 		if (gstate->pending.text.char_space != gstate->sent.text.char_space)
 		{
@@ -688,7 +690,7 @@ update_mcid(fz_context *ctx, pdf_filter_processor *p)
  * we hit the end).
  */
 static void
-filter_string_to_segment(fz_context *ctx, pdf_filter_processor *p, unsigned char *buf, int len, int *pos, int *inc, int *removed_space)
+filter_string_to_segment(fz_context *ctx, pdf_filter_processor *p, unsigned char *buf, size_t len, size_t *pos, int *inc, int *removed_space)
 {
 	filter_gstate *gstate = p->gstate;
 	pdf_font_desc *fontdesc = gstate->pending.text.font;
@@ -779,11 +781,12 @@ push_adjustment_to_array(fz_context *ctx, pdf_filter_processor *p, pdf_obj *arr)
 }
 
 static void
-filter_show_string(fz_context *ctx, pdf_filter_processor *p, unsigned char *buf, int len)
+filter_show_string(fz_context *ctx, pdf_filter_processor *p, unsigned char *buf, size_t len)
 {
 	filter_gstate *gstate = p->gstate;
 	pdf_font_desc *fontdesc = gstate->pending.text.font;
-	int i, inc, removed_space;
+	int inc, removed_space;
+	size_t i;
 
 	if (!fontdesc)
 		return;
@@ -791,7 +794,7 @@ filter_show_string(fz_context *ctx, pdf_filter_processor *p, unsigned char *buf,
 	i = 0;
 	while (i < len)
 	{
-		int start = i;
+		size_t start = i;
 		filter_string_to_segment(ctx, p, buf, len, &i, &inc, &removed_space);
 		if (start != i)
 		{
@@ -843,13 +846,13 @@ filter_show_text(fz_context *ctx, pdf_filter_processor *p, pdf_obj *text)
 			if (pdf_is_string(ctx, item))
 			{
 				unsigned char *buf = (unsigned char *)pdf_to_str_buf(ctx, item);
-				int len = pdf_to_str_len(ctx, item);
-				int j = 0;
+				size_t len = pdf_to_str_len(ctx, item);
+				size_t j = 0;
 				int removed_space;
 				while (j < len)
 				{
 					int inc;
-					int start = j;
+					size_t start = j;
 					filter_string_to_segment(ctx, p, buf, len, &j, &inc, &removed_space);
 					if (start != j)
 					{
@@ -1051,6 +1054,14 @@ static void
 pdf_filter_Q(fz_context *ctx, pdf_processor *proc)
 {
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
+	filter_flush(ctx, p, FLUSH_TEXT);
+	if (p->in_BT)
+	{
+		if (p->chain->op_ET)
+			p->chain->op_ET(ctx, p->chain);
+		p->in_BT = 0;
+		p->BT_pending = 1;
+	}
 	filter_pop(ctx, p);
 }
 
@@ -1274,6 +1285,7 @@ pdf_filter_ET(fz_context *ctx, pdf_processor *proc)
 		filter_flush(ctx, p, 0);
 		if (p->chain->op_ET)
 			p->chain->op_ET(ctx, p->chain);
+		p->in_BT = 0;
 	}
 	p->BT_pending = 0;
 	if (p->filter->after_text_object)
@@ -1407,14 +1419,14 @@ pdf_filter_TJ(fz_context *ctx, pdf_processor *proc, pdf_obj *array)
 }
 
 static void
-pdf_filter_Tj(fz_context *ctx, pdf_processor *proc, char *str, int len)
+pdf_filter_Tj(fz_context *ctx, pdf_processor *proc, char *str, size_t len)
 {
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
 	filter_show_string(ctx, p, (unsigned char *)str, len);
 }
 
 static void
-pdf_filter_squote(fz_context *ctx, pdf_processor *proc, char *str, int len)
+pdf_filter_squote(fz_context *ctx, pdf_processor *proc, char *str, size_t len)
 {
 	/* Note, we convert all T' operators to (maybe) a T* and a Tj */
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
@@ -1428,7 +1440,7 @@ pdf_filter_squote(fz_context *ctx, pdf_processor *proc, char *str, int len)
 }
 
 static void
-pdf_filter_dquote(fz_context *ctx, pdf_processor *proc, float aw, float ac, char *str, int len)
+pdf_filter_dquote(fz_context *ctx, pdf_processor *proc, float aw, float ac, char *str, size_t len)
 {
 	/* Note, we convert all T" operators to (maybe) a T*,
 	 * (maybe) Tc, (maybe) Tw and a Tj. */

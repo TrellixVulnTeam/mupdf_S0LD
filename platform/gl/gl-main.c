@@ -12,6 +12,9 @@
 #include <signal.h>
 #endif
 
+#include "mupdf/helpers/pkcs7-check.h"
+#include "mupdf/helpers/pkcs7-openssl.h"
+
 #include "mujs.h"
 
 #ifndef PATH_MAX
@@ -187,6 +190,7 @@ static fz_location oldpage = {0,0}, currentpage = {0,0};
 static float oldzoom = DEFRES, currentzoom = DEFRES;
 static float oldrotate = 0, currentrotate = 0;
 
+static fz_output *trace_file = NULL;
 static int isfullscreen = 0;
 static int showoutline = 0;
 static int showlinks = 0;
@@ -283,13 +287,13 @@ static fz_location try_location(js_State *J)
 static void push_location(js_State *J, fz_location loc)
 {
 	if (loc.chapter == 0)
-		js_pushnumber(J, loc.page+1);
+		js_pushnumber(J, (double)loc.page+1);
 	else
 	{
 		js_newarray(J);
-		js_pushnumber(J, loc.chapter+1);
+		js_pushnumber(J, (double)loc.chapter+1);
 		js_setindex(J, -2, 0);
-		js_pushnumber(J, loc.page+1);
+		js_pushnumber(J, (double)loc.page+1);
 		js_setindex(J, -2, 1);
 	}
 }
@@ -614,6 +618,18 @@ void ui_show_warning_dialog(const char *fmt, ...)
 	ui.dialog = warning_dialog;
 }
 
+void trace_action(const char *fmt, ...)
+{
+	va_list args;
+	if (trace_file)
+	{
+		va_start(args, fmt);
+		fz_write_vprintf(ctx, trace_file, fmt, args);
+		fz_flush_output(ctx, trace_file);
+		va_end(args);
+	}
+}
+
 void update_title(void)
 {
 	char buf[256];
@@ -668,6 +684,9 @@ void load_page(void)
 {
 	fz_irect area;
 
+	if (trace_file)
+		trace_action("page = doc.loadPage(%d);\n", fz_page_number_from_location(ctx, doc, currentpage));
+
 	/* clear all editor selections */
 	if (selected_annot && pdf_annot_type(ctx, selected_annot) == PDF_ANNOT_WIDGET)
 		pdf_annot_event_blur(ctx, selected_annot);
@@ -685,6 +704,35 @@ void load_page(void)
 	fzpage = fz_load_chapter_page(ctx, doc, currentpage.chapter, currentpage.page);
 	if (pdf)
 		page = (pdf_page*)fzpage;
+
+	if (trace_file)
+	{
+		pdf_widget *w;
+		int i, s;
+
+		for (i = 0, s = 0, w = pdf_first_widget(ctx, page); w != NULL; i++, w = pdf_next_widget(ctx, w))
+			if (pdf_widget_type(ctx, w) == PDF_WIDGET_TYPE_SIGNATURE)
+			{
+				s++;
+				int signd = pdf_widget_is_signed(ctx, w);
+				trace_action("widget = page.getWidgets()[%d];\n", i);
+				if (signd)
+				{
+					int valid = pdf_validate_signature(ctx, w);
+					trace_action("if (!widget.isSigned()) { print(\"Expected signature %d (chapter %d, page %d) to be signed!\\n\"); }\n",
+						s, currentpage.chapter, currentpage.page);
+					trace_action(
+						"tmp = page.getWidgets()[%d].validateSignature();\n"
+						"if (tmp != %d) { print(\"Signature %d (chapter %d, page %d) was invalidated \" + tmp + \" updates ago - expected %d\\n\"); }\n",
+						i, valid, s, currentpage.chapter, currentpage.page, valid);
+				}
+				else
+				{
+					trace_action("if (widget.isSigned()) { print(\"Expected signature %d (chapter %d, page %d) to be unsigned!\\n\"); }\n",
+						s, currentpage.chapter, currentpage.page);
+				}
+			}
+	}
 
 	links = fz_load_links(ctx, fzpage);
 	page_text = fz_new_stext_page_from_page(ctx, fzpage, NULL);
@@ -1027,7 +1075,7 @@ static void do_links(fz_link *link)
 static void do_page_selection(void)
 {
 	static fz_point pt = { 0, 0 };
-	fz_quad hits[1000];
+	static fz_quad hits[1000];
 	int i, n;
 
 	if (ui_mouse_inside(view_page_area))
@@ -1204,6 +1252,8 @@ static void load_document(void)
 		}
 	}
 
+	trace_action("doc = new Document(%q);\n", filename);
+
 	doc = fz_open_accelerated_document(ctx, filename, accel);
 	if (fz_needs_password(ctx, doc))
 	{
@@ -1231,7 +1281,28 @@ static void load_document(void)
 	if (pdf)
 	{
 		if (enable_js)
+		{
+			trace_action("doc.enableJS();\n");
 			pdf_enable_js(ctx, pdf);
+		}
+		if (trace_file)
+		{
+			int vsns = pdf_count_versions(ctx, pdf);
+			trace_action(
+				"tmp = doc.countVersions();\n"
+				"if (%d != tmp) {\n"
+				"  print(\"Mismatch in number of versions of document. I expected %d and got \" + tmp + \"\\n\");\n"
+				"}\n", vsns, vsns);
+			if (vsns > 1)
+			{
+				int valid = pdf_validate_change_history(ctx, pdf);
+				trace_action(
+					"tmp = doc.validateChangeHistory();\n"
+					"if (tmp != %d) {\n"
+					"  print(\"Mismatch in change history validation. I expected %d and got \" + tmp + \"\\n\");\n"
+					"}\n", valid, valid);
+			}
+		}
 		if (anchor)
 			jump_to_page(pdf_lookup_anchor(ctx, pdf, anchor, NULL, NULL));
 	}
@@ -1242,7 +1313,7 @@ static void load_document(void)
 	}
 	anchor = NULL;
 
-	currentpage = fz_clamp_location(ctx, doc, currentpage);
+	oldpage = currentpage = fz_clamp_location(ctx, doc, currentpage);
 }
 
 void reload(void)
@@ -1410,10 +1481,10 @@ static void do_app(void)
 		case '-': set_zoom(zoom_out(currentzoom), ui.x, ui.y); break;
 		case '[': currentrotate -= 90; break;
 		case ']': currentrotate += 90; break;
-		case 'k': case KEY_UP: scroll_y -= 10; break;
-		case 'j': case KEY_DOWN: scroll_y += 10; break;
-		case 'h': case KEY_LEFT: scroll_x -= 10; break;
-		case 'l': case KEY_RIGHT: scroll_x += 10; break;
+		case 'k': case KEY_UP: scroll_y -= canvas_h/10; break;
+		case 'j': case KEY_DOWN: scroll_y += canvas_h/10; break;
+		case 'h': case KEY_LEFT: scroll_x -= canvas_w/10; break;
+		case 'l': case KEY_RIGHT: scroll_x += canvas_w/10; break;
 
 		case 'b': number = fz_maxi(number, 1); while (number--) smart_move_backward(); break;
 		case ' ': number = fz_maxi(number, 1); while (number--) smart_move_forward(); break;
@@ -1529,11 +1600,74 @@ static void do_app(void)
 	}
 }
 
+typedef struct
+{
+	int max;
+	int len;
+	pdf_obj **sig;
+} sigs_list;
+
+static void
+process_sigs(fz_context *ctx, pdf_obj *field, void *arg, pdf_obj **ft)
+{
+	sigs_list *sigs = (sigs_list *)arg;
+
+	if (!pdf_name_eq(ctx, pdf_dict_get(ctx, field, PDF_NAME(Type)), PDF_NAME(Annot)) ||
+		!pdf_name_eq(ctx, pdf_dict_get(ctx, field, PDF_NAME(Subtype)), PDF_NAME(Widget)) ||
+		!pdf_name_eq(ctx, pdf_dict_get(ctx, field, ft[0]), PDF_NAME(Sig)))
+		return;
+
+	if (sigs->len == sigs->max)
+	{
+		int newsize = sigs->max * 2;
+		if (newsize == 0)
+			newsize = 4;
+		sigs->sig = fz_realloc_array(ctx, sigs->sig, newsize, pdf_obj *);
+		sigs->max = newsize;
+	}
+
+	sigs->sig[sigs->len++] = field;
+}
+
+static char *short_signature_error_desc(pdf_signature_error err)
+{
+	switch (err)
+	{
+	case PDF_SIGNATURE_ERROR_OKAY:
+		return "OK";
+	case PDF_SIGNATURE_ERROR_NO_SIGNATURES:
+		return "No signatures";
+	case PDF_SIGNATURE_ERROR_NO_CERTIFICATE:
+		return "No certificate";
+	case PDF_SIGNATURE_ERROR_DIGEST_FAILURE:
+		return "Invalid";
+	case PDF_SIGNATURE_ERROR_SELF_SIGNED:
+		return "Self-signed";
+	case PDF_SIGNATURE_ERROR_SELF_SIGNED_IN_CHAIN:
+		return "Self-signed in chain";
+	case PDF_SIGNATURE_ERROR_NOT_TRUSTED:
+		return "Untrusted";
+	default:
+	case PDF_SIGNATURE_ERROR_UNKNOWN:
+		return "Unknown error";
+	}
+}
+
 static void do_info(void)
 {
 	char buf[100];
+	pdf_document *pdoc = pdf_specifics(ctx, doc);
+	sigs_list list = { 0, 0, NULL };
 
-	ui_dialog_begin(500, 14 * ui.lineheight);
+	if (pdoc)
+	{
+		static pdf_obj *ft_list[2] = { PDF_NAME(FT), NULL };
+		pdf_obj *ft;
+		pdf_obj *form_fields = pdf_dict_getp(ctx, pdf_trailer(ctx, pdoc), "Root/AcroForm/Fields");
+		pdf_walk_tree(ctx, form_fields, PDF_NAME(Kids), process_sigs, NULL, &list, &ft_list[0], &ft);
+	}
+
+	ui_dialog_begin(500, (14+list.len) * ui.lineheight);
 	ui_layout(T, X, W, 0, 0);
 
 	if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_TITLE, buf, sizeof buf) > 0)
@@ -1544,8 +1678,10 @@ static void do_info(void)
 		ui_label("Format: %s", buf);
 	if (fz_lookup_metadata(ctx, doc, FZ_META_ENCRYPTION, buf, sizeof buf) > 0)
 		ui_label("Encryption: %s", buf);
-	if (pdf_specifics(ctx, doc))
+	if (pdoc)
 	{
+		int updates = pdf_count_versions(ctx, pdoc);
+
 		if (fz_lookup_metadata(ctx, doc, "info:Creator", buf, sizeof buf) > 0)
 			ui_label("PDF Creator: %s", buf);
 		if (fz_lookup_metadata(ctx, doc, "info:Producer", buf, sizeof buf) > 0)
@@ -1564,6 +1700,63 @@ static void do_info(void)
 		else
 			fz_strlcat(buf, "none", sizeof buf);
 		ui_label("Permissions: %s", buf);
+		ui_label("PDF %sdocument with %d update%s",
+			pdf_doc_was_linearized(ctx, pdoc) ? "linearized " : "",
+			updates, updates > 1 ? "s" : "");
+		if (updates > 0)
+		{
+			int n = pdf_validate_change_history(ctx, pdoc);
+			if (n == 0)
+				ui_label("Change history seems valid.");
+			else if (n == 1)
+				ui_label("Invalid changes made to the document in the last update.");
+			else if (n == 2)
+				ui_label("Invalid changes made to the document in the penultimate update.");
+			else
+				ui_label("Invalid changes made to the document %d updates ago.", n);
+		}
+
+		if (list.len)
+		{
+			int i;
+			for (i = 0; i < list.len; i++)
+			{
+				pdf_obj *field = list.sig[i];
+				fz_try(ctx)
+				{
+					if (pdf_signature_is_signed(ctx, pdf, field))
+					{
+						if (pdf_supports_signatures(ctx))
+						{
+							pdf_signature_error sig_cert_error = pdf_check_certificate(ctx, pdf, field);
+							pdf_signature_error sig_digest_error = pdf_check_digest(ctx, pdf, field);
+							ui_label("Signature %d: CERT: %s, DIGEST: %s%s", i+1,
+								short_signature_error_desc(sig_cert_error),
+								short_signature_error_desc(sig_digest_error),
+									pdf_signature_incremental_change_since_signing(ctx, pdf, field) ? ", Changed since": "");
+						}
+						else
+							ui_label("Signature %d: Signed (cannot test validity)", i+1);
+					}
+					else
+						ui_label("Signature %d: Unsigned", i+1);
+				}
+				fz_catch(ctx)
+					ui_label("Signature %d: Error", i+1);
+			}
+			fz_free(ctx, list.sig);
+
+			if (updates == 0)
+				ui_label("No updates since document creation");
+			else
+			{
+				int n = pdf_validate_change_history(ctx, pdf);
+				if (n == 0)
+					ui_label("Document changes conform to permissions");
+				else
+					ui_label("Document permissions violated %d updates ago", n);
+			}
+		}
 	}
 	ui_label("Page: %d / %d", fz_page_number_from_location(ctx, doc, currentpage)+1, fz_count_pages(ctx, doc));
 	{
@@ -1579,7 +1772,6 @@ static void do_info(void)
 	}
 	ui_label("ICC rendering: %s.", currenticc ? "on" : "off");
 	ui_label("Spot rendering: %s.", currentseparations ? "on" : "off");
-
 	ui_dialog_end();
 }
 
@@ -1852,19 +2044,21 @@ static int document_filter(const char *filename)
 
 static void do_open_document_dialog(void)
 {
-	if (ui_open_file(filename))
+	if (ui_open_file(filename, "Select a document to open:"))
 	{
 		ui.dialog = NULL;
 		if (filename[0] == 0)
 			glutLeaveMainLoop();
 		else
-			load_document();
-		if (doc)
 		{
-			load_page();
-			render_page();
-			shrinkwrap();
-			update_title();
+			load_document();
+			if (doc)
+			{
+				load_page();
+				render_page();
+				shrinkwrap();
+				update_title();
+			}
 		}
 	}
 }
@@ -1881,6 +2075,7 @@ static void cleanup(void)
 		fz_debug_store(ctx);
 #endif
 
+	fz_drop_output(ctx, trace_file);
 	fz_drop_stext_page(ctx, page_text);
 	fz_drop_separations(ctx, seps);
 	fz_drop_link(ctx, links);
@@ -1906,6 +2101,7 @@ int main_utf8(int argc, char **argv)
 int main(int argc, char **argv)
 #endif
 {
+	const char *trace_file_name = NULL;
 	int c;
 
 #ifndef _WIN32
@@ -1917,7 +2113,7 @@ int main(int argc, char **argv)
 	screen_w = glutGet(GLUT_SCREEN_WIDTH) - SCREEN_FURNITURE_W;
 	screen_h = glutGet(GLUT_SCREEN_HEIGHT) - SCREEN_FURNITURE_H;
 
-	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJA:B:C:")) != -1)
+	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJA:B:C:T:")) != -1)
 	{
 		switch (c)
 		{
@@ -1934,11 +2130,22 @@ int main(int argc, char **argv)
 		case 'A': currentaa = fz_atoi(fz_optarg); break;
 		case 'C': currenttint = 1; tint_white = strtol(fz_optarg, NULL, 16); break;
 		case 'B': currenttint = 1; tint_black = strtol(fz_optarg, NULL, 16); break;
+		case 'T': trace_file_name = fz_optarg; break;
 		}
 	}
 
 	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
 	fz_register_document_handlers(ctx);
+
+	if (trace_file_name)
+	{
+		if (!strcmp(trace_file_name, "-"))
+			trace_file = fz_stdout(ctx);
+		else
+			trace_file = fz_new_output_with_path(ctx, trace_file_name, 0);
+		trace_action("var doc, page, annot, widget, tmp;\n");
+	}
+
 	if (layout_css)
 	{
 		fz_buffer *buf = fz_read_file(ctx, layout_css);
