@@ -10,7 +10,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#ifdef _WIN32
+#ifdef _MSC_VER
 #include <io.h>
 #else
 #include <unistd.h>
@@ -125,7 +125,7 @@ static void file_truncate(fz_context *ctx, void *opaque)
 	FILE *file = opaque;
 	fflush(file);
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 	_chsize_s(fileno(file), ftell(file));
 #else
 	ftruncate(fileno(file), ftell(file));
