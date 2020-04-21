@@ -17,15 +17,13 @@ static const char copy_right[] = "Copyright Artifex Software 2017";
 unsigned int icc_debug_index = 0;
 #endif
 
-typedef struct fz_icc_tag_s fz_icc_tag;
-
-struct fz_icc_tag_s
+typedef struct
 {
 	icTagSignature sig;
 	icUInt32Number offset;
 	icUInt32Number size;
 	unsigned char byte_padding;
-};
+} fz_icc_tag;
 
 #if SAVEICCPROFILE
 static void
@@ -315,7 +313,6 @@ gsicc_create_compute_cam(fz_context *ctx, float white_src[], float *cam)
 	matrixmult(ctx, &(cat02matrixinv[0]), 3, 3, temp_matrix, 3, 3, cam);
 }
 
-/* Create ICC profile from PDF calGray and calRGB definitions */
 fz_buffer *
 fz_new_icc_data_from_cal(fz_context *ctx,
 	float wp[3],

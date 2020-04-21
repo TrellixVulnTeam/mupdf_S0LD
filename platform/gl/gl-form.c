@@ -7,11 +7,10 @@
 #define PATH_MAX 2048
 #endif
 
-#include "mupdf/helpers/pkcs7-check.h"
 #include "mupdf/helpers/pkcs7-openssl.h"
 
 static pdf_widget *sig_widget;
-static char sig_designated_name[500];
+static char *sig_designated_name = NULL;
 static pdf_signature_error sig_cert_error;
 static pdf_signature_error sig_digest_error;
 static int sig_valid_until;
@@ -35,8 +34,7 @@ int do_sign(void)
 	}
 	fz_always(ctx)
 	{
-		if (signer)
-			signer->drop(signer);
+		pdf_drop_signer(ctx, signer);
 	}
 	fz_catch(ctx)
 	{
@@ -46,7 +44,7 @@ int do_sign(void)
 
 	if (pdf_update_page(ctx, sig_widget->page))
 	{
-		trace_action("page.update();\n");
+		trace_page_update();
 		render_page();
 	}
 	return ok;
@@ -206,10 +204,23 @@ static void show_sig_dialog(pdf_widget *widget)
 
 		if (pdf_signature_is_signed(ctx, pdf, widget->obj))
 		{
-			sig_cert_error = pdf_check_certificate(ctx, pdf, widget->obj);
-			sig_digest_error = pdf_check_digest(ctx, pdf, widget->obj);
+			pdf_pkcs7_verifier *verifier;
+			pdf_pkcs7_designated_name *dn;
+
 			sig_valid_until = pdf_validate_signature(ctx, widget);
-			pdf_signature_designated_name(ctx, pdf, widget->obj, sig_designated_name, sizeof(sig_designated_name));
+
+			verifier = pkcs7_openssl_new_verifier(ctx);
+
+			sig_cert_error = pdf_check_certificate(ctx, verifier, pdf, widget->obj);
+			sig_digest_error = pdf_check_digest(ctx, verifier, pdf, widget->obj);
+
+			dn = pdf_signature_get_signatory(ctx, verifier, pdf, widget->obj);
+			fz_free(ctx, sig_designated_name);
+			sig_designated_name = pdf_signature_format_designated_name(ctx, dn);
+			pdf_signature_drop_designated_name(ctx, dn);
+
+			pdf_drop_verifier(ctx, verifier);
+
 			ui.dialog = sig_verify_dialog;
 		}
 		else
@@ -251,7 +262,7 @@ static void tx_dialog(void)
 				pdf_set_text_field_value(ctx, tx_widget, tx_input.text);
 				if (pdf_update_page(ctx, tx_widget->page))
 				{
-					trace_action("page.update();\n");
+					trace_page_update();
 					render_page();
 				}
 				ui.dialog = NULL;
@@ -309,7 +320,7 @@ static void ch_dialog(void)
 			{
 				if (pdf_update_page(ctx, ch_widget->page))
 				{
-					trace_action("page.update();\n");
+					trace_page_update();
 					render_page();
 				}
 				ui.dialog = NULL;
@@ -445,7 +456,7 @@ void do_widget_canvas(fz_irect canvas_area)
 
 	if (pdf_update_page(ctx, page))
 	{
-		trace_action("page.update();\n");
+		trace_page_update();
 		render_page();
 	}
 }

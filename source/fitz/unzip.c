@@ -1,10 +1,9 @@
 #include "mupdf/fitz.h"
-#include "fitz-imp.h"
 
 #include <string.h>
 #include <limits.h>
 
-#include <zlib.h>
+#include "z-imp.h"
 
 #if !defined (INT32_MAX)
 #define INT32_MAX 2147483647L
@@ -21,22 +20,19 @@
 
 #define ZIP_ENCRYPTED_FLAG 0x1
 
-typedef struct zip_entry_s zip_entry;
-typedef struct fz_zip_archive_s fz_zip_archive;
-
-struct zip_entry_s
+typedef struct
 {
 	char *name;
 	uint64_t offset, csize, usize;
-};
+} zip_entry;
 
-struct fz_zip_archive_s
+typedef struct
 {
 	fz_archive super;
 
 	int count;
 	zip_entry *entries;
-};
+} fz_zip_archive;
 
 static void drop_zip_archive(fz_context *ctx, fz_archive *arch)
 {
@@ -408,11 +404,6 @@ static int count_zip_entries(fz_context *ctx, fz_archive *arch)
 	return zip->count;
 }
 
-/*
-	Detect if stream object is a zip archive.
-
-	Assumes that the stream object is seekable.
-*/
 int
 fz_is_zip_archive(fz_context *ctx, fz_stream *file)
 {
@@ -430,16 +421,6 @@ fz_is_zip_archive(fz_context *ctx, fz_stream *file)
 	return 1;
 }
 
-/*
-	Open a zip archive stream.
-
-	Open an archive using a seekable stream object rather than
-	opening a file or directory on disk.
-
-	An exception is throw if the stream is not a zip archive as
-	indicated by the presence of a zip signature.
-
-*/
 fz_archive *
 fz_open_zip_archive_with_stream(fz_context *ctx, fz_stream *file)
 {
@@ -470,15 +451,6 @@ fz_open_zip_archive_with_stream(fz_context *ctx, fz_stream *file)
 	return &zip->super;
 }
 
-/*
-	Open a zip archive file.
-
-	An exception is throw if the file is not a zip archive as
-	indicated by the presence of a zip signature.
-
-	filename: a path to a zip archive file as it would be given to
-	open(2).
-*/
 fz_archive *
 fz_open_zip_archive(fz_context *ctx, const char *filename)
 {

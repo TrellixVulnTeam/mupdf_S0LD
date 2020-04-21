@@ -12,7 +12,6 @@
 #include <signal.h>
 #endif
 
-#include "mupdf/helpers/pkcs7-check.h"
 #include "mupdf/helpers/pkcs7-openssl.h"
 
 #include "mujs.h"
@@ -25,10 +24,6 @@
 #include <unistd.h> /* for fork, exec, and getcwd */
 #else
 #include <direct.h> /* for getcwd */
-#endif
-
-#ifdef _WIN32
-char *realpath(const char *path, char *resolved_path); /* in gl-file.c */
 #endif
 
 #ifdef __APPLE__
@@ -304,7 +299,7 @@ static void load_history(void)
 	char absname[PATH_MAX];
 	int i, n;
 
-	if (!realpath(filename, absname))
+	if (!fz_realpath(filename, absname))
 		return;
 
 	J = js_newstate(NULL, NULL, 0);
@@ -381,7 +376,7 @@ static void save_history(void)
 	if (!doc)
 		return;
 
-	if (!realpath(filename, absname))
+	if (!fz_realpath(filename, absname))
 		return;
 
 	J = js_newstate(NULL, NULL, 0);
@@ -475,7 +470,7 @@ static int convert_to_accel_path(char outname[], char *absname, size_t len)
 static int get_accelerator_filename(char outname[], size_t len)
 {
 	char absname[PATH_MAX];
-	if (!realpath(filename, absname))
+	if (!fz_realpath(filename, absname))
 		return 0;
 	if (!convert_to_accel_path(outname, absname, len))
 		return 0;
@@ -618,6 +613,36 @@ void ui_show_warning_dialog(const char *fmt, ...)
 	ui.dialog = warning_dialog;
 }
 
+static void quit_dialog(void)
+{
+	ui_dialog_begin(500, (ui.gridsize+4)*3);
+	ui_layout(T, NONE, NW, 2, 2);
+	ui_label("%C The document has unsaved changes. Are you sure you want to quit?", 0x26a0); /* WARNING SIGN */
+	ui_layout(B, X, S, 2, 2);
+	ui_panel_begin(0, ui.gridsize, 0, 0, 0);
+	{
+		ui_layout(R, NONE, S, 0, 0);
+		if (ui_button("Save"))
+			do_save_pdf_file();
+		ui_spacer();
+		if (ui_button("Discard") || ui.key == 'q')
+			glutLeaveMainLoop();
+		ui_layout(L, NONE, S, 0, 0);
+		if (ui_button("Cancel") || ui.key == KEY_ESCAPE)
+			ui.dialog = NULL;
+	}
+	ui_panel_end();
+	ui_dialog_end();
+}
+
+void quit(void)
+{
+	if (pdf && pdf_has_unsaved_changes(ctx, pdf))
+		ui.dialog = quit_dialog;
+	else
+		glutLeaveMainLoop();
+}
+
 void trace_action(const char *fmt, ...)
 {
 	va_list args;
@@ -628,6 +653,13 @@ void trace_action(const char *fmt, ...)
 		fz_flush_output(ctx, trace_file);
 		va_end(args);
 	}
+}
+
+void trace_page_update(void)
+{
+	static int trace_idx = 1;
+	trace_action("page.update();\n");
+	trace_action("page.toPixmap(Identity, DeviceRGB).saveAsPNG(\"trace-%03d.png\");\n", trace_idx++);
 }
 
 void update_title(void)
@@ -787,6 +819,8 @@ void render_page(void)
 
 	ui_texture_from_pixmap(&page_tex, pix);
 	fz_drop_pixmap(ctx, pix);
+
+	FZ_LOG_DUMP_STORE(ctx, "Store state after page render:\n");
 }
 
 void render_page_if_changed(void)
@@ -1076,6 +1110,7 @@ static void do_page_selection(void)
 {
 	static fz_point pt = { 0, 0 };
 	static fz_quad hits[1000];
+	fz_rect rect;
 	int i, n;
 
 	if (ui_mouse_inside(view_page_area))
@@ -1102,7 +1137,20 @@ static void do_page_selection(void)
 		else if (ui.mod == GLUT_ACTIVE_CTRL + GLUT_ACTIVE_SHIFT)
 			fz_snap_selection(ctx, page_text, &page_a, &page_b, FZ_SELECT_LINES);
 
-		n = fz_highlight_selection(ctx, page_text, page_a, page_b, hits, nelem(hits));
+		if (ui.mod == GLUT_ACTIVE_SHIFT)
+		{
+			rect = fz_make_rect(
+					fz_min(page_a.x, page_b.x),
+					fz_min(page_a.y, page_b.y),
+					fz_max(page_a.x, page_b.x),
+					fz_max(page_a.y, page_b.y));
+			n = 1;
+			hits[0] = fz_quad_from_rect(rect);
+		}
+		else
+		{
+			n = fz_highlight_selection(ctx, page_text, page_a, page_b, hits, nelem(hits));
+		}
 
 		glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO); /* invert destination color */
 		glEnable(GL_BLEND);
@@ -1125,9 +1173,15 @@ static void do_page_selection(void)
 		{
 			char *s;
 #ifdef _WIN32
-			s = fz_copy_selection(ctx, page_text, page_a, page_b, 1);
+			if (ui.mod == GLUT_ACTIVE_SHIFT)
+				s = fz_copy_rectangle(ctx, page_text, rect, 1);
+			else
+				s = fz_copy_selection(ctx, page_text, page_a, page_b, 1);
 #else
-			s = fz_copy_selection(ctx, page_text, page_a, page_b, 0);
+			if (ui.mod == GLUT_ACTIVE_SHIFT)
+				s = fz_copy_rectangle(ctx, page_text, rect, 0);
+			else
+				s = fz_copy_selection(ctx, page_text, page_a, page_b, 0);
 #endif
 			ui_set_clipboard(s);
 			fz_free(ctx, s);
@@ -1444,7 +1498,7 @@ static void clear_search(void)
 static void do_app(void)
 {
 	if (ui.key == KEY_F4 && ui.mod == GLUT_ACTIVE_ALT)
-		glutLeaveMainLoop();
+		quit();
 
 	if (ui.down || ui.middle || ui.right || ui.key)
 		showinfo = 0;
@@ -1461,7 +1515,7 @@ static void do_app(void)
 		case 'F': showform = !showform; break;
 		case 'i': showinfo = !showinfo; break;
 		case 'r': reload(); break;
-		case 'q': glutLeaveMainLoop(); break;
+		case 'q': quit(); break;
 		case 'S': do_save_pdf_file(); break;
 
 		case '>': layout_em = number > 0 ? number : layout_em + 1; relayout(); break;
@@ -1726,17 +1780,15 @@ static void do_info(void)
 				{
 					if (pdf_signature_is_signed(ctx, pdf, field))
 					{
-						if (pdf_supports_signatures(ctx))
-						{
-							pdf_signature_error sig_cert_error = pdf_check_certificate(ctx, pdf, field);
-							pdf_signature_error sig_digest_error = pdf_check_digest(ctx, pdf, field);
-							ui_label("Signature %d: CERT: %s, DIGEST: %s%s", i+1,
-								short_signature_error_desc(sig_cert_error),
-								short_signature_error_desc(sig_digest_error),
-									pdf_signature_incremental_change_since_signing(ctx, pdf, field) ? ", Changed since": "");
-						}
-						else
-							ui_label("Signature %d: Signed (cannot test validity)", i+1);
+						pdf_pkcs7_verifier *verifier = pkcs7_openssl_new_verifier(ctx);
+						pdf_signature_error sig_cert_error = pdf_check_certificate(ctx, verifier, pdf, field);
+						pdf_signature_error sig_digest_error = pdf_check_digest(ctx, verifier, pdf, field);
+						ui_label("Signature %d: CERT: %s, DIGEST: %s%s", i+1,
+							short_signature_error_desc(sig_cert_error),
+							short_signature_error_desc(sig_digest_error),
+								pdf_signature_incremental_change_since_signing(ctx, pdf, field) ? ", Changed since": "");
+
+						pdf_drop_verifier(ctx, verifier);
 					}
 					else
 						ui_label("Signature %d: Unsigned", i+1);
@@ -1946,9 +1998,11 @@ void do_main(void)
 				search_hit_quads, nelem(search_hit_quads));
 			if (search_hit_count)
 			{
+				float search_hit_x = search_hit_quads[0].ul.x;
+				float search_hit_y = search_hit_quads[0].ul.y;
 				search_active = 0;
 				search_hit_page = search_page;
-				jump_to_location(search_hit_page);
+				jump_to_location_xy(search_hit_page, search_hit_x, search_hit_y);
 			}
 			else
 			{
@@ -2072,7 +2126,7 @@ static void cleanup(void)
 
 #ifndef NDEBUG
 	if (fz_atoi(getenv("FZ_DEBUG_STORE")))
-		fz_debug_store(ctx);
+		fz_debug_store(ctx, fz_stdout(ctx));
 #endif
 
 	fz_drop_output(ctx, trace_file);

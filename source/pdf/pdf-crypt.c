@@ -12,15 +12,13 @@ enum
 	PDF_CRYPT_UNKNOWN,
 };
 
-typedef struct pdf_crypt_filter_s pdf_crypt_filter;
-
-struct pdf_crypt_filter_s
+typedef struct
 {
 	int method;
 	int length;
-};
+} pdf_crypt_filter;
 
-struct pdf_crypt_s
+struct pdf_crypt
 {
 	pdf_obj *id;
 
@@ -43,11 +41,6 @@ struct pdf_crypt_s
 };
 
 static void pdf_parse_crypt_filter(fz_context *ctx, pdf_crypt_filter *cf, pdf_crypt *crypt, pdf_obj *name);
-
-/*
- * Create crypt object for decrypting strings and streams
- * given the Encryption and ID objects.
- */
 
 pdf_crypt *
 pdf_new_crypt(fz_context *ctx, pdf_obj *dict, pdf_obj *id)
@@ -755,17 +748,6 @@ static void pdf_saslprep_from_utf8(char *password, const char *utf8, int n)
 	fz_strlcpy(password, utf8, n);
 }
 
-/*
-	Attempt to authenticate a
-	password.
-
-	Returns 0 for failure, non-zero for success.
-
-	In the non-zero case:
-		bit 0 set => no password required
-		bit 1 set => user password authenticated
-		bit 2 set => owner password authenticated
-*/
 int
 pdf_authenticate_password(fz_context *ctx, pdf_document *doc, const char *pwd_utf8)
 {
@@ -1242,6 +1224,7 @@ void pdf_encrypt_data(fz_context *ctx, pdf_crypt *crypt, int num, int gen, void 
 
 	if (crypt->strf.method == PDF_CRYPT_AESV2 || crypt->strf.method == PDF_CRYPT_AESV3)
 	{
+		size_t len = 0;
 		fz_aes aes;
 		unsigned char iv[16];
 
@@ -1257,7 +1240,7 @@ void pdf_encrypt_data(fz_context *ctx, pdf_crypt *crypt, int num, int gen, void 
 
 		while (n > 0)
 		{
-			size_t len = n;
+			len = n;
 			if (len > 16)
 				len = 16;
 			memcpy(buffer, s, len);
@@ -1265,10 +1248,10 @@ void pdf_encrypt_data(fz_context *ctx, pdf_crypt *crypt, int num, int gen, void 
 				memset(&buffer[len], 16-(int)len, 16-len);
 			fz_aes_crypt_cbc(&aes, FZ_AES_ENCRYPT, 16, iv, buffer, buffer+16);
 			write_data(ctx, arg, buffer+16, 16);
-			s += 16;
-			n -= 16;
+			s += len;
+			n -= len;
 		}
-		if (n == 0) {
+		if (len == 16) {
 			memset(buffer, 16, 16);
 			fz_aes_crypt_cbc(&aes, FZ_AES_ENCRYPT, 16, iv, buffer, buffer+16);
 			write_data(ctx, arg, buffer+16, 16);

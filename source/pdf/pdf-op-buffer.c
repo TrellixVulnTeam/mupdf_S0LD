@@ -1,15 +1,13 @@
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
 
-typedef struct pdf_output_processor_s pdf_output_processor;
-
-struct pdf_output_processor_s
+typedef struct
 {
 	pdf_processor super;
 	fz_output *out;
 	int ahxencode;
 	int extgstate;
-};
+} pdf_output_processor;
 
 /* general graphics state */
 
@@ -811,15 +809,6 @@ pdf_drop_output_processor(fz_context *ctx, pdf_processor *proc)
 	fz_drop_output(ctx, out);
 }
 
-/*
-	Create an output processor. This
-	sends the incoming PDF operator stream to an fz_output stream.
-
-	out: The output stream to which operators will be sent.
-
-	ahxencode: If 0, then image streams will be send as binary,
-	otherwise they will be asciihexencoded.
-*/
 pdf_processor *
 pdf_new_output_processor(fz_context *ctx, fz_output *out, int ahxencode)
 {
@@ -951,16 +940,6 @@ pdf_new_output_processor(fz_context *ctx, fz_output *out, int ahxencode)
 	return (pdf_processor*)proc;
 }
 
-/*
-	Create a buffer processor. This
-	collects the incoming PDF operator stream into an fz_buffer.
-
-	buffer: The (possibly empty) buffer to which operators will be
-	appended.
-
-	ahxencode: If 0, then image streams will be send as binary,
-	otherwise they will be asciihexencoded.
-*/
 pdf_processor *
 pdf_new_buffer_processor(fz_context *ctx, fz_buffer *buffer, int ahxencode)
 {

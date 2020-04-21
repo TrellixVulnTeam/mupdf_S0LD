@@ -1,6 +1,5 @@
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
-#include "../fitz/fitz-imp.h" // ick!
 
 #include <string.h>
 #include <time.h>
@@ -70,7 +69,6 @@ pdf_drop_annots(fz_context *ctx, pdf_annot *annot)
 	}
 }
 
-/* Create transform to fit appearance stream to annotation Rect */
 fz_matrix
 pdf_annot_transform(fz_context *ctx, pdf_annot *annot)
 {
@@ -167,9 +165,6 @@ pdf_next_annot(fz_context *ctx, pdf_annot *annot)
 	return annot->next;
 }
 
-/*
-	Return the rectangle for an annotation on a page.
-*/
 fz_rect
 pdf_bound_annot(fz_context *ctx, pdf_annot *annot)
 {
@@ -287,11 +282,6 @@ static void check_allowed_subtypes(fz_context *ctx, pdf_annot *annot, pdf_obj *p
 		fz_throw(ctx, FZ_ERROR_GENERIC, "%s annotations have no %s property", pdf_to_name(ctx, subtype), pdf_to_name(ctx, property));
 }
 
-/*
-	create a new annotation of the specified type on the
-	specified page. The returned pdf_annot structure is owned by the page
-	and does not need to be freed.
-*/
 pdf_annot *
 pdf_create_annot_raw(fz_context *ctx, pdf_page *page, enum pdf_annot_type type)
 {
@@ -798,6 +788,46 @@ pdf_set_annot_border(fz_context *ctx, pdf_annot *annot, float w)
 	pdf_dict_del(ctx, annot->obj, PDF_NAME(Border)); /* deprecated */
 	pdf_dict_del(ctx, annot->obj, PDF_NAME(BE)); /* not supported */
 
+	pdf_dirty_annot(ctx, annot);
+}
+
+fz_text_language
+pdf_document_language(fz_context *ctx, pdf_document *doc)
+{
+	pdf_obj *trailer = pdf_trailer(ctx, doc);
+	pdf_obj *root = pdf_dict_get(ctx, trailer, PDF_NAME(Root));
+	pdf_obj *lang = pdf_dict_get(ctx, root, PDF_NAME(Lang));
+	return fz_text_language_from_string(pdf_to_text_string(ctx, lang));
+}
+
+void pdf_set_document_language(fz_context *ctx, pdf_document *doc, fz_text_language lang)
+{
+	pdf_obj *trailer = pdf_trailer(ctx, doc);
+	pdf_obj *root = pdf_dict_get(ctx, trailer, PDF_NAME(Root));
+	char buf[8];
+	if (lang == FZ_LANG_UNSET)
+		pdf_dict_del(ctx, root, PDF_NAME(Lang));
+	else
+		pdf_dict_put_text_string(ctx, root, PDF_NAME(Lang), fz_string_from_text_language(buf, lang));
+}
+
+fz_text_language
+pdf_annot_language(fz_context *ctx, pdf_annot *annot)
+{
+	pdf_obj *lang = pdf_dict_get_inheritable(ctx, annot->obj, PDF_NAME(Lang));
+	if (lang)
+		return fz_text_language_from_string(pdf_to_str_buf(ctx, lang));
+	return pdf_document_language(ctx, annot->page->doc);
+}
+
+void
+pdf_set_annot_language(fz_context *ctx, pdf_annot *annot, fz_text_language lang)
+{
+	char buf[8];
+	if (lang == FZ_LANG_UNSET)
+		pdf_dict_del(ctx, annot->obj, PDF_NAME(Lang));
+	else
+		pdf_dict_put_text_string(ctx, annot->obj, PDF_NAME(Lang), fz_string_from_text_language(buf, lang));
 	pdf_dirty_annot(ctx, annot);
 }
 
@@ -1360,6 +1390,7 @@ pdf_annot_ink_list_stroke_vertex(fz_context *ctx, pdf_annot *annot, int i, int k
 	return fz_transform_point(point, page_ctm);
 }
 
+/* FIXME: try/catch required for memory exhaustion */
 void
 pdf_set_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, const int *count, const fz_point *v)
 {

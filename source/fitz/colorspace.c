@@ -1,6 +1,6 @@
 #include "mupdf/fitz.h"
 
-#include "fitz-imp.h"
+#include "color-imp.h"
 
 #include <assert.h>
 #include <math.h>
@@ -216,7 +216,6 @@ int fz_colorspace_is_device_n(fz_context *ctx, fz_colorspace *cs)
 	return cs && (cs->type == FZ_COLORSPACE_SEPARATION);
 }
 
-/* True for CMYK, Separation and DeviceN colorspaces. */
 int fz_colorspace_is_subtractive(fz_context *ctx, fz_colorspace *cs)
 {
 	return cs && (cs->type == FZ_COLORSPACE_CMYK || cs->type == FZ_COLORSPACE_SEPARATION);
@@ -242,13 +241,11 @@ int fz_colorspace_is_device_cmyk(fz_context *ctx, fz_colorspace *cs)
 	return fz_colorspace_is_device(ctx, cs) && fz_colorspace_is_cmyk(ctx, cs);
 }
 
-/* True if DeviceN color space has only colorants from the CMYK set. */
 int fz_colorspace_device_n_has_only_cmyk(fz_context *ctx, fz_colorspace *cs)
 {
 	return cs && ((cs->flags & FZ_COLORSPACE_HAS_CMYK_AND_SPOTS) == FZ_COLORSPACE_HAS_CMYK);
 }
 
-/* True if DeviceN color space has cyan magenta yellow or black as one of its colorants. */
 int fz_colorspace_device_n_has_cmyk(fz_context *ctx, fz_colorspace *cs)
 {
 	return cs && (cs->flags & FZ_COLORSPACE_HAS_CMYK);
@@ -569,10 +566,6 @@ fz_clamp_color(fz_context *ctx, fz_colorspace *cs, const float *in, float *out)
 
 const fz_color_params fz_default_color_params = { FZ_RI_RELATIVE_COLORIMETRIC, 1, 0, 0 };
 
-/* Handle page specific default colorspace settings that PDF holds in its page resources.
- * Also track the output intent.
- */
-
 fz_default_colorspaces *fz_new_default_colorspaces(fz_context *ctx)
 {
 	fz_default_colorspaces *default_cs = fz_malloc_struct(ctx, fz_default_colorspaces);
@@ -696,9 +689,7 @@ void fz_set_default_output_intent(fz_context *ctx, fz_default_colorspaces *defau
 
 #if FZ_ENABLE_ICC
 
-typedef struct fz_link_key_s fz_link_key;
-
-struct fz_link_key_s {
+typedef struct {
 	int refs;
 	unsigned char src_md5[16];
 	unsigned char dst_md5[16];
@@ -709,7 +700,7 @@ struct fz_link_key_s {
 	unsigned char format;
 	unsigned char proof;
 	unsigned char bgr;
-};
+} fz_link_key;
 
 static void *
 fz_keep_link_key(fz_context *ctx, void *key_)

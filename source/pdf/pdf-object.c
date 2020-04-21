@@ -1,6 +1,5 @@
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
-#include "../fitz/fitz-imp.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -39,14 +38,14 @@ enum
 	PDF_FLAGS_MEMO_BASE_BOOL = 16
 };
 
-struct pdf_obj_s
+struct pdf_obj
 {
 	short refs;
 	unsigned char kind;
 	unsigned char flags;
 };
 
-typedef struct pdf_obj_num_s
+typedef struct
 {
 	pdf_obj super;
 	union
@@ -56,7 +55,7 @@ typedef struct pdf_obj_num_s
 	} u;
 } pdf_obj_num;
 
-typedef struct pdf_obj_string_s
+typedef struct
 {
 	pdf_obj super;
 	char *text; /* utf8 encoded text string */
@@ -64,13 +63,13 @@ typedef struct pdf_obj_string_s
 	char buf[1];
 } pdf_obj_string;
 
-typedef struct pdf_obj_name_s
+typedef struct
 {
 	pdf_obj super;
 	char n[1];
 } pdf_obj_name;
 
-typedef struct pdf_obj_array_s
+typedef struct
 {
 	pdf_obj super;
 	pdf_document *doc;
@@ -80,7 +79,7 @@ typedef struct pdf_obj_array_s
 	pdf_obj **items;
 } pdf_obj_array;
 
-typedef struct pdf_obj_dict_s
+typedef struct
 {
 	pdf_obj super;
 	pdf_document *doc;
@@ -90,7 +89,7 @@ typedef struct pdf_obj_dict_s
 	struct keyval *items;
 } pdf_obj_dict;
 
-typedef struct pdf_obj_ref_s
+typedef struct
 {
 	pdf_obj super;
 	pdf_document *doc; /* Only needed for arrays, dicts and indirects */
@@ -375,7 +374,6 @@ void pdf_set_int(fz_context *ctx, pdf_obj *obj, int64_t i)
 		NUM(obj)->u.i = i;
 }
 
-/* for use by pdf_crypt_obj_imp to decrypt AES string in place */
 void pdf_set_str_len(fz_context *ctx, pdf_obj *obj, size_t newlen)
 {
 	RESOLVE(obj);

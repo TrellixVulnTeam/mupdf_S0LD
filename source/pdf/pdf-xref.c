@@ -60,7 +60,7 @@ static void pdf_drop_xref_sections_imp(fz_context *ctx, pdf_document *doc, pdf_x
 		{
 			xref->unsaved_sigs = usig->next;
 			pdf_drop_obj(ctx, usig->field);
-			usig->signer->drop(usig->signer);
+			pdf_drop_signer(ctx, usig->signer);
 			fz_free(ctx, usig);
 		}
 	}
@@ -215,7 +215,6 @@ ensure_solid_xref(fz_context *ctx, pdf_document *doc, int num, int which)
 		extend_xref_index(ctx, doc, num);
 }
 
-/* Used while reading the individual xref sections from a file */
 pdf_xref_entry *pdf_get_populating_xref_entry(fz_context *ctx, pdf_document *doc, int num)
 {
 	/* Return an entry within the xref currently being populated */
@@ -249,10 +248,6 @@ pdf_xref_entry *pdf_get_populating_xref_entry(fz_context *ctx, pdf_document *doc
 	return &sub->table[num-sub->start];
 }
 
-/* Used after loading a document to access entries */
-/* This will never throw anything, or return NULL if it is
- * only asked to return objects in range within a 'solid'
- * xref. */
 pdf_xref_entry *pdf_get_xref_entry(fz_context *ctx, pdf_document *doc, int i)
 {
 	pdf_xref *xref = NULL;
@@ -422,7 +417,7 @@ void pdf_xref_store_unsaved_signature(fz_context *ctx, pdf_document *doc, pdf_ob
 	 * saving time */
 	unsaved_sig = fz_malloc_struct(ctx, pdf_unsaved_sig);
 	unsaved_sig->field = pdf_keep_obj(ctx, field);
-	unsaved_sig->signer = signer->keep(signer);
+	unsaved_sig->signer = signer->keep(ctx, signer);
 	unsaved_sig->next = NULL;
 	if (xref->unsaved_sigs_end == NULL)
 		xref->unsaved_sigs_end = &xref->unsaved_sigs;
@@ -449,8 +444,6 @@ int pdf_xref_obj_is_unsaved_signature(pdf_document *doc, pdf_obj *obj)
 	return 0;
 }
 
-/* Ensure that the current populating xref has a single subsection
- * that covers the entire range. */
 void pdf_ensure_solid_xref(fz_context *ctx, pdf_document *doc, int num)
 {
 	if (doc->num_xref_sections == 0)
@@ -459,7 +452,6 @@ void pdf_ensure_solid_xref(fz_context *ctx, pdf_document *doc, int num)
 	ensure_solid_xref(ctx, doc, num, doc->num_xref_sections-1);
 }
 
-/* Ensure that an object has been cloned into the incremental xref section */
 void pdf_xref_ensure_incremental_object(fz_context *ctx, pdf_document *doc, int num)
 {
 	pdf_xref_entry *new_entry, *old_entry;
@@ -1530,6 +1522,24 @@ pdf_init_document(fz_context *ctx, pdf_document *doc)
 	}
 }
 
+void
+pdf_invalidate_xfa(fz_context *ctx, pdf_document *doc)
+{
+	int i;
+
+	if (doc == NULL)
+		return;
+
+	for (i = 0; i < doc->xfa.count; i++)
+	{
+		fz_free(ctx, doc->xfa.entries[i].key);
+		fz_drop_xml(ctx, doc->xfa.entries[i].value);
+	}
+	doc->xfa.count = 0;
+	fz_free(ctx, doc->xfa.entries);
+	doc->xfa.entries = 0;
+}
+
 static void
 pdf_drop_document_imp(fz_context *ctx, pdf_document *doc)
 {
@@ -1601,14 +1611,10 @@ pdf_drop_document_imp(fz_context *ctx, pdf_document *doc)
 	fz_free(ctx, doc->rev_page_map);
 
 	fz_defer_reap_end(ctx);
+
+	pdf_invalidate_xfa(ctx, doc);
 }
 
-/*
-	Closes and frees an opened PDF document.
-
-	The resource store in the context associated with pdf_document
-	is emptied.
-*/
 void
 pdf_drop_document(fz_context *ctx, pdf_document *doc)
 {
@@ -2174,9 +2180,6 @@ pdf_count_objects(fz_context *ctx, pdf_document *doc)
 	return pdf_xref_len(ctx, doc);
 }
 
-/*
-	Allocate a slot in the xref table and return a fresh unused object number.
-*/
 int
 pdf_create_object(fz_context *ctx, pdf_document *doc)
 {
@@ -2198,9 +2201,6 @@ pdf_create_object(fz_context *ctx, pdf_document *doc)
 	return num;
 }
 
-/*
-	Remove object from xref table, marking the slot as free.
-*/
 void
 pdf_delete_object(fz_context *ctx, pdf_document *doc, int num)
 {
@@ -2226,9 +2226,6 @@ pdf_delete_object(fz_context *ctx, pdf_document *doc, int num)
 	x->obj = NULL;
 }
 
-/*
-	Replace object in xref table with the passed in object.
-*/
 void
 pdf_update_object(fz_context *ctx, pdf_document *doc, int num, pdf_obj *newobj)
 {
@@ -2257,13 +2254,6 @@ pdf_update_object(fz_context *ctx, pdf_document *doc, int num, pdf_obj *newobj)
 	pdf_set_obj_parent(ctx, newobj, num);
 }
 
-/*
-	Replace stream contents for object in xref table with the passed in buffer.
-
-	The buffer contents must match the /Filter setting if 'compressed' is true.
-	If 'compressed' is false, the /Filter and /DecodeParms entries are deleted.
-	The /Length entry is updated.
-*/
 void
 pdf_update_stream(fz_context *ctx, pdf_document *doc, pdf_obj *obj, fz_buffer *newbuf, int compressed)
 {
@@ -2336,6 +2326,14 @@ pdf_lookup_metadata(fz_context *ctx, pdf_document *doc, const char *key, char *b
 	return -1;
 }
 
+
+static fz_location
+pdf_resolve_link_imp(fz_context *ctx, fz_document *doc_, const char *uri, float *xp, float *yp)
+{
+	pdf_document *doc = (pdf_document*)doc_;
+	return fz_make_location(0, pdf_resolve_link(ctx, doc, uri, xp, yp));
+}
+
 /*
 	Initializers for the fz_document interface.
 
@@ -2368,15 +2366,6 @@ pdf_new_document(fz_context *ctx, fz_stream *file)
 	return doc;
 }
 
-/*
-	Opens a PDF document.
-
-	Same as pdf_open_document, but takes a stream instead of a
-	filename to locate the PDF document to open. Increments the
-	reference count of the stream. See fz_open_file,
-	fz_open_file_w or fz_open_fd for opening a stream, and
-	fz_drop_stream for closing an open stream.
-*/
 pdf_document *
 pdf_open_document_with_stream(fz_context *ctx, fz_stream *file)
 {
@@ -2394,23 +2383,6 @@ pdf_open_document_with_stream(fz_context *ctx, fz_stream *file)
 	return doc;
 }
 
-/*
-	Open a PDF document.
-
-	Open a PDF document by reading its cross reference table, so
-	MuPDF can locate PDF objects inside the file. Upon an broken
-	cross reference table or other parse errors MuPDF will restart
-	parsing the file from the beginning to try to rebuild a
-	(hopefully correct) cross reference table to allow further
-	processing of the file.
-
-	The returned pdf_document should be used when calling most
-	other PDF functions. Note that it wraps the context, so those
-	functions implicitly get access to the global state in
-	context.
-
-	filename: a path to a file as it would be given to open(2).
-*/
 pdf_document *
 pdf_open_document(fz_context *ctx, const char *filename)
 {
@@ -2768,10 +2740,6 @@ pdf_obj *pdf_progressive_advance(fz_context *ctx, pdf_document *doc, int pagenum
 	return doc->linear_page_refs[pagenum];
 }
 
-/*
-		Down-cast generic fitz objects into pdf specific variants.
-		Returns NULL if the objects are not from a PDF document.
-*/
 pdf_document *pdf_document_from_fz_document(fz_context *ctx, fz_document *ptr)
 {
 	return (pdf_document *)((ptr && ptr->count_pages == pdf_count_pages_imp) ? ptr : NULL);
@@ -2782,10 +2750,6 @@ pdf_page *pdf_page_from_fz_page(fz_context *ctx, fz_page *ptr)
 	return (pdf_page *)((ptr && ptr->bound_page == (fz_page_bound_page_fn*)pdf_bound_page) ? ptr : NULL);
 }
 
-/*
-	down-cast a fz_document to a pdf_document.
-	Returns NULL if underlying document is not PDF
-*/
 pdf_document *pdf_specifics(fz_context *ctx, fz_document *doc)
 {
 	return pdf_document_from_fz_document(ctx, doc);
@@ -3000,13 +2964,6 @@ void pdf_clear_xref_to_mark(fz_context *ctx, pdf_document *doc)
 	}
 }
 
-/* This function returns the number of versions that there
- * are in a file. i.e. 1 + the number of updates that
- * the file on disc has been through. i.e. internal
- * unsaved changes to the file (such as appearance streams)
- * are ignored. Also, the initial write of a linearized
- * file (which appears as a base file write + an incremental
- * update) is treated as a single version. */
 int
 pdf_count_versions(fz_context *ctx, pdf_document *doc)
 {
@@ -3207,7 +3164,7 @@ typedef struct
 
 /* This structure is used to hold the definition of which fields
  * are locked. */
-struct pdf_locked_fields_s
+struct pdf_locked_fields
 {
 	int p;
 	int all;
@@ -3289,12 +3246,12 @@ pdf_is_field_locked(fz_context *ctx, pdf_locked_fields *locked, const char *name
 /* Unfortunately, in C, there is no legal way to define a function
  * type that returns itself. We therefore have to use a struct
  * wrapper. */
-typedef struct filter_wrap_s
+typedef struct filter_wrap
 {
-	struct filter_wrap_s (*func)(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
+	struct filter_wrap (*func)(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 } filter_wrap;
 
-typedef struct filter_wrap_s (*filter_fn)(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
+typedef struct filter_wrap (*filter_fn)(fz_context *ctx, pdf_obj *dict, pdf_obj *key);
 
 #define RETURN_FILTER(f) { filter_wrap rf; rf.func = (f); return rf; }
 
@@ -3798,9 +3755,11 @@ find_locked_fields_value(fz_context *ctx, pdf_locked_fields *fields, pdf_obj *v)
 	for (i = 0; i < n; i++)
 	{
 		pdf_obj *sr = pdf_array_get(ctx, ref, i);
-		pdf_obj *tm, *tp;
+		pdf_obj *tm, *tp, *type;
 
-		if (!pdf_name_eq(ctx, pdf_dict_get(ctx, sr, PDF_NAME(Type)), PDF_NAME(SigRef)))
+		/* Type is optional, but if it exists, it'd better be SigRef. */
+		type = pdf_dict_get(ctx, sr, PDF_NAME(Type));
+		if (type != NULL && !pdf_name_eq(ctx, type, PDF_NAME(SigRef)))
 			continue;
 		tm = pdf_dict_get(ctx, sr, PDF_NAME(TransformMethod));
 		tp = pdf_dict_get(ctx, sr, PDF_NAME(TransformParams));
@@ -3917,11 +3876,31 @@ pdf_find_locked_fields_for_sig(fz_context *ctx, pdf_document *doc, pdf_obj *sig)
 
 	fz_try(ctx)
 	{
+		pdf_obj *ref;
+		int i, len;
+
 		/* Ensure it really is a sig */
 		if (!pdf_name_eq(ctx, pdf_dict_get(ctx, sig, PDF_NAME(Subtype)), PDF_NAME(Widget)) ||
 			!pdf_name_eq(ctx, pdf_dict_get_inheritable(ctx, sig, PDF_NAME(FT)), PDF_NAME(Sig)))
 			break;
 
+		/* Check the locking details given in the V (i.e. what the signature value
+		 * claims to lock). */
+		ref = pdf_dict_getp(ctx, sig, "V/Reference");
+		len = pdf_array_len(ctx, ref);
+		for (i = 0; i < len; i++)
+		{
+			pdf_obj *tp = pdf_dict_get(ctx, pdf_array_get(ctx, ref, i), PDF_NAME(TransformParams));
+			merge_lock_specification(ctx, fields, tp);
+		}
+
+		/* Also, check the locking details given in the Signature definition. This may
+		 * not strictly be necessary as it's supposed to be "what the form author told
+		 * the signature that it should lock". A well-formed signature should lock
+		 * at least that much (possibly with extra fields locked from the XFA). If the
+		 * signature doesn't lock as much as it was told to, we should be suspicious
+		 * of the signing application. It is not clear that this test is actually
+		 * necessary, or in keeping with what Acrobat does. */
 		merge_lock_specification(ctx, fields, pdf_dict_get(ctx, sig, PDF_NAME(Lock)));
 	}
 	fz_catch(ctx)
@@ -4098,11 +4077,6 @@ pdf_validate_changes(fz_context *ctx, pdf_document *doc, int version)
 	return result;
 }
 
-/* Checks the entire history of the document, and returns the number of
- * the last version that checked out OK.
- * i.e. 0 = "the entire history checks out OK".
- *      n = "none of the history checked out OK".
- */
 int
 pdf_validate_change_history(fz_context *ctx, pdf_document *doc)
 {
@@ -4121,7 +4095,8 @@ pdf_validate_change_history(fz_context *ctx, pdf_document *doc)
 }
 
 /* Return the version that obj appears in, or -1 for not found. */
-int pdf_find_incremental_update_num_for_obj(fz_context *ctx, pdf_document *doc, pdf_obj *obj)
+static int
+pdf_find_incremental_update_num_for_obj(fz_context *ctx, pdf_document *doc, pdf_obj *obj)
 {
 	pdf_xref *xref = NULL;
 	pdf_xref_subsec *sub;
@@ -4161,8 +4136,6 @@ int pdf_find_incremental_update_num_for_obj(fz_context *ctx, pdf_document *doc, 
 	return -1;
 }
 
-/* "Versions" allow for the first incremental update in a linearized file being
- * ignored. */
 int pdf_find_version_for_obj(fz_context *ctx, pdf_document *doc, pdf_obj *obj)
 {
 	int v = pdf_find_incremental_update_num_for_obj(ctx, doc, obj);
