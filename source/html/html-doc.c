@@ -6,24 +6,21 @@
 
 enum { T, R, B, L };
 
-typedef struct html_document_s html_document;
-typedef struct html_page_s html_page;
-
-struct html_document_s
+typedef struct
 {
 	fz_document super;
 	fz_archive *zip;
 	fz_html_font_set *set;
 	fz_html *html;
 	fz_outline *outline;
-};
+} html_document;
 
-struct html_page_s
+typedef struct
 {
 	fz_page super;
 	html_document *doc;
 	int number;
-};
+} html_page;
 
 static void
 htdoc_drop_document(fz_context *ctx, fz_document *doc_)
@@ -236,5 +233,7 @@ fz_document_handler html_document_handler =
 	htdoc_open_document,
 	htdoc_open_document_with_stream,
 	htdoc_extensions,
-	htdoc_mimetypes
+	htdoc_mimetypes,
+	NULL,
+	NULL,
 };

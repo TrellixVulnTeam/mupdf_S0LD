@@ -1,27 +1,25 @@
 #include "mupdf/fitz.h"
-#include "fitz-imp.h"
 
 #include <string.h>
 #include <assert.h>
 
 /*
-Simple hashtable with open addressing linear probe.
-Unlike text book examples, removing entries works
-correctly in this implementation, so it won't start
-exhibiting bad behaviour if entries are inserted
-and removed frequently.
+	Simple hashtable with open addressing linear probe.
+	Unlike text book examples, removing entries works
+	correctly in this implementation, so it won't start
+	exhibiting bad behaviour if entries are inserted
+	and removed frequently.
 */
 
 enum { MAX_KEY_LEN = 48 };
-typedef struct fz_hash_entry_s fz_hash_entry;
 
-struct fz_hash_entry_s
+typedef struct
 {
 	unsigned char key[MAX_KEY_LEN];
 	void *val;
-};
+} fz_hash_entry;
 
-struct fz_hash_table_s
+struct fz_hash_table
 {
 	int keylen;
 	int size;

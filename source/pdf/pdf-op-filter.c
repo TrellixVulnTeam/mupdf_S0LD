@@ -3,8 +3,6 @@
 
 #include <string.h>
 
-typedef struct filter_gstate_s filter_gstate;
-
 typedef enum
 {
 	FLUSH_CTM = 1,
@@ -17,9 +15,7 @@ typedef enum
 	FLUSH_FILL = 1+2
 } gstate_flush_flags;
 
-typedef struct pdf_filter_gstate_s pdf_filter_gstate;
-
-struct pdf_filter_gstate_s
+typedef struct pdf_filter_gstate
 {
 	fz_matrix ctm;
 	struct
@@ -43,24 +39,24 @@ struct pdf_filter_gstate_s
 		float miterlimit;
 	} stroke;
 	pdf_text_state text;
-};
+} pdf_filter_gstate;
 
-struct filter_gstate_s
+typedef struct filter_gstate
 {
-	filter_gstate *next;
+	struct filter_gstate *next;
 	int pushed;
 	pdf_filter_gstate pending;
 	pdf_filter_gstate sent;
-};
+} filter_gstate;
 
-typedef struct editable_str_s
+typedef struct
 {
 	char *utf8;
 	int edited;
 	int pos;
 } editable_str;
 
-typedef struct tag_record_s
+typedef struct tag_record
 {
 	int bdc;
 	char *tag;
@@ -72,10 +68,10 @@ typedef struct tag_record_s
 	editable_str alt;
 	editable_str actualtext;
 
-	struct tag_record_s *prev;
+	struct tag_record *prev;
 } tag_record;
 
-typedef struct pdf_filter_processor_s
+typedef struct
 {
 	pdf_processor super;
 	pdf_document *doc;
@@ -94,8 +90,6 @@ typedef struct pdf_filter_processor_s
 	pdf_obj *old_rdb, *new_rdb;
 	pdf_filter_options *filter;
 	fz_matrix transform;
-	int form_id;
-	int image_id;
 } pdf_filter_processor;
 
 static void
@@ -127,6 +121,22 @@ add_resource(fz_context *ctx, pdf_filter_processor *p, pdf_obj *key, const char 
 	if (!res)
 		res = pdf_dict_put_dict(ctx, p->new_rdb, key, 8);
 	pdf_dict_puts(ctx, res, name, val);
+}
+
+static void
+create_resource_name(fz_context *ctx, pdf_filter_processor *p, pdf_obj *key, const char *prefix, char *buf, int len)
+{
+	int i;
+	pdf_obj *res = pdf_dict_get(ctx, p->new_rdb, key);
+	if (!res)
+		res = pdf_dict_put_dict(ctx, p->new_rdb, key, 8);
+	for (i = 1; i < 65536; ++i)
+	{
+		fz_snprintf(buf, len, "%s%d", prefix, i);
+		if (!pdf_dict_gets(ctx, res, buf))
+			return;
+	}
+	fz_throw(ctx, FZ_ERROR_GENERIC, "Cannot create unique resource name");
 }
 
 static void
@@ -1401,6 +1411,7 @@ static void
 pdf_filter_Tstar(fz_context *ctx, pdf_processor *proc)
 {
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
+	p->Tm_adjust = 0;
 	pdf_tos_newline(&p->tos, p->gstate->pending.text.leading);
 	/* If Tm_pending, then just adjusting the matrix (as
 	 * pdf_tos_newline has done) is enough. Otherwise we
@@ -1634,13 +1645,28 @@ static void
 pdf_filter_BI(fz_context *ctx, pdf_processor *proc, fz_image *image, const char *colorspace)
 {
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
-	fz_matrix ctm;
 	filter_flush(ctx, p, FLUSH_ALL);
-	ctm = fz_concat(p->gstate->sent.ctm, p->transform);
-	if (p->filter->image_filter && p->filter->image_filter(ctx, p->filter->opaque, ctm, "<inline>", image))
-		return;
 	if (p->chain->op_BI)
-		p->chain->op_BI(ctx, p->chain, image, colorspace);
+	{
+		if (p->filter->image_filter)
+		{
+			fz_matrix ctm = fz_concat(p->gstate->sent.ctm, p->transform);
+			image = p->filter->image_filter(ctx, p->filter->opaque, ctm, "<inline>", image);
+			if (image)
+			{
+				fz_try(ctx)
+					p->chain->op_BI(ctx, p->chain, image, colorspace);
+				fz_always(ctx)
+					fz_drop_image(ctx, image);
+				fz_catch(ctx)
+					fz_rethrow(ctx);
+			}
+		}
+		else
+		{
+			p->chain->op_BI(ctx, p->chain, image, colorspace);
+		}
+	}
 }
 
 static void
@@ -1657,26 +1683,57 @@ static void
 pdf_filter_Do_image(fz_context *ctx, pdf_processor *proc, const char *name, fz_image *image)
 {
 	pdf_filter_processor *p = (pdf_filter_processor*)proc;
-	fz_matrix ctm;
+	fz_image *new_image;
 	filter_flush(ctx, p, FLUSH_ALL);
-	ctm = fz_concat(p->gstate->sent.ctm, p->transform);
-	if (p->filter->image_filter && p->filter->image_filter(ctx, p->filter->opaque, ctm, name, image))
-		return;
-	if (p->filter->instance_forms)
+	if (p->chain->op_Do_image)
 	{
-		/* Make up a unique name when instancing forms so we don't accidentally clash. */
-		char buf[40];
-		pdf_obj *obj = pdf_dict_gets(ctx, pdf_dict_get(ctx, p->old_rdb, PDF_NAME(XObject)), name);
-		fz_snprintf(buf, sizeof buf, "Im%d", p->image_id++);
-		add_resource(ctx, p, PDF_NAME(XObject), buf, obj);
-		if (p->chain->op_Do_image)
-			p->chain->op_Do_image(ctx, p->chain, buf, image);
-	}
-	else
-	{
-		copy_resource(ctx, p, PDF_NAME(XObject), name);
-		if (p->chain->op_Do_image)
-			p->chain->op_Do_image(ctx, p->chain, name, image);
+		if (p->filter->image_filter)
+		{
+			fz_matrix ctm = fz_concat(p->gstate->sent.ctm, p->transform);
+			new_image = p->filter->image_filter(ctx, p->filter->opaque, ctm, name, image);
+		}
+		else
+		{
+			new_image = image;
+		}
+
+		if (new_image == image)
+		{
+			if (p->filter->instance_forms)
+			{
+				/* Make up a unique name when instancing forms so we don't accidentally clash. */
+				char buf[40];
+				pdf_obj *obj = pdf_dict_gets(ctx, pdf_dict_get(ctx, p->old_rdb, PDF_NAME(XObject)), name);
+				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf);
+				add_resource(ctx, p, PDF_NAME(XObject), buf, obj);
+				p->chain->op_Do_image(ctx, p->chain, buf, image);
+			}
+			else
+			{
+				copy_resource(ctx, p, PDF_NAME(XObject), name);
+				p->chain->op_Do_image(ctx, p->chain, name, image);
+			}
+		}
+		else if (new_image != NULL)
+		{
+			pdf_obj *obj = NULL;
+			fz_var(obj);
+			fz_try(ctx)
+			{
+				char buf[40];
+				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf);
+				obj = pdf_add_image(ctx, p->doc, new_image);
+				add_resource(ctx, p, PDF_NAME(XObject), buf, obj);
+				p->chain->op_Do_image(ctx, p->chain, buf, new_image);
+			}
+			fz_always(ctx)
+			{
+				pdf_drop_obj(ctx, obj);
+				fz_drop_image(ctx, new_image);
+			}
+			fz_catch(ctx)
+				fz_rethrow(ctx);
+		}
 	}
 }
 
@@ -1692,7 +1749,7 @@ pdf_filter_Do_form(fz_context *ctx, pdf_processor *proc, const char *name, pdf_o
 		/* Copy an instance of the form with a new unique name. */
 		pdf_obj *new_xobj;
 		char buf[40];
-		fz_snprintf(buf, sizeof buf, "Fm%d", p->form_id++);
+		create_resource_name(ctx, p, PDF_NAME(XObject), "Fm", buf, sizeof buf);
 		transform = fz_concat(p->gstate->sent.ctm, p->transform);
 		new_xobj = pdf_filter_xobject_instance(ctx, xobj, page_resources, transform, p->filter);
 		fz_try(ctx)
@@ -1898,42 +1955,6 @@ pdf_drop_filter_processor(fz_context *ctx, pdf_processor *proc)
 	fz_free(ctx, p->font_name);
 }
 
-/*
-	Create a filter processor. This
-	filters the PDF operators it is fed, and passes them down
-	(with some changes) to the child filter.
-
-	The changes made by the filter are:
-
-	* No operations are allowed to change the top level gstate.
-	Additional q/Q operators are inserted to prevent this.
-
-	* Repeated/unnecessary colour operators are removed (so,
-	for example, "0 0 0 rg 0 1 rg 0.5 g" would be sanitised to
-	"0.5 g")
-
-	The intention of these changes is to provide a simpler,
-	but equivalent stream, repairing problems with mismatched
-	operators, maintaining structure (such as BMC, EMC calls)
-	and leaving the graphics state in an known (default) state
-	so that subsequent operations (such as synthesising new
-	operators to be appended to the stream) are easier.
-
-	The net graphical effect of the filtered operator stream
-	should be identical to the incoming operator stream.
-
-	chain: The child processor to which the filtered operators
-	will be fed.
-
-	old_res: The incoming resource dictionary.
-
-	new_res: An (initially empty) resource dictionary that will
-	be populated by copying entries from the old dictionary to
-	the new one as they are used. At the end therefore, this
-	contains exactly those resource objects actually required.
-
-	The filter options struct allows you to filter objects using callbacks.
-*/
 pdf_processor *
 pdf_new_filter_processor(
 	fz_context *ctx,
@@ -2078,8 +2099,6 @@ pdf_new_filter_processor(
 	proc->new_rdb = new_rdb;
 	proc->filter = filter;
 	proc->transform = transform;
-	proc->form_id = 1;
-	proc->image_id = 1;
 
 	fz_try(ctx)
 	{

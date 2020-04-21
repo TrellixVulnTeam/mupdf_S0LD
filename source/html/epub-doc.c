@@ -3,18 +3,27 @@
 
 #include <string.h>
 #include <math.h>
-#include <assert.h>
 
 #include <zlib.h> /* for crc32 */
 
 enum { T, R, B, L };
 
-typedef struct epub_document_s epub_document;
-typedef struct epub_chapter_s epub_chapter;
-typedef struct epub_page_s epub_page;
-typedef struct epub_accelerator_s epub_accelerator;
+typedef struct epub_chapter epub_chapter;
+typedef struct epub_page epub_page;
 
-struct epub_document_s
+typedef struct
+{
+	int max_chapters;
+	int num_chapters;
+	float layout_w;
+	float layout_h;
+	float layout_em;
+	uint32_t css_sum;
+	int use_doc_css;
+	int *pages_in_chapter;
+} epub_accelerator;
+
+typedef struct
 {
 	fz_document super;
 	fz_archive *zip;
@@ -36,9 +45,9 @@ struct epub_document_s
 	 * to the most recently used html block here, thus
 	 * ensuring that the stored copy won't be evicted. */
 	fz_html *most_recent_html;
-};
+} epub_document;
 
-struct epub_chapter_s
+struct epub_chapter
 {
 	epub_document *doc;
 	char *path;
@@ -46,25 +55,13 @@ struct epub_chapter_s
 	epub_chapter *next;
 };
 
-struct epub_page_s
+struct epub_page
 {
 	fz_page super;
 	epub_document *doc;
 	epub_chapter *ch;
 	int number;
 	fz_html *html;
-};
-
-struct epub_accelerator_s
-{
-	int max_chapters;
-	int num_chapters;
-	float layout_w;
-	float layout_h;
-	float layout_em;
-	uint32_t css_sum;
-	int use_doc_css;
-	int *pages_in_chapter;
 };
 
 static uint32_t
@@ -315,7 +312,11 @@ accelerate_chapter(fz_context *ctx, epub_document *doc, epub_chapter *ch, fz_htm
 
 	if (ch->number < acc->num_chapters)
 	{
-		assert(acc->pages_in_chapter[ch->number] == p || acc->pages_in_chapter[ch->number] == -1);
+		if (acc->pages_in_chapter[ch->number] != p && acc->pages_in_chapter[ch->number] != -1)
+		{
+			fz_warn(ctx, "Invalidating stale accelerator data.");
+			invalidate_accelerator(ctx, doc->accel);
+		}
 		acc->pages_in_chapter[ch->number] = p;
 		return;
 	}
@@ -849,13 +850,13 @@ epub_init(fz_context *ctx, fz_archive *zip, fz_stream *accel)
 }
 
 static fz_document *
-epub_open_document_with_stream(fz_context *ctx, fz_stream *file, fz_stream *accel)
+epub_open_accel_document_with_stream(fz_context *ctx, fz_stream *file, fz_stream *accel)
 {
 	return epub_init(ctx, fz_open_zip_archive_with_stream(ctx, file), accel);
 }
 
 static fz_document *
-epub_open_document(fz_context *ctx, const char *filename, const char *accel)
+epub_open_accel_document(fz_context *ctx, const char *filename, const char *accel)
 {
 	fz_stream *afile = NULL;
 	fz_document *doc;
@@ -886,6 +887,18 @@ epub_open_document(fz_context *ctx, const char *filename, const char *accel)
 	return doc;
 }
 
+static fz_document *
+epub_open_document_with_stream(fz_context *ctx, fz_stream *file)
+{
+	return epub_init(ctx, fz_open_zip_archive_with_stream(ctx, file), NULL);
+}
+
+static fz_document *
+epub_open_document(fz_context *ctx, const char *filename)
+{
+	return epub_open_accel_document(ctx, filename, NULL);
+}
+
 static int
 epub_recognize(fz_context *doc, const char *magic)
 {
@@ -909,10 +922,10 @@ static const char *epub_mimetypes[] =
 fz_document_handler epub_document_handler =
 {
 	epub_recognize,
-	NULL,
-	NULL,
+	epub_open_document,
+	epub_open_document_with_stream,
 	epub_extensions,
 	epub_mimetypes,
-	epub_open_document,
-	epub_open_document_with_stream
+	epub_open_accel_document,
+	epub_open_accel_document_with_stream
 };

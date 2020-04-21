@@ -1,5 +1,4 @@
 #include "mupdf/fitz.h"
-#include "fitz-imp.h"
 
 #include <string.h>
 #include <limits.h>
@@ -9,23 +8,20 @@
 #define TYPE_CONTIGUOUS '7'
 #define TYPE_LONG_NAME 'L'
 
-typedef struct tar_entry_s tar_entry;
-typedef struct fz_tar_archive_s fz_tar_archive;
-
-struct tar_entry_s
+typedef struct
 {
 	char *name;
 	int64_t offset;
 	int size;
-};
+} tar_entry;
 
-struct fz_tar_archive_s
+typedef struct
 {
 	fz_archive super;
 
 	int count;
 	tar_entry *entries;
-};
+} fz_tar_archive;
 
 static inline int isoctdigit(char c)
 {
@@ -211,11 +207,6 @@ static int count_tar_entries(fz_context *ctx, fz_archive *arch)
 	return tar->count;
 }
 
-/*
-	Detect if stream object is a tar achieve.
-
-	Assumes that the stream object is seekable.
-*/
 int
 fz_is_tar_archive(fz_context *ctx, fz_stream *file)
 {
@@ -239,16 +230,6 @@ fz_is_tar_archive(fz_context *ctx, fz_stream *file)
 	return 0;
 }
 
-/*
-	Open a tar archive stream.
-
-	Open an archive using a seekable stream object rather than
-	opening a file or directory on disk.
-
-	An exception is throw if the stream is not a tar archive as
-	indicated by the presence of a tar signature.
-
-*/
 fz_archive *
 fz_open_tar_archive_with_stream(fz_context *ctx, fz_stream *file)
 {
@@ -279,15 +260,6 @@ fz_open_tar_archive_with_stream(fz_context *ctx, fz_stream *file)
 	return &tar->super;
 }
 
-/*
-	Open a tar archive file.
-
-	An exception is throw if the file is not a tar archive as
-	indicated by the presence of a tar signature.
-
-	filename: a path to a tar archive file as it would be given to
-	open(2).
-*/
 fz_archive *
 fz_open_tar_archive(fz_context *ctx, const char *filename)
 {

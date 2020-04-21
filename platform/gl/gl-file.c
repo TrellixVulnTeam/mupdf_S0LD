@@ -39,7 +39,8 @@ static struct
 	struct list list_dir;
 	char curdir[PATH_MAX];
 	int count;
-	struct entry files[512];
+	int max;
+	struct entry *files;
 	int selected;
 } fc;
 
@@ -60,6 +61,17 @@ static int cmp_entry(const void *av, const void *bv)
 	return strcmp(a->name, b->name);
 }
 
+static void
+ensure_one_more_file(void)
+{
+	if (fc.count == fc.max)
+	{
+		int new_max = fc.max == 0 ? 512 : fc.max*2;
+		fc.files = fz_realloc_array(ctx, fc.files, new_max, struct entry);
+		fc.max = new_max;
+	}
+}
+
 #ifdef _WIN32
 
 #ifdef __MINGW32__
@@ -67,20 +79,6 @@ typedef int errno_t;
 __attribute__ ((dllimport)) errno_t wcscat_s (wchar_t *, size_t, const wchar_t *);
 #endif
 #include <shlobj.h>
-
-const char *realpath(const char *path, char buf[PATH_MAX])
-{
-	wchar_t wpath[PATH_MAX];
-	wchar_t wbuf[PATH_MAX];
-	int i;
-	MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, PATH_MAX);
-	GetFullPathNameW(wpath, PATH_MAX, wbuf, NULL);
-	WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, buf, PATH_MAX, NULL, NULL);
-	for (i=0; buf[i]; ++i)
-		if (buf[i] == '\\')
-			buf[i] = '/';
-	return buf;
-}
 
 static void load_dir(const char *path)
 {
@@ -90,7 +88,7 @@ static void load_dir(const char *path)
 	char buf[PATH_MAX];
 	int i;
 
-	realpath(path, fc.curdir);
+	fz_realpath(path, fc.curdir);
 	if (!fz_is_directory(ctx, path))
 		return;
 
@@ -112,6 +110,7 @@ static void load_dir(const char *path)
 			WideCharToMultiByte(CP_UTF8, 0, ffd.cFileName, -1, buf, PATH_MAX, NULL, NULL);
 			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
 				continue;
+			ensure_one_more_file();
 			fc.files[fc.count].is_dir = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 			if (fc.files[fc.count].is_dir || !fc.filter || fc.filter(buf))
 			{
@@ -206,7 +205,7 @@ static void load_dir(const char *path)
 	DIR *dir;
 	struct dirent *dp;
 
-	realpath(path, fc.curdir);
+	fz_realpath(path, fc.curdir);
 	if (!fz_is_directory(ctx, fc.curdir))
 		return;
 
@@ -214,21 +213,24 @@ static void load_dir(const char *path)
 
 	fc.selected = -1;
 	fc.count = 0;
+
 	dir = opendir(fc.curdir);
 	if (!dir)
 	{
+		ensure_one_more_file();
 		fc.files[fc.count].is_dir = 1;
 		fz_strlcpy(fc.files[fc.count].name, "..", FILENAME_MAX);
 		++fc.count;
 	}
 	else
 	{
-		while ((dp = readdir(dir)) && fc.count < (int)nelem(fc.files))
+		while ((dp = readdir(dir)))
 		{
 			/* skip hidden files */
 			if (dp->d_name[0] == '.' && strcmp(dp->d_name, ".") && strcmp(dp->d_name, ".."))
 				continue;
 			fz_snprintf(buf, sizeof buf, "%s/%s", fc.curdir, dp->d_name);
+			ensure_one_more_file();
 			fc.files[fc.count].is_dir = fz_is_directory(ctx, buf);
 			if (fc.files[fc.count].is_dir || !fc.filter || fc.filter(buf))
 			{

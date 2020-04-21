@@ -2,7 +2,6 @@
 
 #if FZ_ENABLE_PDF
 #include "mupdf/pdf.h"
-#include "mupdf/helpers/pkcs7-check.h"
 #include "mupdf/helpers/pkcs7-openssl.h"
 #endif
 
@@ -215,9 +214,10 @@ static void ffi_gc_fz_document(js_State *J, void *doc)
 
 static void ffi_gc_pdf_pkcs7_signer(js_State *J, void *signer_)
 {
+	fz_context *ctx = js_getcontext(J);
 	pdf_pkcs7_signer *signer = (pdf_pkcs7_signer *)signer_;
 	if (signer)
-		signer->drop(signer);
+		signer->drop(ctx, signer);
 }
 
 static void ffi_gc_fz_page(js_State *J, void *page)
@@ -797,7 +797,7 @@ static fz_buffer *ffi_tobuffer(js_State *J, int idx)
 
 /* device calling into js from c */
 
-typedef struct js_device_s
+typedef struct
 {
 	fz_device super;
 	js_State *J;
@@ -4078,6 +4078,20 @@ static void ffi_PDFPage_update(js_State *J)
 	js_pushboolean(J, changed);
 }
 
+static void ffi_PDFPage_applyRedactions(js_State *J)
+{
+	fz_context *ctx = js_getcontext(J);
+	pdf_page *page = js_touserdata(J, 0, "pdf_page");
+	pdf_redact_options opts;
+	memset(&opts, 0, sizeof opts);
+	if (js_isdefined(J, 1)) opts.no_black_boxes = js_toboolean(J, 1);
+	if (js_isdefined(J, 2)) opts.keep_images = js_toboolean(J, 2);
+	fz_try(ctx)
+		pdf_redact_page(ctx, page->doc, page, &opts);
+	fz_catch(ctx)
+		rethrow(J);
+}
+
 static void ffi_PDFAnnotation_bound(js_State *J)
 {
 	fz_context *ctx = js_getcontext(J);
@@ -4947,6 +4961,7 @@ static void ffi_PDFWidget_sign(js_State *J)
 	fz_context *ctx = js_getcontext(J);
 	pdf_widget *widget = js_touserdata(J, 0, "pdf_widget");
 	pdf_pkcs7_signer *signer = js_touserdata(J, 1, "pdf_pkcs7_signer");
+
 	fz_try(ctx)
 		pdf_sign_signature(ctx, widget, signer);
 	fz_catch(ctx)
@@ -5291,6 +5306,7 @@ int murun_main(int argc, char **argv)
 		jsB_propfun(J, "PDFPage.createAnnotation", ffi_PDFPage_createAnnotation, 1);
 		jsB_propfun(J, "PDFPage.deleteAnnotation", ffi_PDFPage_deleteAnnotation, 1);
 		jsB_propfun(J, "PDFPage.update", ffi_PDFPage_update, 0);
+		jsB_propfun(J, "PDFPage.applyRedactions", ffi_PDFPage_applyRedactions, 2);
 	}
 	js_setregistry(J, "pdf_page");
 

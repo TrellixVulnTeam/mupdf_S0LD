@@ -127,7 +127,21 @@ skip_language_code_utf8(const unsigned char *s, size_t n, size_t i)
 	return 0;
 }
 
-/* Convert Unicode/PdfDocEncoding string into utf-8 */
+static int
+is_valid_utf8(const unsigned char *s, const unsigned char *end)
+{
+	for (; s < end; ++s)
+	{
+		int skip = *s < 0x80 ? 0 : *s < 0xC0 ? -1 : *s < 0xE0 ? 1 : *s < 0xF0 ? 2 : *s < 0xF5 ? 3 : -1;
+		if (skip == -1)
+			return 0;
+		while (skip-- > 0)
+			if (++s >= end || (*s & 0xC0) != 0x80)
+				return 0;
+	}
+	return 1;
+}
+
 char *
 pdf_new_utf8_from_pdf_string(fz_context *ctx, const char *ssrcptr, size_t srclen)
 {
@@ -230,6 +244,14 @@ pdf_new_utf8_from_pdf_string(fz_context *ctx, const char *ssrcptr, size_t srclen
 		}
 	}
 
+	/* Detect UTF-8 strings that aren't marked with a BOM */
+	else if (is_valid_utf8(srcptr, srcptr + srclen))
+	{
+		dst = Memento_label(fz_malloc(ctx, srclen + 1), "utf8_from_guess");
+		memcpy(dst, srcptr, srclen);
+		dstptr = dst + srclen;
+	}
+
 	/* PDFDocEncoding */
 	else
 	{
@@ -249,7 +271,6 @@ pdf_new_utf8_from_pdf_string(fz_context *ctx, const char *ssrcptr, size_t srclen
 	return dst;
 }
 
-/* Convert text string object to UTF-8 */
 char *
 pdf_new_utf8_from_pdf_string_obj(fz_context *ctx, pdf_obj *src)
 {
@@ -259,7 +280,6 @@ pdf_new_utf8_from_pdf_string_obj(fz_context *ctx, pdf_obj *src)
 	return pdf_new_utf8_from_pdf_string(ctx, srcptr, srclen);
 }
 
-/* Load text stream and convert to UTF-8 */
 char *
 pdf_new_utf8_from_pdf_stream_obj(fz_context *ctx, pdf_obj *src)
 {
@@ -279,7 +299,6 @@ pdf_new_utf8_from_pdf_stream_obj(fz_context *ctx, pdf_obj *src)
 	return dst;
 }
 
-/* Load text stream or text string and convert to UTF-8 */
 char *
 pdf_load_stream_or_string_as_utf8(fz_context *ctx, pdf_obj *src)
 {
@@ -336,10 +355,6 @@ pdf_new_text_string_utf16be(fz_context *ctx, const char *s)
 	return obj;
 }
 
-/*
- * Create a PDF 'text string' by encoding input string as either ASCII or UTF-16BE.
- * In theory, we could also use PDFDocEncoding.
- */
 pdf_obj *
 pdf_new_text_string(fz_context *ctx, const char *s)
 {

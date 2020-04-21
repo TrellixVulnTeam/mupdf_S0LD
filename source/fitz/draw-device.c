@@ -1,5 +1,10 @@
-#include "fitz-imp.h"
+#include "mupdf/fitz.h"
+
+#include "context-imp.h"
+#include "color-imp.h"
 #include "draw-imp.h"
+#include "glyph-imp.h"
+#include "pixmap-imp.h"
 
 #include <string.h>
 #include <assert.h>
@@ -18,15 +23,11 @@
 /* Enable the following to help debug graphics stack pushes/pops */
 #undef DUMP_STACK_CHANGES
 
-typedef struct fz_draw_device_s fz_draw_device;
-
 enum {
 	FZ_DRAWDEV_FLAGS_TYPE3 = 1,
 };
 
-typedef struct fz_draw_state_s fz_draw_state;
-
-struct fz_draw_state_s {
+typedef struct {
 	fz_irect scissor;
 	fz_pixmap *dest;
 	fz_pixmap *mask;
@@ -38,9 +39,9 @@ struct fz_draw_state_s {
 	fz_matrix ctm;
 	float xstep, ystep;
 	fz_irect area;
-};
+} fz_draw_state;
 
-struct fz_draw_device_s
+typedef struct fz_draw_device
 {
 	fz_device super;
 	fz_matrix transform;
@@ -55,7 +56,7 @@ struct fz_draw_device_s
 	fz_draw_state *stack;
 	int stack_cap;
 	fz_draw_state init_stack[STACK_SIZE];
-};
+} fz_draw_device;
 
 #ifdef DUMP_GROUP_BLENDS
 
@@ -3019,79 +3020,24 @@ new_draw_device(fz_context *ctx, fz_matrix transform, fz_pixmap *dest, const fz_
 	return (fz_device*)dev;
 }
 
-/*
-	Create a device to draw on a pixmap.
-
-	dest: Target pixmap for the draw device. See fz_new_pixmap*
-	for how to obtain a pixmap. The pixmap is not cleared by the
-	draw device, see fz_clear_pixmap* for how to clear it prior to
-	calling fz_new_draw_device. Free the device by calling
-	fz_drop_device.
-
-	transform: Transform from user space in points to device space in pixels.
-*/
 fz_device *
 fz_new_draw_device(fz_context *ctx, fz_matrix transform, fz_pixmap *dest)
 {
 	return new_draw_device(ctx, transform, dest, NULL, NULL, NULL);
 }
 
-/*
-	Create a device to draw on a pixmap.
-
-	dest: Target pixmap for the draw device. See fz_new_pixmap*
-	for how to obtain a pixmap. The pixmap is not cleared by the
-	draw device, see fz_clear_pixmap* for how to clear it prior to
-	calling fz_new_draw_device. Free the device by calling
-	fz_drop_device.
-
-	transform: Transform from user space in points to device space in pixels.
-
-	clip: Bounding box to restrict any marking operations of the
-	draw device.
-*/
 fz_device *
 fz_new_draw_device_with_bbox(fz_context *ctx, fz_matrix transform, fz_pixmap *dest, const fz_irect *clip)
 {
 	return new_draw_device(ctx, transform, dest, NULL, clip, NULL);
 }
 
-/*
-	Create a device to draw on a pixmap.
-
-	dest: Target pixmap for the draw device. See fz_new_pixmap*
-	for how to obtain a pixmap. The pixmap is not cleared by the
-	draw device, see fz_clear_pixmap* for how to clear it prior to
-	calling fz_new_draw_device. Free the device by calling
-	fz_drop_device.
-
-	transform: Transform from user space in points to device space in pixels.
-
-	proof_cs: Intermediate color space to map though when mapping to
-	color space defined by pixmap.
-*/
 fz_device *
 fz_new_draw_device_with_proof(fz_context *ctx, fz_matrix transform, fz_pixmap *dest, fz_colorspace *cs)
 {
 	return new_draw_device(ctx, transform, dest, NULL, NULL, cs);
 }
 
-/*
-	Create a device to draw on a pixmap.
-
-	dest: Target pixmap for the draw device. See fz_new_pixmap*
-	for how to obtain a pixmap. The pixmap is not cleared by the
-	draw device, see fz_clear_pixmap* for how to clear it prior to
-	calling fz_new_draw_device. Free the device by calling
-	fz_drop_device.
-
-	transform: Transform from user space in points to device space in pixels.
-
-	clip: Bounding box to restrict any marking operations of the
-	draw device.
-
-	proof_cs: Color space to render to prior to mapping to color space defined by pixmap.
-*/
 fz_device *
 fz_new_draw_device_with_bbox_proof(fz_context *ctx, fz_matrix transform, fz_pixmap *dest, const fz_irect *clip, fz_colorspace *cs)
 {
@@ -3154,9 +3100,6 @@ static int parse_aa_opts(const char *val)
 	return 8;
 }
 
-/*
-	Parse draw device options from a comma separated key-value string.
-*/
 fz_draw_options *
 fz_parse_draw_options(fz_context *ctx, fz_draw_options *opts, const char *args)
 {
@@ -3213,14 +3156,6 @@ fz_parse_draw_options(fz_context *ctx, fz_draw_options *opts, const char *args)
 	return opts;
 }
 
-/*
-
-	Create a new pixmap and draw device, using the specified options.
-
-	options: Options to configure the draw device, and choose the resolution and colorspace.
-	mediabox: The bounds of the page in points.
-	pixmap: An out parameter containing the newly created pixmap.
-*/
 fz_device *
 fz_new_draw_device_with_options(fz_context *ctx, const fz_draw_options *opts, fz_rect mediabox, fz_pixmap **pixmap)
 {
