@@ -2,44 +2,6 @@
 #include "mupdf/pdf.h"
 
 #include <string.h>
-#include <time.h>
-
-#ifdef _WIN32
-#define timegm _mkgmtime
-
-// TODO: Remove this section when all MinGW targeting build tools
-//       fully support '_mkgmtime()'.
-#if defined(__MINGW32__) && !defined(HAVE_MKGMTIME)
-
-#include <windows.h>
-
-typedef time_t (__cdecl *TIMEGMPROC)(struct tm*);
-
-static time_t _mkgmtime(struct tm* timeptr)
-{
-	HINSTANCE h_libc;
-	static TIMEGMPROC timegm_proc = NULL;
-
-	if (timegm_proc == NULL)
-	{
-		h_libc = LoadLibraryA("msvcrt.dll");
-		if (h_libc != NULL)
-		{
-			timegm_proc = (TIMEGMPROC) GetProcAddress(h_libc, "_mkgmtime");
-		}
-	}
-
-	if (timegm_proc != NULL)
-		return (timegm_proc)(timeptr);
-
-	return -1;
-}
-
-#endif // __MINGW32__
-
-#endif // _WIN32
-
-#define isdigit(c) (c >= '0' && c <= '9')
 
 pdf_annot *
 pdf_keep_annot(fz_context *ctx, pdf_annot *annot)
@@ -931,7 +893,7 @@ static int pdf_annot_color_rgb(fz_context *ctx, pdf_obj *arr, float rgb[3])
 	return 1;
 }
 
-static void pdf_set_annot_color_imp(fz_context *ctx, pdf_annot *annot, pdf_obj *key, int n, const float color[4], pdf_obj **allowed)
+static void pdf_set_annot_color_imp(fz_context *ctx, pdf_annot *annot, pdf_obj *key, int n, const float *color, pdf_obj **allowed)
 {
 	pdf_document *doc = annot->page->doc;
 	pdf_obj *arr;
@@ -1010,7 +972,7 @@ pdf_annot_MK_BC_rgb(fz_context *ctx, pdf_annot *annot, float rgb[3])
 }
 
 void
-pdf_set_annot_color(fz_context *ctx, pdf_annot *annot, int n, const float color[4])
+pdf_set_annot_color(fz_context *ctx, pdf_annot *annot, int n, const float *color)
 {
 	pdf_set_annot_color_imp(ctx, annot, PDF_NAME(C), n, color, NULL);
 }
@@ -1038,7 +1000,7 @@ pdf_annot_interior_color(fz_context *ctx, pdf_annot *annot, int *n, float color[
 }
 
 void
-pdf_set_annot_interior_color(fz_context *ctx, pdf_annot *annot, int n, const float color[4])
+pdf_set_annot_interior_color(fz_context *ctx, pdf_annot *annot, int n, const float *color)
 {
 	pdf_set_annot_color_imp(ctx, annot, PDF_NAME(IC), n, color, interior_color_subtypes);
 }
@@ -1488,112 +1450,6 @@ pdf_add_annot_ink_list(fz_context *ctx, pdf_annot *annot, int n, fz_point p[])
 	pdf_dirty_annot(ctx, annot);
 }
 
-void
-pdf_format_date(fz_context *ctx, char *s, int n, int64_t isecs)
-{
-	time_t secs = isecs;
-#ifdef _POSIX_SOURCE
-	struct tm tmbuf, *tm = gmtime_r(&secs, &tmbuf);
-#else
-	struct tm *tm = gmtime(&secs);
-#endif
-	if (!tm)
-	{
-		fz_strlcpy(s, "D:19700101000000Z", n);
-	}
-	else
-	{
-		if (!strftime(s, n, "D:%Y%m%d%H%M%SZ", tm) && n > 0)
-			s[0] = '\0';
-	}
-}
-
-static int64_t
-pdf_parse_date(fz_context *ctx, const char *s)
-{
-	int tz_sign, tz_hour, tz_min, tz_adj;
-	struct tm tm;
-	time_t utc;
-
-	if (!s)
-		return 0;
-
-	memset(&tm, 0, sizeof tm);
-	tm.tm_mday = 1;
-
-	tz_sign = 1;
-	tz_hour = 0;
-	tz_min = 0;
-
-	if (s[0] == 'D' && s[1] == ':')
-		s += 2;
-
-	if (!isdigit(s[0]) || !isdigit(s[1]) || !isdigit(s[2]) || !isdigit(s[3]))
-	{
-		fz_warn(ctx, "invalid date format (missing year)");
-		return 0;
-	}
-	tm.tm_year = (s[0]-'0')*1000 + (s[1]-'0')*100 + (s[2]-'0')*10 + (s[3]-'0') - 1900;
-	s += 4;
-
-	if (isdigit(s[0]) && isdigit(s[1]))
-	{
-		tm.tm_mon = (s[0]-'0')*10 + (s[1]-'0') - 1; /* month is 0-11 in struct tm */
-		s += 2;
-		if (isdigit(s[0]) && isdigit(s[1]))
-		{
-			tm.tm_mday = (s[0]-'0')*10 + (s[1]-'0');
-			s += 2;
-			if (isdigit(s[0]) && isdigit(s[1]))
-			{
-				tm.tm_hour = (s[0]-'0')*10 + (s[1]-'0');
-				s += 2;
-				if (isdigit(s[0]) && isdigit(s[1]))
-				{
-					tm.tm_min = (s[0]-'0')*10 + (s[1]-'0');
-					s += 2;
-					if (isdigit(s[0]) && isdigit(s[1]))
-					{
-						tm.tm_sec = (s[0]-'0')*10 + (s[1]-'0');
-						s += 2;
-					}
-				}
-			}
-		}
-	}
-
-	if (s[0] == 'Z')
-	{
-		s += 1;
-	}
-	else if ((s[0] == '-' || s[0] == '+') && isdigit(s[1]) && isdigit(s[2]))
-	{
-		tz_sign = (s[0] == '-') ? -1 : 1;
-		tz_hour = (s[1]-'0')*10 + (s[2]-'0');
-		s += 3;
-		if (s[0] == '\'' && isdigit(s[1]) && isdigit(s[2]))
-		{
-			tz_min = (s[1]-'0')*10 + (s[2]-'0');
-			s += 3;
-			if (s[0] == '\'')
-				s += 1;
-		}
-	}
-
-	if (s[0] != 0)
-		fz_warn(ctx, "invalid date format (garbage at end)");
-
-	utc = timegm(&tm);
-	if (utc == (time_t)-1)
-	{
-		fz_warn(ctx, "date overflow error");
-		return 0;
-	}
-
-	tz_adj = tz_sign * (tz_hour * 3600 + tz_min * 60);
-	return utc - tz_adj;
-}
-
 static pdf_obj *markup_subtypes[] = {
 	PDF_NAME(Text),
 	PDF_NAME(FreeText),
@@ -1621,8 +1477,16 @@ static pdf_obj *markup_subtypes[] = {
 int64_t
 pdf_annot_modification_date(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_obj *date = pdf_dict_get(ctx, annot->obj, PDF_NAME(M));
-	return date ? pdf_parse_date(ctx, pdf_to_str_buf(ctx, date)) : 0;
+	return pdf_dict_get_date(ctx, annot->obj, PDF_NAME(M));
+}
+
+/*
+	Get annotation's creation date in seconds since the epoch.
+*/
+int64_t
+pdf_annot_creation_date(fz_context *ctx, pdf_annot *annot)
+{
+	return pdf_dict_get_date(ctx, annot->obj, PDF_NAME(CreationDate));
 }
 
 /*
@@ -1631,12 +1495,19 @@ pdf_annot_modification_date(fz_context *ctx, pdf_annot *annot)
 void
 pdf_set_annot_modification_date(fz_context *ctx, pdf_annot *annot, int64_t secs)
 {
-	char s[40];
-
 	check_allowed_subtypes(ctx, annot, PDF_NAME(M), markup_subtypes);
+	pdf_dict_put_date(ctx, annot->obj, PDF_NAME(M), secs);
+	pdf_dirty_annot(ctx, annot);
+}
 
-	pdf_format_date(ctx, s, sizeof s, secs);
-	pdf_dict_put_string(ctx, annot->obj, PDF_NAME(M), s, strlen(s));
+/*
+	Set annotation's creation date in seconds since the epoch.
+*/
+void
+pdf_set_annot_creation_date(fz_context *ctx, pdf_annot *annot, int64_t secs)
+{
+	check_allowed_subtypes(ctx, annot, PDF_NAME(CreationDate), markup_subtypes);
+	pdf_dict_put_date(ctx, annot->obj, PDF_NAME(CreationDate), secs);
 	pdf_dirty_annot(ctx, annot);
 }
 
