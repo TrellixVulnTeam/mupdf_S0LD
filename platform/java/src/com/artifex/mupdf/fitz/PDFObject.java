@@ -1,6 +1,10 @@
 package com.artifex.mupdf.fitz;
 
-public class PDFObject
+import java.util.Date;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+public class PDFObject implements Iterable<PDFObject>
 {
 	static {
 		Context.init();
@@ -73,6 +77,7 @@ public class PDFObject
 
 	private native PDFObject getArray(int index);
 	private native PDFObject getDictionary(String name);
+	private native PDFObject getDictionaryKey(int index);
 
 	public PDFObject get(int index) {
 		return getArray(index);
@@ -80,6 +85,10 @@ public class PDFObject
 
 	public PDFObject get(String name) {
 		return getDictionary(name);
+	}
+
+	public PDFObject get(PDFObject name) {
+		return getDictionary(name != null ? name.asName() : null);
 	}
 
 	private native void putArrayBoolean(int index, boolean b);
@@ -101,6 +110,7 @@ public class PDFObject
 	private native void putDictionaryPDFObjectPDFObject(PDFObject name, PDFObject obj);
 	private native void putDictionaryPDFObjectRect(PDFObject name, Rect r);
 	private native void putDictionaryPDFObjectMatrix(PDFObject name, Matrix m);
+	private native void putDictionaryPDFObjectDate(PDFObject name, long secs);
 
 	public void put(int index, boolean b) {
 		putArrayBoolean(index, b);
@@ -170,6 +180,10 @@ public class PDFObject
 		putDictionaryPDFObjectMatrix(name, m);
 	}
 
+	public void put(PDFObject name, Date time) {
+		putDictionaryPDFObjectDate(name, time.getTime());
+	}
+
 	private native void deleteArray(int index);
 	private native void deleteDictionaryString(String name);
 	private native void deleteDictionaryPDFObject(PDFObject name);
@@ -215,4 +229,39 @@ public class PDFObject
 	}
 
 	public static final PDFObject Null = new PDFObject(0);
+
+	public Iterator<PDFObject> iterator() {
+		return new PDFObjectIterator(this);
+	}
+
+	protected class PDFObjectIterator implements Iterator<PDFObject> {
+		private PDFObject object;
+		private boolean isarray;
+		private int position;
+
+		public PDFObjectIterator(PDFObject object) {
+			this.object = object;
+			isarray = object != null ? object.isArray() : false;
+			position = -1;
+		}
+
+		public boolean hasNext() {
+			return object != null && (position + 1) < object.size();
+		}
+
+		public PDFObject next() {
+			if (object == null || position >= object.size())
+				throw new NoSuchElementException("Object has no more elements");
+
+			position++;
+			if (isarray)
+				return object.get(position);
+			else
+				return object.getDictionaryKey(position);
+		}
+
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
+	}
 }

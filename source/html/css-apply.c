@@ -243,15 +243,15 @@ match_att_has_condition(fz_xml *node, const char *att, const char *needle)
 	const char *ss;
 	size_t n;
 	if (haystack) {
-		/* Try matching whole property first. */
-		if (!strcmp(haystack, needle))
-			return 1;
-
-		/* Look for matching words. */
-		n = strlen(needle);
 		ss = strstr(haystack, needle);
-		if (ss && (ss[n] == ' ' || ss[n] == 0) && (ss == haystack || ss[-1] == ' '))
-			return 1;
+		if (ss)
+		{
+			n = strlen(needle);
+
+			/* Look for exact matches or matching words. */
+			if ((ss[n] == ' ' || ss[n] == 0) && (ss == haystack || ss[-1] == ' '))
+				return 1;
+		}
 	}
 	return 0;
 }
@@ -288,11 +288,13 @@ match_selector(fz_css_selector *sel, fz_xml *node)
 		if (sel->combine == ' ')
 		{
 			fz_xml *parent = fz_xml_up(node);
+			if (!parent || !match_selector(sel->right, node))
+				return 0;
+
 			while (parent)
 			{
 				if (match_selector(sel->left, parent))
-					if (match_selector(sel->right, node))
-						return 1;
+					return 1;
 				parent = fz_xml_up(parent);
 			}
 			return 0;
@@ -814,6 +816,27 @@ value_from_raw_property(fz_css_match *match, const char *name)
 	return NULL;
 }
 
+/*
+ * An optimized version of value_from_property that already knows
+ * the property can inherit its value and therefore can avoid
+ * further look-ups in the inheritable-properties list.
+ */
+static fz_css_value *
+value_from_inheritable_property(fz_css_match *match, const char *name)
+{
+	fz_css_value *value;
+
+	value = value_from_raw_property(match, name);
+	if (match->up)
+	{
+		if (value && !strcmp(value->data, "inherit"))
+			return value_from_inheritable_property(match->up, name);
+		if (!value)
+			return value_from_inheritable_property(match->up, name);
+	}
+	return value;
+}
+
 static fz_css_value *
 value_from_property(fz_css_match *match, const char *name)
 {
@@ -826,7 +849,8 @@ value_from_property(fz_css_match *match, const char *name)
 			if (strcmp(name, "font-size") != 0) /* never inherit 'font-size' textually */
 				return value_from_property(match->up, name);
 		if (!value && keyword_in_list(name, inherit_list, nelem(inherit_list)))
-			return value_from_property(match->up, name);
+			/* Call an optimized version that avoids further name checks */
+			return value_from_inheritable_property(match->up, name);
 	}
 	return value;
 }
