@@ -1320,20 +1320,24 @@ static void *hit_limit(void *val)
 
 static void *hit_memory_limit(trace_info *info, int is_malloc, size_t oldsize, size_t size)
 {
+	char buf[150];
 	if (is_malloc)
-		printf("Memory limit (%zu) hit upon malloc(%zu) when %zu already allocated.\n", info->mem_limit, size, info->current);
+		fz_snprintf(buf, sizeof buf, "Memory limit (%zu) hit upon malloc(%zu) when %zu already allocated.\n", info->mem_limit, size, info->current);
 	else
-		printf("Memory limit (%zu) hit upon realloc(%zu) from %zu bytes when %zu already allocated.\n", info->mem_limit, size, oldsize, info->current);
+		fz_snprintf(buf, sizeof buf, "Memory limit (%zu) hit upon realloc(%zu) from %zu bytes when %zu already allocated.\n", info->mem_limit, size, oldsize, info->current);
+	printf("%s", buf);
 	return hit_limit(NULL);
 }
 
 
 static void *hit_alloc_limit(trace_info *info, int is_malloc, size_t oldsize, size_t size)
 {
+	char buf[150];
 	if (is_malloc)
-		printf("Allocation limit (%zu) hit upon malloc(%zu) when %zu already allocated.\n", info->alloc_limit, size, info->current);
+		fz_snprintf(buf, sizeof buf, "Allocation limit (%zu) hit upon malloc(%zu) when %zu already allocated.\n", info->alloc_limit, size, info->current);
 	else
-		printf("Allocation limit (%zu) hit upon realloc(%zu) from %zu bytes when %zu already allocated.\n", info->alloc_limit, size, oldsize, info->current);
+		fz_snprintf(buf, sizeof buf, "Allocation limit (%zu) hit upon realloc(%zu) from %zu bytes when %zu already allocated.\n", info->alloc_limit, size, oldsize, info->current);
+	printf("%s", buf);
 	return hit_limit(NULL);
 }
 
