@@ -30,7 +30,7 @@ for:
             - TARGET: mingw
     install:
     - cmd: C:\MinGW\bin\mingw-get update &&
-        C:\MinGW\bin\mingw-get upgrade msys-base mingw32-base gcc-c++-bin
+        C:\MinGW\bin\mingw-get upgrade --recursive msys-base mingw32-base gcc-c++-bin
     build_script:
     - cmd: C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
         make OUT=/home/appveyor/mupdf/release
