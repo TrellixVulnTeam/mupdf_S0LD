@@ -1,13 +1,14 @@
+image: Visual Studio 2019
+
 environment:
   matrix:
-  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
-    TARGET: VS2019
+  - TARGET: VS2019
     platform: Win32
     configuration: Release
-  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
-    TARGET: mingw
+  - TARGET: mingw
   - TARGET: cygwin-mingw32-cross
   - TARGET: msys2-mingw32-cross
+  - TARGET: msys2-mingw32-native
 
 
 before_build:
@@ -35,7 +36,7 @@ for:
             - TARGET: mingw
     install:
     - cmd: C:\MinGW\bin\mingw-get update &&
-        C:\MinGW\bin\mingw-get upgrade msys-base mingw32-base gcc-c++-bin
+        C:\MinGW\bin\mingw-get upgrade --recursive msys-base mingw32-base gcc-c++-bin
     build_script:
     - cmd: C:\MinGW\msys\1.0\bin\bash -e -l -c "cd /c/projects/mupdf &&
         make OUT=/home/appveyor/mupdf/release
@@ -82,8 +83,28 @@ for:
         make OUT=/home/appveyor/mupdf/release
         OS=mingw32-cross
         XLIBS+=-static-libgcc
-        XCFLAGS+=-DHAVE_MKGMTIME
-        2>&1 | tee -a mupdf-$(git describe --tags)-build.log"
+        XCFLAGS+=-DHAVE_MKGMTIME"
+- 
+    matrix:
+        only: 
+            - TARGET: msys2-mingw32-native
+    install:
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S
+            bash
+            pacman
+            pacman-mirrors
+            msys2-runtime" &&
+        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
+            make
+            mingw-w64-i686-toolchain
+            p7zip"
+    build_script:
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "PATH=/mingw32/bin:$PATH &&
+            cd /c/projects/mupdf &&
+            make OUT=/home/appveyor/mupdf/release
+            XLIBS+=-static-libgcc
+            XCFLAGS+=-DHAVE_MKGMTIME
+            2>&1 | tee -a mupdf-$(git describe --tags)-build.log"
     after_build:
     - cmd: C:\msys64\usr\bin\bash -e -l -c "mkdir /c/projects/mupdf/mupdf-mingw &&
             cp /home/appveyor/mupdf/release/mupdf-w32.exe
