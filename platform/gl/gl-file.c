@@ -101,7 +101,7 @@ static void load_dir(const char *path)
 	for (i=0; wpath[i]; ++i)
 		if (wpath[i] == '/')
 			wpath[i] = '\\';
-	wcscat_s(wpath, PATH_MAX, TEXT("/*"));
+	wcscat_s(wpath, PATH_MAX, L"/*");
 	dir = FindFirstFileW(wpath, &ffd);
 	if (dir)
 	{
