@@ -66,6 +66,7 @@ static JavaVM *jvm = NULL;
 
 static jclass cls_Buffer;
 static jclass cls_ColorSpace;
+static jclass cls_Context_Version;
 static jclass cls_Cookie;
 static jclass cls_Device;
 static jclass cls_DisplayList;
@@ -124,6 +125,10 @@ static jclass cls_UnsupportedOperationException;
 
 static jfieldID fid_Buffer_pointer;
 static jfieldID fid_ColorSpace_pointer;
+static jfieldID fid_Context_Version_major;
+static jfieldID fid_Context_Version_minor;
+static jfieldID fid_Context_Version_patch;
+static jfieldID fid_Context_Version_version;
 static jfieldID fid_Cookie_pointer;
 static jfieldID fid_Device_pointer;
 static jfieldID fid_DisplayList_pointer;
@@ -191,6 +196,7 @@ static jfieldID fid_PKCS7Verifier_pointer;
 
 static jmethodID mid_ColorSpace_fromPointer;
 static jmethodID mid_ColorSpace_init;
+static jmethodID mid_Context_Version_init;
 static jmethodID mid_Device_beginGroup;
 static jmethodID mid_Device_beginLayer;
 static jmethodID mid_Device_beginMask;
@@ -334,12 +340,14 @@ static int check_enums()
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_FILE_ATTACHMENT == PDF_ANNOT_FILE_ATTACHMENT;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_SOUND == PDF_ANNOT_SOUND;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_MOVIE == PDF_ANNOT_MOVIE;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_RICH_MEDIA == PDF_ANNOT_RICH_MEDIA;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_WIDGET == PDF_ANNOT_WIDGET;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_SCREEN == PDF_ANNOT_SCREEN;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_PRINTER_MARK == PDF_ANNOT_PRINTER_MARK;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_TRAP_NET == PDF_ANNOT_TRAP_NET;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_WATERMARK == PDF_ANNOT_WATERMARK;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_3D == PDF_ANNOT_3D;
+	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_PROJECTION == PDF_ANNOT_PROJECTION;
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_TYPE_UNKNOWN == PDF_ANNOT_UNKNOWN;
 
 	valid &= com_artifex_mupdf_fitz_PDFAnnotation_IS_INVISIBLE == PDF_ANNOT_IS_INVISIBLE;
@@ -602,6 +610,13 @@ static int find_fids(JNIEnv *env)
 	fid_ColorSpace_pointer = get_field(&err, env, "pointer", "J");
 	mid_ColorSpace_init = get_method(&err, env, "<init>", "(J)V");
 	mid_ColorSpace_fromPointer = get_static_method(&err, env, "fromPointer", "(J)L"PKG"ColorSpace;");
+
+	cls_Context_Version = get_class(&err, env, PKG"Context$Version");
+	mid_Context_Version_init = get_method(&err, env, "<init>", "(L"PKG"Context;)V");
+	fid_Context_Version_major = get_field(&err, env, "major", "I");
+	fid_Context_Version_minor = get_field(&err, env, "minor", "I");
+	fid_Context_Version_patch = get_field(&err, env, "patch", "I");
+	fid_Context_Version_version = get_field(&err, env, "version", "Ljava/lang/String;");
 
 	cls_Cookie = get_class(&err, env, PKG"Cookie");
 	fid_Cookie_pointer = get_field(&err, env, "pointer", "J");
@@ -896,6 +911,7 @@ static void lose_fids(JNIEnv *env)
 {
 	(*env)->DeleteGlobalRef(env, cls_Buffer);
 	(*env)->DeleteGlobalRef(env, cls_ColorSpace);
+	(*env)->DeleteGlobalRef(env, cls_Context_Version);
 	(*env)->DeleteGlobalRef(env, cls_Cookie);
 	(*env)->DeleteGlobalRef(env, cls_Device);
 	(*env)->DeleteGlobalRef(env, cls_DisplayList);

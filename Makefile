@@ -115,6 +115,9 @@ endif
 $(OUT)/source/%.o : source/%.c
 	$(CC_CMD) -Wall -Wdeclaration-after-statement $(LIB_CFLAGS) $(THIRD_CFLAGS)
 
+$(OUT)/source/%.o : source/%.cpp
+	$(CXX_CMD) -Wall $(LIB_CFLAGS) $(THIRD_CFLAGS)
+
 $(OUT)/platform/%.o : platform/%.c
 	$(CC_CMD) -Wall
 
@@ -128,8 +131,10 @@ $(OUT)/%.o: %.rc
 
 THIRD_OBJ := $(THIRD_SRC:%.c=$(OUT)/%.o)
 THIRD_OBJ := $(THIRD_OBJ:%.cc=$(OUT)/%.o)
+THIRD_OBJ := $(THIRD_OBJ:%.cpp=$(OUT)/%.o)
 
 MUPDF_SRC := $(sort $(wildcard source/fitz/*.c))
+MUPDF_SRC += $(sort $(wildcard source/fitz/*.cpp))
 MUPDF_SRC += $(sort $(wildcard source/pdf/*.c))
 MUPDF_SRC += $(sort $(wildcard source/xps/*.c))
 MUPDF_SRC += $(sort $(wildcard source/svg/*.c))
@@ -137,6 +142,7 @@ MUPDF_SRC += $(sort $(wildcard source/html/*.c))
 MUPDF_SRC += $(sort $(wildcard source/cbz/*.c))
 
 MUPDF_OBJ := $(MUPDF_SRC:%.c=$(OUT)/%.o)
+MUPDF_OBJ := $(MUPDF_OBJ:%.cpp=$(OUT)/%.o)
 
 THREAD_SRC := source/helpers/mu-threads/mu-threads.c
 THREAD_OBJ := $(THREAD_SRC:%.c=$(OUT)/%.o)

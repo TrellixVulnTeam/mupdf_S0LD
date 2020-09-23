@@ -9,6 +9,8 @@
 #define stat _stat
 #endif
 #ifndef _WIN32
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <signal.h>
 #endif
 
@@ -66,6 +68,9 @@ enum
 static void open_browser(const char *uri)
 {
 	char buf[PATH_MAX];
+#ifndef _WIN32
+	pid_t pid;
+#endif
 
 	/* Relative file:// URI, make it absolute! */
 	if (!strncmp(uri, "file://", 7) && uri[7] != '/')
@@ -91,12 +96,22 @@ static void open_browser(const char *uri)
 		browser = "xdg-open";
 #endif
 	}
-	if (fork() == 0)
+	/* Fork once to start a child process that we wait on. This
+	 * child process forks again and immediately exits. The
+	 * grandchild process continues in the background. The purpose
+	 * of this strange two-step is to avoid zombie processes. See
+	 * bug 695701 for an explanation. */
+	pid = fork();
+	if (pid == 0)
 	{
-		execlp(browser, browser, uri, (char*)0);
-		fprintf(stderr, "cannot exec '%s'\n", browser);
-		exit(0);
+		if (fork() == 0)
+		{
+			execlp(browser, browser, uri, (char*)0);
+			fprintf(stderr, "cannot exec '%s'\n", browser);
+		}
+		_exit(0);
 	}
+	waitpid(pid, NULL, 0);
 #endif
 }
 
@@ -494,14 +509,14 @@ static void save_accelerator(void)
 	fz_save_accelerator(ctx, doc, absname);
 }
 
-static int search_active = 0;
 static struct input search_input = { { 0 }, 0 };
-static char *search_needle = 0;
 static int search_dir = 1;
 static fz_location search_page = {-1, -1};
 static fz_location search_hit_page = {-1, -1};
-static int search_hit_count = 0;
-static fz_quad search_hit_quads[5000];
+static int search_active = 0;
+char *search_needle = 0;
+int search_hit_count = 0;
+fz_quad search_hit_quads[5000];
 
 static char *help_dialog_text =
 	"The middle mouse button (scroll wheel button) pans the document view. "
@@ -512,6 +527,7 @@ static char *help_dialog_text =
 	"i - show document information\n"
 	"o - show document outline\n"
 	"a - show annotation editor\n"
+	"R - show redaction editor\n"
 	"L - highlight links\n"
 	"F - highlight form fields\n"
 	"r - reload file\n"
@@ -871,6 +887,11 @@ static void restore_mark(struct mark mark)
 static int eqloc(fz_location a, fz_location b)
 {
 	return a.chapter == b.chapter && a.page == b.page;
+}
+
+int search_has_results(void)
+{
+	return !search_active && eqloc(search_hit_page, currentpage) && search_hit_count > 0;
 }
 
 static int is_first_page(fz_location loc)
@@ -1395,11 +1416,14 @@ static void toggle_outline(void)
 	}
 }
 
-void toggle_annotate(void)
+void toggle_annotate(int mode)
 {
 	if (pdf)
 	{
-		showannotate = !showannotate;
+		if (showannotate != mode)
+			showannotate = mode;
+		else
+			showannotate = ANNOTATE_MODE_NONE;
 		if (canvas_w == page_tex.w && canvas_h == page_tex.h)
 			shrinkwrap();
 	}
@@ -1514,7 +1538,8 @@ static void do_app(void)
 		{
 		case KEY_ESCAPE: clear_search(); selected_annot = NULL; break;
 		case KEY_F1: ui.dialog = help_dialog; break;
-		case 'a': toggle_annotate(); break;
+		case 'a': toggle_annotate(ANNOTATE_MODE_NORMAL); break;
+		case 'R': toggle_annotate(ANNOTATE_MODE_REDACT); break;
 		case 'o': toggle_outline(); break;
 		case 'L': showlinks = !showlinks; break;
 		case 'F': showform = !showform; break;
@@ -1741,9 +1766,9 @@ static void do_info(void)
 	{
 		int updates = pdf_count_versions(ctx, pdoc);
 
-		if (fz_lookup_metadata(ctx, doc, "info:Creator", buf, sizeof buf) > 0)
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_CREATOR, buf, sizeof buf) > 0)
 			ui_label("PDF Creator: %s", buf);
-		if (fz_lookup_metadata(ctx, doc, "info:Producer", buf, sizeof buf) > 0)
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_PRODUCER, buf, sizeof buf) > 0)
 			ui_label("PDF Producer: %s", buf);
 		buf[0] = 0;
 		if (fz_has_permission(ctx, doc, FZ_PERMISSION_PRINT))
@@ -2050,7 +2075,10 @@ void do_main(void)
 	{
 		ui_layout(R, BOTH, NW, 0, 0);
 		ui_panel_begin(annotate_w, 0, 4, 4, 1);
-		do_annotate_panel();
+		if (showannotate == ANNOTATE_MODE_NORMAL)
+			do_annotate_panel();
+		else
+			do_redact_panel();
 		ui_panel_end();
 	}
 
