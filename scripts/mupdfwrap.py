@@ -105,6 +105,10 @@ Args:
         (specifically definition of NDEBUG is important because it must match
         what was used when libmupdf.so was built).
 
+        Examples:
+            -d build/shared-debug
+            -d build/shared-release
+
     --doc <languages>
         Generates documentation for the different APIs.
 
@@ -204,8 +208,11 @@ C++ wrapping:
 
                 We look for all fz_*() functions that take the wrapped struct
                 as a first arg (ignoring any fz_context* arg), and wrap these
-                into class methods. If there are duplicate prototypes, we
-                comment-out all but the first.
+                into auto-generated class methods. If there are duplicate
+                prototypes, we comment-out all but the first.
+
+                Auto-generated methods are omitted if a custom method is
+                defined with the same name.
 
             Other:
 
@@ -246,6 +253,7 @@ import inspect
 import io
 import os
 import re
+import shutil
 import sys
 import textwrap
 import time
@@ -303,7 +311,7 @@ class ClangInfo:
         clang.cindex.Config.set_library_file(). This appears to be necessary
         even when clang is installed as a standard package.
         '''
-        for version in 7, 6,:
+        for version in 8, 7, 6,:
             ok = self._try_init_clang( version)
             if ok:
                 break
@@ -327,24 +335,26 @@ class ClangInfo:
                     log( '[could not find {clang_bin}: {e=}]')
                     return
                 clang_search_dirs = clang_search_dirs.strip().split(':')
-                for i in clang_search_dirs:
-                    p = os.path.join( i, f'libclang-{version}.*so*')
-                    p = os.path.abspath( p)
-                    libclang_so = glob.glob( p)
-                    if not libclang_so:
-                        continue
+                for i in ['/usr/lib', '/usr/local/lib'] + clang_search_dirs:
+                    for leaf in f'libclang-{version}.*so*', f'libclang.so.{version}.*':
+                        p = os.path.join( i, leaf)
+                        p = os.path.abspath( p)
+                        #log( '{p=}')
+                        libclang_so = glob.glob( p)
+                        if not libclang_so:
+                            continue
 
-                    # We have found libclang.so.
-                    self.libclang_so = libclang_so[0]
-                    log1( 'Using {self.libclang_so=}')
-                    clang.cindex.Config.set_library_file( self.libclang_so)
-                    self.resource_dir = jlib.system(
-                            f'{clang_bin} -print-resource-dir',
-                            out='return',
-                            ).strip()
-                    self.include_path = os.path.join( self.resource_dir, 'include')
-                    self.clang_version = version
-                    return True
+                        # We have found libclang.so.
+                        self.libclang_so = libclang_so[0]
+                        log1( 'Using {self.libclang_so=}')
+                        clang.cindex.Config.set_library_file( self.libclang_so)
+                        self.resource_dir = jlib.system(
+                                f'{clang_bin} -print-resource-dir',
+                                out='return',
+                                ).strip()
+                        self.include_path = os.path.join( self.resource_dir, 'include')
+                        self.clang_version = version
+                        return True
 
 
 g_clang_info = ClangInfo()
@@ -414,7 +424,11 @@ class Rename:
         '''
         if name.startswith( 'pdf_'):
             return 'p' + name
-        return f'{clip( name, "fz_")}'
+        ret = f'{clip( name, "fz_")}'
+        if ret in ('stdin', 'stdout', 'stderr'):
+            log( 'appending underscore to {ret=}')
+            ret += '_'
+        return ret
     def function_call( self, name):
         '''
         Name used by class methods when calling wrapper function - we call our
@@ -439,7 +453,11 @@ class Rename:
             if fnname.startswith( prefix):
                 return f'run{fnname[len(prefix):]}'
         if structname.startswith( 'fz_'):
-            return clip( fnname, "fz_")
+            ret = clip( fnname, "fz_")
+            if ret in ('stdin', 'stdout', 'stderr'):
+                log( 'appending underscore to {ret=}')
+                ret += '_'
+            return ret
         if structname.startswith( 'pdf_'):
             return clip( fnname, "pdf_")
         assert 0, f'unrecognised structname={structname}'
@@ -1071,7 +1089,16 @@ classextras = ClassExtras(
 
         fz_link = ClassExtra(
                 iterator_next = ('', ''),
-                constructor_raw = True,
+                constructor_raw = False,
+                constructors_extra = [
+                    ExtraConstructor( '(fz_link* link)',
+                        f'''
+                        : m_internal( {rename.function_call("fz_keep_link")}(link))
+                        {{
+                        }}
+                        ''',
+                        )
+                ],
                 ),
 
         fz_location = ClassExtra(
@@ -1423,7 +1450,7 @@ classextras = ClassExtras(
                             else if (fixed == Fixed_UNIT)       *this->internal() = {rename.function_raw('fz_unit_rect')};
                             else if (fixed == Fixed_EMPTY)      *this->internal() = {rename.function_raw('fz_empty_rect')};
                             else if (fixed == Fixed_INFINITE)   *this->internal() = {rename.function_raw('fz_infinite_rect')};
-                            throw ErrorAbort( "Unrecognised From value");
+                            else throw ErrorAbort( "Unrecognised From value");
                         }}
                         '''),
                         ],
@@ -1504,6 +1531,12 @@ classextras = ClassExtras(
 
         fz_stext_options = ClassExtra(
                 constructors_extra = [
+                    ExtraConstructor( '()',
+                        '''
+                        : flags( 0)
+                        {
+                        }
+                        '''),
                     ExtraConstructor( '(int flags)',
                         '''
                         : flags( flags)
@@ -1526,6 +1559,17 @@ classextras = ClassExtras(
                         }}
                         ''',
                         comment = f'/* Wrapper for fz_copy_selection(). */',
+                        ),
+                    ExtraMethod( 'std::string', 'copy_rectangle(Rect& area, int crlf)',
+                        f'''
+                        {{
+                            char* text = {rename.function_call('fz_copy_rectangle')}(m_internal, *(fz_rect*) &area.x0, crlf);
+                            std::string ret(text);
+                            {rename.function_call('fz_free')}(text);
+                            return ret;
+                        }}
+                        ''',
+                        comment = f'/* Wrapper for fz_copy_rectangle(). */',
                         ),
                     ],
                 iterator_next = ('first_block', 'last_block'),
@@ -2136,7 +2180,7 @@ def make_fncall( tu, cursor, return_type, fncall, out):
     out.write( f'    const char*    trace = getenv("MUPDF_trace");\n')
     out.write( f'    if (trace) {{\n')
 
-    out.write( f'        fprintf(::stderr, "%s:%i:%s(): calling {cursor.mangled_name}():')
+    out.write( f'        fprintf(stderr, "%s:%i:%s(): calling {cursor.mangled_name}():')
 
     items = []
     for arg, name, separator, alt, out_param in get_args( tu, cursor, include_fz_context=True):
@@ -2817,9 +2861,46 @@ def make_function_wrappers(
         except Clang6FnArgsBug as e:
             #log( jlib.exception_info())
             log( 'Unable to wrap function {cursor.spelling} becase: {e}')
-        else:
-            out_functions_h.write( temp_out_h.getvalue())
-            out_functions_cpp.write( temp_out_cpp.getvalue())
+            continue
+
+        out_functions_h.write( temp_out_h.getvalue())
+        out_functions_cpp.write( temp_out_cpp.getvalue())
+        if fnname == 'fz_lookup_metadata':
+            # Output convenience wrapper for fz_lookup_metadata() that is
+            # easily SWIG-able - it returns a std::string by value, and uses an
+            # out-param for the integer error/length value.
+            out_functions_h.write(
+                    textwrap.dedent(
+                    f'''
+                    /* Extra wrapper for fz_lookup_metadata() that returns a std::string and sets
+                    *o_out to length of string plus one. If <key> is not found, returns empty
+                    string with *o_out=-1. <o_out> can be NULL if caller is not interested in
+                    error information. */
+                    std::string lookup_metadata(fz_document *doc, const char *key, int* o_out=NULL);
+
+                    '''))
+            out_functions_cpp.write(
+                    textwrap.dedent(
+                    f'''
+                    std::string lookup_metadata(fz_document *doc, const char *key, int* o_out)
+                    {{
+                        int e = lookup_metadata(doc, key, NULL /*buf*/, 0 /*size*/);
+                        if (e < 0) {{
+                            // Not found.
+                            if (o_out)  *o_out = e;
+                            return "";
+                        }}
+                        assert(e != 0);
+                        char* buf = (char*) malloc(e);
+                        assert(buf);    // mupdf::malloc() throws on error.
+                        int e2 = lookup_metadata(doc, key, buf, e);
+                        assert(e2 = e);
+                        std::string ret = buf;
+                        free(buf);
+                        if (o_out)  *o_out = e;
+                        return ret;
+                    }}
+                    '''))
 
 
 find_struct_cache = None
@@ -2920,11 +3001,6 @@ def class_add_iterator( struct, structname, classname, extras):
         it_internal_type = structname
         it_type = classname
 
-    # Iterator needs raw constructor so it can set its internal m_item as
-    # it iterates.
-    #
-    extras.constructor_raw = True
-
     # We add to extras.methods_extra().
     #
     extras.methods_extra.append(
@@ -2950,7 +3026,7 @@ def class_add_iterator( struct, structname, classname, extras):
 
     extras.class_bottom += f'\n    typedef {classname}Iterator iterator;\n'
 
-    extras.class_pre += f'struct {classname}Iterator;\n'
+    extras.class_pre += f'\nstruct {classname}Iterator;\n'
 
     extras.class_post += f'''
             struct {classname}Iterator
@@ -3887,7 +3963,9 @@ def class_wrapper( tu, register_fn_use, struct, structname, classname, out_h, ou
                 out_cpp,
                 )
 
-    # Auto-add all methods that take <structname> as first param.
+    # Auto-add all methods that take <structname> as first param, but
+    # skip methods that are already wrapped in extras.method_wrappers or
+    # extras.methods_extra etc.
     #
     for fnname in find_wrappable_function_with_arg0_type( tu, structname):
         if fnname in extras.method_wrappers:
@@ -4287,6 +4365,8 @@ def cpp_source( dir_mupdf, namespace, base, header_git, doit=True):
             #include "mupdf/fitz.h"
             #include "mupdf/pdf.h"
 
+            #include <string>
+
             #ifdef SWIG
                 #define mupdf_OUTPARAM(name)  OUTPUT
             #else
@@ -4330,6 +4410,7 @@ def cpp_source( dir_mupdf, namespace, base, header_git, doit=True):
             #include "mupdf/functions.h"
             #include "mupdf/internal.h"
 
+            #include <assert.h>
 
             '''))
 
@@ -4782,6 +4863,23 @@ def build_swig( build_dirs, container_classnames, language='python', swig='swig'
             %pointer_functions(int, pint);
             %pointer_functions(fz_font, pfont);
 
+            %pythoncode %{{
+            # Override default Document.lookup_metadata() method so we can
+            # return the string value directly.
+            Document_lookup_metadata_0 = Document.lookup_metadata
+            def Document_lookup_metadata(self, key):
+                """
+                Returns string or None if not found.
+                """
+                e = new_pint()
+                ret = lookup_metadata(self.m_internal, key, e)
+                e = pint_value(e)
+                if e < 0:
+                    return None
+                return ret
+            Document.lookup_metadata = Document_lookup_metadata
+            %}}
+
             ''')
 
     # Make some additions to the generated Python module.
@@ -4917,11 +5015,26 @@ def build_swig( build_dirs, container_classnames, language='python', swig='swig'
             ''').strip().replace( '\n', ' \\\n')
             )
 
+    swig_cpp_old = None
+    if os.path.isfile(swig_cpp):
+        swig_cpp_old = swig_cpp + '-0'
+        shutil.copy2(swig_cpp, swig_cpp_old)
+
     jlib.build(
             (swig_i, include1, include2),
             (swig_cpp, swig_py),
             command,
             )
+
+    if swig_cpp_old:
+        def read_all(path):
+            with open(path) as f:
+                return f.read()
+        swig_cpp_old_text = read_all(swig_cpp_old)
+        swig_cpp_text = read_all(swig_cpp)
+        if swig_cpp_text == swig_cpp_old_text:
+            jlib.log('Preserving old file mtime etc because unchanged: {swig_cpp=}')
+            os.rename(swig_cpp_old, swig_cpp)
 
 
 def build_swig_java( container_classnames):
@@ -4971,174 +5084,6 @@ def test_swig():
                 test.i
             ''').replace( '\n', ' \\\n')
             )
-
-
-
-def test_mupdfcpp_swig():
-    '''
-    Test the python API.
-    '''
-    import mupdf
-    import os
-    import sys
-    log = print
-
-    log( 'have imported mupdf')
-
-    if 1:
-        # Test operations using functions:
-        #
-        log( 'Testing functions.')
-
-        # Find mupdf:thirdparty/zlib/zlib.3.pdf, assuming we are in
-        # mupdf:platform/python.
-        zlib_pdf = os.path.abspath( f'{__file__}/../../../thirdparty/zlib/zlib.3.pdf')
-
-        assert os.path.isfile( zlib_pdf), f'file does not exist: {zlib_pdf}'
-        log( f'    Opening {zlib_pdf}')
-        document = mupdf.open_document( zlib_pdf)
-        log( f'    {mupdf.needs_password( document)}')
-        log( f'    {mupdf.needs_password( document)}')
-        log( f'    {mupdf.count_pages( document)}')
-        log( f'    {mupdf.document_output_intent( document)}')
-
-    # Test operations using classes:
-    #
-    log( f'Testing classes')
-    for filename in (
-            os.path.expanduser( '~/pdf_reference17.pdf'),
-            os.path.expanduser( '~/artifex/testfiles/pdf_reference17.pdf'),
-            ):
-        if os.path.isfile( filename):
-            break
-    else:
-        raise Exception( 'cannot find pdf_reference17.pdf')
-
-    document = mupdf.Document( filename)
-    log( f'Have create document for {filename}')
-    log( f'{document.needs_password()}')
-    log( f'{document.count_pages()}')
-
-    zoom = 10
-    scale = mupdf.Matrix.scale( zoom/100., zoom/100.)
-    page_number = 0
-    log( f'Have created scale: a={scale.a} b={scale.b} c={scale.c} d={scale.d} e={scale.e} f={scale.f}')
-
-    colorspace = mupdf.Colorspace( mupdf.Colorspace.Fixed_RGB)
-    log( f'{colorspace.m_internal.key_storable.storable.refs}')
-    pixmap = mupdf.Pixmap( document, page_number, scale, colorspace, 0)
-    log( f'Have created pixmap: {pixmap.m_internal.w} {pixmap.m_internal.h} {pixmap.m_internal.stride} {pixmap.m_internal.n}')
-
-    filename = 'mupdf_test-out.png'
-    pixmap.save_pixmap_as_png( filename)
-    log( f'Have created {filename} using pixmap.save_pixmap_as_png().')
-
-
-    # Print image data in ascii PPM format. Copied from
-    # mupdf/docs/examples/example.c.
-    #
-    samples = pixmap.m_internal.samples
-    stride = pixmap.m_internal.stride
-    n = pixmap.m_internal.n
-    filename = 'mupdf_test-out.ppm'
-    with open( filename, 'w') as f:
-        f.write( 'P3\n')
-        f.write( '%s %s\n' % (pixmap.m_internal.w, pixmap.m_internal.h))
-        f.write( '255\n')
-        for y in range( 0, pixmap.m_internal.h):
-            for x in range( pixmap.m_internal.w):
-                if x:
-                    f.write( '  ')
-                offset = y * stride + x * n
-                f.write( '%3d %3d %3d' % (
-                        mupdf.bytes_getitem( samples, offset + 0),
-                        mupdf.bytes_getitem( samples, offset + 1),
-                        mupdf.bytes_getitem( samples, offset + 2),
-                        ))
-            f.write( '\n')
-    log( f'Have created {filename} by scanning pixmap.')
-
-    # Generate .png and but create Pixmap from Page instead of from Document.
-    #
-    page = mupdf.Page(document, 0)
-    separations = page.page_separations()
-    log( f'page_separations() returned {"true" if separations else "false"}')
-    pixmap = mupdf.Pixmap( page, scale, colorspace, 0)
-    filename = 'mupdf_test-out2.png'
-    pixmap.save_pixmap_as_png( filename)
-    log( f'Have created {filename} using pixmap.save_pixmap_as_png()')
-
-    # Show links
-    log( f'Links.')
-    page = mupdf.Page(document, 0)
-    link = mupdf.load_links( page.m_internal);
-    log( f'{link}')
-    if link:
-        for i in link:
-            log( f'{i}')
-
-    # Check we can iterate over Link's, by creating one manually.
-    #
-    link = mupdf.Link( mupdf.Rect(0, 0, 1, 1), None, "hello")
-    log( f'items in <link> are:')
-    for i in link:
-        log( f'    {i.m_internal.refs} {i.m_internal.uri}')
-
-    # Check iteration over Outlines.
-    #
-    log( f'Outlines.')
-    outline = mupdf.Outline( document)
-    log( f'{outline.uri()} {outline.page()} {outline.x()} {outline.y()} {outline.is_open()} {outline.title()}')
-    log( f'items in outline tree are:')
-    for o in outline:
-        log( f'    {o.uri()} {o.page()} {o.x()} {o.y()} {o.is_open()} {o.title()}')
-
-    # Check iteration over StextPage.
-    #
-    log( f'StextPage.')
-    stext_options = mupdf.StextOptions(0)
-    stext_page = mupdf.StextPage( document, 40, stext_options)
-    device_stext = mupdf.Device( stext_page, stext_options)
-    matrix = mupdf.Matrix()
-    page = mupdf.Page( document, 0)
-    cookie = mupdf.Cookie()
-    page.run( device_stext, matrix, cookie)
-    log( f'    stext_page is:')
-    for block in stext_page:
-        log( f'        block:')
-        for line in block:
-            line_text = ''
-            for char in line:
-                line_text += chr( char.m_internal.c)
-            log( f'            {line_text}')
-
-    device_stext.close_device()
-
-    # Check copy-constructor.
-    log( f'Checking copy-constructor')
-    document2 = mupdf.Document( document)
-    del document
-    page = mupdf.Page(document2, 0)
-    scale = mupdf.Matrix()
-    pixmap = mupdf.Pixmap( page, scale, colorspace, 0)
-    pixmap.save_pixmap_as_png( 'mupdf_test-out3.png')
-
-    stdout = mupdf.Output(mupdf.Output.Fixed_STDOUT)
-    log( f'{type(stdout)} {stdout.m_internal.state}')
-
-    mediabox = page.bound_page()
-    out = mupdf.DocumentWriter( filename, 'png', '')
-    dev = out.begin_page( mediabox)
-    page.run( dev, mupdf.Matrix(mupdf.fz_identity), mupdf.Cookie())
-    out.end_page()
-
-    # Check out-params are converted into python return value.
-    bitmap = mupdf.Bitmap( 10, 20, 8, 72, 72)
-    bitmap_details = bitmap.bitmap_details()
-    log( f'{bitmap_details}')
-    assert bitmap_details == [10, 20, 8, 12]
-
-    log( f'finished')
 
 
 class BuildDirs:
@@ -5217,6 +5162,7 @@ def main():
                 container_classnames = None
                 force_rebuild = False
                 header_git = False
+                jlib.log('{build_dirs.dir_so=}')
 
                 while 1:
                     actions = args.next()
@@ -5241,8 +5187,15 @@ def main():
                         elif action == 'm':
                             # Build libmupdf.so.
                             log( '{build_dirs.dir_mupdf=}')
+                            make = 'make'
+                            if os.uname()[0] == 'OpenBSD':
+                                # Need to run gmake, not make. Also for some
+                                # reason gmake on OpenBSD sets CC to clang, but
+                                # CXX to g++, so need to force CXX=clang++ too.
+                                #
+                                make = 'CXX=clang++ gmake'
 
-                            command = f'cd {build_dirs.dir_mupdf} && make HAVE_GLUT=no shared=yes verbose=yes'
+                            command = f'cd {build_dirs.dir_mupdf} && {make} HAVE_GLUT=no HAVE_PTHREAD=yes shared=yes verbose=yes'
                             #command += ' USE_SYSTEM_FREETYPE=yes USE_SYSTEM_ZLIB=yes'
                             if 0: pass
                             elif build_dirs.dir_so == f'{build_dirs.dir_mupdf}build/shared-debug/':
@@ -5254,8 +5207,7 @@ def main():
                             else:
                                 raise Exception( f'Unrecognised dir_so={build_dirs.dir_so}')
 
-                            jlib.system( command, prefix=jlib.log_text())
-
+                            jlib.system( command, prefix=jlib.log_text(), out=sys.stderr, verbose=1)
 
                         elif action == '0':
                             # Generate C++ code that wraps the fz_* API.
@@ -5320,7 +5272,7 @@ def main():
                             include2 = f'{build_dirs.dir_mupdf}platform/c++/include'
                             command = ( textwrap.dedent(
                                     f'''
-                                    g++
+                                    c++
                                         -o {out_so}
                                         {build_dirs.cpp_flags}
                                         -fPIC
@@ -5352,9 +5304,6 @@ def main():
                         elif action == '3':
                             # Compile and link to create _mupdfcpp_swig.so.
                             #
-                            # We use python3-config to find libpython.so and
-                            # python-dev include path etc.
-                            #
                             # We use g++ debug/release flags as implied by
                             # --dir-so, but all builds output the same file
                             # mupdf:platform/python/_mupdf.so. We could instead
@@ -5366,15 +5315,11 @@ def main():
                             # like _mupdf.so does not require a matching
                             # libmupdfcpp.so and libmupdf.sp.]
                             #
-                            python_configdir = jlib.system( 'python3-config --configdir', out='return')
-                            libpython_so = os.path.join(
-                                    python_configdir.strip(),
-                                    f'libpython{sys.version_info[0]}.{sys.version_info[1]}.so',
-                                    )
-                            assert os.path.isfile( libpython_so), f'cannot find libpython_so={libpython_so}'
 
-                            python_includes = jlib.system( 'python3-config --includes', out='return')
-                            python_includes = python_includes.strip()
+                            # Use pkg-config to find compile/link flags for building with python.
+                            python_includes = jlib.system( 'pkg-config --cflags python3', out='return')
+                            python_link     = jlib.system( 'pkg-config --libs python3', out='return')
+                            libpython_so    = None
 
                             # These are the input files to our g++ command:
                             #
@@ -5398,7 +5343,7 @@ def main():
                             #
                             command = ( textwrap.dedent(
                                     f'''
-                                    g++
+                                    c++
                                         -o {out_so}
                                         {build_dirs.cpp_flags}
                                         -fPIC
@@ -5408,6 +5353,7 @@ def main():
                                         {python_includes}
                                         {mupdfcpp_swig_cpp}
                                         {jlib.link_l_flags( [mupdf_so, mupdfcpp_so, libpython_so])}
+                                        {python_link}
                                     ''').strip().replace( '\n', ' \\\n').strip()
                                     )
                             jlib.build(
@@ -5509,7 +5455,9 @@ def main():
                         ld_library_path = os.path.abspath( f'{build_dirs.dir_so}')
                         pythonpath = build_dirs.dir_so
                         jlib.system( f'cd {build_dirs.dir_so}; LD_LIBRARY_PATH={ld_library_path} PYTHONPATH={pythonpath} pydoc3 -w ./mupdf.py')
-                        assert os.path.isfile( f'{build_dirs.dir_so}mupdf.html')
+                        path = f'{build_dirs.dir_so}mupdf.html'
+                        assert os.path.isfile( path)
+                        log( 'have created: {path}')
 
                     else:
                         raise Exception( f'unrecognised language param: {lang}')
@@ -5553,7 +5501,6 @@ def main():
                 log( 'running: {command}')
                 e = jlib.system(
                         command,
-                        out = -1,
                         raise_errors=False,
                         verbose=False,
                         )
@@ -5569,14 +5516,7 @@ def main():
                     sync_docs = True
                     destination = args.next()
                 log( 'Syncing to {destination=}')
-                txts = []
-                files = list( hs) + list( cpps) + list( txts) + [
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test-out2.png',
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test-out3.png',
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test-out.png',
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test-out.ppm',
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test.py',
-                        f'{build_dirs.dir_mupdf}platform/python/mupdf_test.py.out.txt',
+                files = list( hs) + list( cpps) + [
                         f'{build_dirs.dir_so}mupdf.py',
                         f'{build_dirs.dir_mupdf}platform/c++/fn_usage.txt',
                         ]
@@ -5620,17 +5560,6 @@ def main():
 
             elif arg == '--test' or arg == '-t':
 
-                # Create test .py programme.
-                #
-                with open( f'{build_dirs.dir_mupdf}platform/python/mupdf_test.py', 'w') as out:
-                    os.fchmod( out.fileno(), 0o755)
-                    out.write( '#!/usr/bin/env python3\n')
-                    out.write( inspect.getsource( test_mupdfcpp_swig))
-                    out.write( textwrap.dedent( '''
-                            if __name__ == '__main__':
-                                test_mupdfcpp_swig()
-                            '''))
-
                 # We need to set LD_LIBRARY_PATH and PYTHONPATH so that our
                 # test .py programme can load mupdf.py and _mupdf.so.
                 ld_library_path = os.path.abspath( f'{build_dirs.dir_so}')
@@ -5647,18 +5576,30 @@ def main():
                         f.write( text)
 
                     jlib.system(
-                            f'cd {build_dirs.dir_mupdf}platform/python/; {envs} ./mupdf_test.py',
-                            out = outfn
+                            f'cd {build_dirs.dir_mupdf}platform/python/; {envs} ../../scripts/mupdfwrap_test.py',
+                            out = outfn,
+                            verbose=1,
                             )
 
                 # Run mutool.py.
                 #
                 mutool_py = os.path.abspath( __file__ + '/../mutool.py')
-                log( 'running {mutool_py=}')
-                jlib.system(
-                        f'{envs} {mutool_py}',
-                        out = lambda text: log( text),
-                        )
+                zlib_pdf = f'{build_dirs.dir_mupdf}thirdparty/zlib/zlib.3.pdf'
+                for args2 in (
+                        f'trace {zlib_pdf}',
+                        f'convert -o zlib.3.pdf-%d.png {zlib_pdf}',
+                        f'draw -o zlib.3.pdf-%d.png -s tmf -v -y l -w 150 -R 30 -h 200 {zlib_pdf}',
+                        f'draw -o zlib.png -R 10 {zlib_pdf}',
+                        f'clean -gggg -l {zlib_pdf} zlib.clean.pdf',
+                        ):
+                    command = f'{envs} {mutool_py} {args2}'
+                    log( 'running: {command}')
+                    jlib.system(
+                            f'{command}',
+                            out = lambda text: log( text, nv=0),
+                            )
+
+                log( 'Tests ran ok.')
 
             elif arg == '--test-swig':
                 test_swig()
@@ -5673,3 +5614,4 @@ if __name__ == '__main__':
         main()
     except Exception:
         print( jlib.exception_info())
+        sys.exit(1)

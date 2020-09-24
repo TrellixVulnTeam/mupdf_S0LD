@@ -1648,7 +1648,7 @@ static void push_byte_string(js_State *J, unsigned char *str, size_t len)
 		for (i = 0; i < len; ++i)
 		{
 			js_pushnumber(J, str[i]);
-			js_setindex(J, -2, i);
+			js_setindex(J, -2, (int)i);
 		}
 	}
 }
@@ -2846,6 +2846,37 @@ static void ffi_new_Pixmap(js_State *J)
 	js_newuserdata(J, "fz_pixmap", pixmap, ffi_gc_fz_pixmap);
 }
 
+static void ffi_Pixmap_warp(js_State *J)
+{
+	fz_context *ctx = js_getcontext(J);
+	fz_pixmap *pixmap = js_touserdata(J, 0, "fz_pixmap");
+	/* 1 = array of 8 floats for points */
+	int w = js_tonumber(J, 2);
+	int h = js_tonumber(J, 3);
+	fz_pixmap *dest = NULL;
+	fz_point points[4];
+	int i;
+
+	if (w < 0 || h < 0 || !js_isarray(J, 1) || js_getlength(J, 1) != 8)
+		js_throw(J);
+
+	for (i = 0; i < 8; i++)
+	{
+		float *f = i&1 ? &points[i>>1].y : &points[i>>1].x;
+		js_getindex(J, 1, i);
+		*f = js_tonumber(J, -1);
+		js_pop(J, 1);
+	}
+
+	fz_try(ctx)
+		dest = fz_warp_pixmap(ctx, pixmap, points, w, h);
+	fz_catch(ctx)
+		rethrow(J);
+
+	js_getregistry(J, "fz_pixmap");
+	js_newuserdata(J, "fz_pixmap", dest, ffi_gc_fz_pixmap);
+}
+
 static void ffi_Pixmap_saveAsPNG(js_State *J)
 {
 	fz_context *ctx = js_getcontext(J);
@@ -3163,29 +3194,46 @@ static void ffi_new_Text(js_State *J)
 static void ffi_Text_walk(js_State *J)
 {
 	fz_text *text = js_touserdata(J, 0, "fz_text");
+	char buf[8];
 	fz_text_span *span;
 	fz_matrix trm;
 	int i;
 
-	js_getproperty(J, 1, "showGlyph");
 	for (span = text->head; span; span = span->next) {
 		ffi_pushfont(J, span->font);
 		trm = span->trm;
-		for (i = 0; i < span->len; ++i) {
-			trm.e = span->items[i].x;
-			trm.f = span->items[i].y;
-			js_copy(J, -2); /* showGlyph function */
-			js_copy(J, 1); /* object for this binding */
-			js_copy(J, -3); /* font */
+		if (js_hasproperty(J, 1, "beginSpan")) {
+			js_copy(J, 1); // this
+			js_copy(J, -3); // font
 			ffi_pushmatrix(J, trm);
-			js_pushnumber(J, span->items[i].gid);
-			js_pushnumber(J, span->items[i].ucs);
-			js_pushnumber(J, span->wmode);
+			js_pushboolean(J, span->wmode);
 			js_pushnumber(J, span->bidi_level);
+			js_pushnumber(J, span->markup_dir);
+			js_pushstring(J, fz_string_from_text_language(buf, span->language));
 			js_call(J, 6);
 			js_pop(J, 1);
 		}
+		for (i = 0; i < span->len; ++i) {
+			trm.e = span->items[i].x;
+			trm.f = span->items[i].y;
+			if (js_hasproperty(J, 1, "showGlyph")) {
+				js_copy(J, 1); /* object for this binding */
+				js_copy(J, -3); /* font */
+				ffi_pushmatrix(J, trm);
+				js_pushnumber(J, span->items[i].gid);
+				js_pushnumber(J, span->items[i].ucs);
+				js_pushnumber(J, span->wmode);
+				js_pushnumber(J, span->bidi_level);
+				js_call(J, 6);
+				js_pop(J, 1);
+			}
+		}
 		js_pop(J, 1); /* pop font object */
+		if (js_hasproperty(J, 1, "endSpan")) {
+			js_copy(J, 1); // this
+			js_call(J, 0);
+			js_pop(J, 1);
+		}
 	}
 	js_pop(J, 1); /* pop showGlyph function */
 }
@@ -6218,6 +6266,7 @@ int murun_main(int argc, char **argv)
 		jsB_propfun(J, "Pixmap.getXResolution", ffi_Pixmap_getXResolution, 0);
 		jsB_propfun(J, "Pixmap.getYResolution", ffi_Pixmap_getYResolution, 0);
 		jsB_propfun(J, "Pixmap.getSample", ffi_Pixmap_getSample, 3);
+		jsB_propfun(J, "Pixmap.warp", ffi_Pixmap_warp, 3);
 
 		// Pixmap.samples()
 		// Pixmap.invert

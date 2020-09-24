@@ -2286,22 +2286,22 @@ pdf_update_stream(fz_context *ctx, pdf_document *doc, pdf_obj *obj, fz_buffer *n
 int
 pdf_lookup_metadata(fz_context *ctx, pdf_document *doc, const char *key, char *buf, int size)
 {
-	if (!strcmp(key, "format"))
+	if (!strcmp(key, FZ_META_FORMAT))
 	{
 		int version = pdf_version(ctx, doc);
-		return (int)fz_snprintf(buf, size, "PDF %d.%d", version/10, version % 10);
+		return 1 + (int)fz_snprintf(buf, size, "PDF %d.%d", version/10, version % 10);
 	}
 
-	if (!strcmp(key, "encryption"))
+	if (!strcmp(key, FZ_META_ENCRYPTION))
 	{
 		if (doc->crypt)
-			return (int)fz_snprintf(buf, size, "Standard V%d R%d %d-bit %s",
+			return 1 + (int)fz_snprintf(buf, size, "Standard V%d R%d %d-bit %s",
 					pdf_crypt_version(ctx, doc->crypt),
 					pdf_crypt_revision(ctx, doc->crypt),
 					pdf_crypt_length(ctx, doc->crypt),
 					pdf_crypt_method(ctx, doc->crypt));
 		else
-			return (int)fz_strlcpy(buf, "None", size);
+			return 1 + (int)fz_strlcpy(buf, "None", size);
 	}
 
 	if (strstr(key, "info:") == key)
@@ -2319,7 +2319,7 @@ pdf_lookup_metadata(fz_context *ctx, pdf_document *doc, const char *key, char *b
 			return -1;
 
 		s = pdf_to_text_string(ctx, info);
-		n = (int)fz_strlcpy(buf, s, size);
+		n = 1 + (int)fz_strlcpy(buf, s, size);
 		return n;
 	}
 
@@ -2826,7 +2826,7 @@ pdf_document *pdf_create_document(fz_context *ctx)
 	doc = pdf_new_document(ctx, NULL);
 	fz_try(ctx)
 	{
-		doc->version = 14;
+		doc->version = 17;
 		doc->file_size = 0;
 		doc->startxref = 0;
 		doc->num_xref_sections = 0;

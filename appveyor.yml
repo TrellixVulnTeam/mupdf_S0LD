@@ -2,9 +2,9 @@ image: Visual Studio 2019
 
 environment:
   matrix:
-  - TARGET: VS2019
-    platform: Win32
-    configuration: Release
+#  - TARGET: VS2019
+#    platform: Win32
+#    configuration: Release
   - TARGET: mingw
   - TARGET: cygwin-mingw32-cross
   - TARGET: msys2-mingw32-cross
