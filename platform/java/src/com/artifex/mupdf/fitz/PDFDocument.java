@@ -47,6 +47,7 @@ public class PDFDocument extends Document
 
 	public native PDFGraftMap newPDFGraftMap();
 	public native PDFObject graftObject(PDFObject obj);
+	public native void graftPage(int pageTo, PDFDocument src, int pageFrom);
 
 	private native PDFObject addStreamBuffer(Buffer buf, Object obj, boolean compressed);
 	private native PDFObject addStreamString(String str, Object obj, boolean compressed);
@@ -101,6 +102,7 @@ public class PDFDocument extends Document
 	public native PDFObject addCJKFont(Font font, int ordering, int wmode, boolean serif);
 	public native PDFObject addFont(Font font);
 	public native boolean hasUnsavedChanges();
+	public native boolean wasRepaired();
 	public native boolean canBeSavedIncrementally();
 
 	public native void save(String filename, String options);

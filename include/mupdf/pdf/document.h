@@ -243,6 +243,11 @@ void pdf_set_layer_config_as_default(fz_context *ctx, pdf_document *doc);
 */
 int pdf_has_unsaved_changes(fz_context *ctx, pdf_document *doc);
 
+/*
+	Determine if this PDF has been repaired since opening.
+*/
+int pdf_was_repaired(fz_context *ctx, pdf_document *doc);
+
 /* Object that can perform the cryptographic operation necessary for document signing */
 typedef struct pdf_pkcs7_signer pdf_pkcs7_signer;
 
@@ -429,6 +434,26 @@ void pdf_drop_graft_map(fz_context *ctx, pdf_graft_map *map);
 	that any shared children are not copied more than once.
 */
 pdf_obj *pdf_graft_mapped_object(fz_context *ctx, pdf_graft_map *map, pdf_obj *obj);
+
+/*
+	Graft a page (and its resources) from the src document to the
+	destination document of the graft. This involves a deep copy
+	of the objects in question.
+
+	map: A map targetted at the document into which the page should
+	be inserted.
+
+	page_to: The position within the destination document at which
+	the page should be inserted (pages numbered from 0, with -1
+	meaning "at the end").
+
+	src: The document from which the page should be copied.
+
+	page_from: The page number which should be copied from the src
+	document (pages numbered from 0, with -1 meaning "at the end").
+*/
+void pdf_graft_page(fz_context *ctx, pdf_document *dst, int page_to, pdf_document *src, int page_from);
+void pdf_graft_mapped_page(fz_context *ctx, pdf_graft_map *map, int page_to, pdf_document *src, int page_from);
 
 /*
 	Create a device that will record the
