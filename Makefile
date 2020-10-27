@@ -64,7 +64,7 @@ ifdef RANLIB
   RANLIB_CMD = $(QUIET_RANLIB) $(RANLIB) $@
 endif
 LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-TAGS_CMD = $(QUIET_TAGS) ctags -R --c-kinds=+p
+TAGS_CMD = $(QUIET_TAGS) ctags -R --c-kinds=+p --exclude=platform/python --exclude=platform/c++
 WINDRES_CMD = $(QUIET_WINDRES) $(MKTGTDIR) ; $(WINDRES) $< $@
 ifneq ($(HAVE_WIN32),yes)
   Z_NOEXECSTACK = -z noexecstack
