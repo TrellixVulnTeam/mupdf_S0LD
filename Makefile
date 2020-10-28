@@ -6,24 +6,21 @@ ifndef build
   build := release
 endif
 
+default: all
+
+include Makerules
+
 ifndef OUT
-  ifeq ($(shared),yes)
-    OUT := build/shared-$(build)
-  else
-    OUT := build/$(build)
-  endif
+  OUT := build/$(build_prefix)$(build)$(build_suffix)
 endif
 
 ifndef GENERATED
   GENERATED := build/generated
 endif
 
-default: all
+include Makethird
 
 # --- Configuration ---
-
-include Makerules
-include Makethird
 
 # Do not specify CFLAGS or LIBS on the make invocation line - specify
 # XCFLAGS or XLIBS instead. Make ignores any lines in the makefile that
@@ -67,7 +64,7 @@ ifdef RANLIB
   RANLIB_CMD = $(QUIET_RANLIB) $(RANLIB) $@
 endif
 LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-TAGS_CMD = $(QUIET_TAGS) ctags -R --c-kinds=+p
+TAGS_CMD = $(QUIET_TAGS) ctags -R --c-kinds=+p --exclude=platform/python --exclude=platform/c++
 WINDRES_CMD = $(QUIET_WINDRES) $(MKTGTDIR) ; $(WINDRES) $< $@
 ifneq ($(HAVE_WIN32),yes)
   Z_NOEXECSTACK = -z noexecstack

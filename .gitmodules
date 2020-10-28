@@ -31,3 +31,12 @@
 [submodule "thirdparty/freeglut"]
 	path = thirdparty/freeglut
 	url = https://github.com/TamirEvan/thirdparty-freeglut.git
+[submodule "thirdparty/tesseract"]
+	path = thirdparty/tesseract
+	url = https://github.com/TamirEvan/thirdparty-tesseract.git
+[submodule "thirdparty/leptonica"]
+	path = thirdparty/leptonica
+	url = https://github.com/TamirEvan/thirdparty-leptonica.git
+[submodule "thirdparty/extract"]
+	path = thirdparty/extract
+	url = https://github.com/TamirEvan/extract.git
