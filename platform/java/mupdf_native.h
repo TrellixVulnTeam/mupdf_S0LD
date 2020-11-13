@@ -711,6 +711,14 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_DocumentWriter_endPage
 JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_DocumentWriter_close
   (JNIEnv *, jobject);
 
+/*
+ * Class:     com_artifex_mupdf_fitz_DocumentWriter
+ * Method:    addOCRListener
+ * Signature: (Lcom/artifex/mupdf/fitz/DocumentWriter/OCRListener;)V
+ */
+JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_DocumentWriter_addOCRListener
+  (JNIEnv *, jobject, jobject);
+
 #ifdef __cplusplus
 }
 #endif
@@ -1795,6 +1803,14 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_eventBlur
 JNIEXPORT jboolean JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_update
   (JNIEnv *, jobject);
 
+/*
+ * Class:     com_artifex_mupdf_fitz_PDFAnnotation
+ * Method:    getObject
+ * Signature: ()Lcom/artifex/mupdf/fitz/PDFObject;
+ */
+JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_PDFAnnotation_getObject
+  (JNIEnv *, jobject);
+
 #ifdef __cplusplus
 }
 #endif
@@ -2759,10 +2775,18 @@ JNIEXPORT jboolean JNICALL Java_com_artifex_mupdf_fitz_PDFPage_update
 
 /*
  * Class:     com_artifex_mupdf_fitz_PDFPage
- * Method:    getWidgetsNative
+ * Method:    getWidgets
  * Signature: ()[Lcom/artifex/mupdf/fitz/PDFWidget;
  */
-JNIEXPORT jobjectArray JNICALL Java_com_artifex_mupdf_fitz_PDFPage_getWidgetsNative
+JNIEXPORT jobjectArray JNICALL Java_com_artifex_mupdf_fitz_PDFPage_getWidgets
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     com_artifex_mupdf_fitz_PDFPage
+ * Method:    createSignature
+ * Signature: ()Lcom/artifex/mupdf/fitz/PDFWidget;
+ */
+JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_PDFPage_createSignature
   (JNIEnv *, jobject);
 
 #ifdef __cplusplus
@@ -3239,6 +3263,14 @@ JNIEXPORT jobjectArray JNICALL Java_com_artifex_mupdf_fitz_Page_search
 JNIEXPORT jbyteArray JNICALL Java_com_artifex_mupdf_fitz_Page_textAsHtml
   (JNIEnv *, jobject);
 
+/*
+ * Class:     com_artifex_mupdf_fitz_Page
+ * Method:    createLink
+ * Signature: (Lcom/artifex/mupdf/fitz/Rect;Ljava/lang/String;)Lcom/artifex/mupdf/fitz/Link;
+ */
+JNIEXPORT jobject JNICALL Java_com_artifex_mupdf_fitz_Page_createLink
+  (JNIEnv *, jobject, jobject, jstring);
+
 #ifdef __cplusplus
 }
 #endif
@@ -3566,6 +3598,10 @@ JNIEXPORT void JNICALL Java_com_artifex_mupdf_fitz_Pixmap_tint
 #ifdef __cplusplus
 extern "C" {
 #endif
+#undef com_artifex_mupdf_fitz_Rect_FZ_MIN_INF_RECT
+#define com_artifex_mupdf_fitz_Rect_FZ_MIN_INF_RECT -2147483648L
+#undef com_artifex_mupdf_fitz_Rect_FZ_MAX_INF_RECT
+#define com_artifex_mupdf_fitz_Rect_FZ_MAX_INF_RECT 2147483520L
 /*
  * Class:     com_artifex_mupdf_fitz_Rect
  * Method:    adjustForStroke

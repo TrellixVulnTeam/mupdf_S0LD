@@ -158,6 +158,7 @@ build_compression_params(fz_context *ctx, pdf_obj *f, pdf_obj *p, fz_compression
 
 		params->type = FZ_IMAGE_JBIG2;
 		params->u.jbig2.globals = NULL;
+		params->u.jbig2.embedded = 1; /* jbig2 streams are always embedded without file headers */
 		if (g)
 		{
 			if (!pdf_is_stream(ctx, g))
@@ -392,7 +393,7 @@ pdf_load_compressed_inline_image(fz_context *ctx, pdf_document *doc, pdf_obj *di
 		istm = pdf_open_inline_stream(ctx, doc, dict, length, file_stm, &bc->params);
 		leech = fz_open_leecher(ctx, istm, bc->buffer);
 		decomp = fz_open_image_decomp_stream(ctx, leech, &bc->params, &dummy_l2factor);
-		pixmap = fz_decomp_image_from_stream(ctx, decomp, image, NULL, indexed, 0);
+		pixmap = fz_decomp_image_from_stream(ctx, decomp, image, NULL, indexed, 0, NULL);
 		fz_set_compressed_image_buffer(ctx, image, bc);
 	}
 	fz_always(ctx)
