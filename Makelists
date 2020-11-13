@@ -296,11 +296,19 @@ OPENJPEG_SRC += thirdparty/openjpeg/src/lib/openjp2/thread.c
 # --- FREEGLUT ---
 
 GLUT_CFLAGS += -Ithirdparty/freeglut/include
+ifeq ($(HAVE_WIN32),yes)
+GLUT_CFLAGS += -DFREEGLUT_STATIC
+endif # HAVE_WIN32
 
 GLUT_BUILD_CFLAGS += -Ithirdparty/freeglut/src
 GLUT_BUILD_CFLAGS += -DHAVE_UNISTD_H
 GLUT_BUILD_CFLAGS += -DHAVE_STDINT_H
+ifeq ($(HAVE_WIN32),yes)
+GLUT_BUILD_CFLAGS += -DFREEGLUT_STATIC
+GLUT_BUILD_CFLAGS += -DNEED_XPARSEGEOMETRY_IMPL
+else # !HAVE_WIN32
 GLUT_BUILD_CFLAGS += -DHAVE_X11_EXTENSIONS_XRANDR_H
+endif # HAVE_WIN32
 
 GLUT_SRC += thirdparty/freeglut/src/fg_callbacks.c
 GLUT_SRC += thirdparty/freeglut/src/fg_cursor.c
@@ -327,6 +335,26 @@ GLUT_SRC += thirdparty/freeglut/src/fg_teapot.c
 GLUT_SRC += thirdparty/freeglut/src/fg_videoresize.c
 GLUT_SRC += thirdparty/freeglut/src/fg_window.c
 
+ifeq ($(HAVE_WIN32),yes)
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_cursor_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_display_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_ext_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_gamemode_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_init_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_input_devices_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_joystick_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_main_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_menu_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_spaceball_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_state_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_structure_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/mswin/fg_window_mswin.c
+GLUT_SRC += thirdparty/freeglut/src/util/xparsegeometry_repl.c
+
+GLUT_LIBS += -lopengl32
+GLUT_LIBS += -mwindows
+GLUT_LIBS += -lwinmm
+else # !HAVE_WIN32
 GLUT_SRC += thirdparty/freeglut/src/x11/fg_cursor_x11.c
 GLUT_SRC += thirdparty/freeglut/src/x11/fg_display_x11_glx.c
 GLUT_SRC += thirdparty/freeglut/src/x11/fg_ext_x11.c
@@ -348,6 +376,7 @@ GLUT_SRC += thirdparty/freeglut/src/x11/fg_xinput_x11.c
 GLUT_LIBS += -lGL
 GLUT_LIBS += -lX11
 GLUT_LIBS += -lXrandr
+endif # HAVE_WIN32
 
 # --- LEPTONICA (optional, used by Tesseract) ---
 
