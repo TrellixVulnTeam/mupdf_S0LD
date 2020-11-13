@@ -323,6 +323,92 @@ pdf_create_annot_raw(fz_context *ctx, pdf_page *page, enum pdf_annot_type type)
 	return annot;
 }
 
+fz_link *
+pdf_create_link(fz_context *ctx, pdf_page *page, fz_rect bbox, const char *uri)
+{
+	fz_link *link = NULL;
+	pdf_document *doc = page->doc;
+	pdf_obj *annot_obj = pdf_new_dict(ctx, doc, 0);
+	pdf_obj *ind_obj = NULL;
+	pdf_obj *bs = NULL;
+	pdf_obj *a = NULL;
+	fz_link **linkp;
+	fz_rect page_mediabox;
+	fz_matrix page_ctm;
+
+	fz_var(link);
+	fz_var(ind_obj);
+	fz_var(bs);
+	fz_var(a);
+
+	pdf_page_transform(ctx, page, &page_mediabox, &page_ctm);
+	page_ctm = fz_invert_matrix(page_ctm);
+	bbox = fz_transform_rect(bbox, page_ctm);
+
+	fz_try(ctx)
+	{
+		int ind_obj_num;
+		pdf_obj *annot_arr;
+
+		annot_arr = pdf_dict_get(ctx, page->obj, PDF_NAME(Annots));
+		if (annot_arr == NULL)
+		{
+			annot_arr = pdf_new_array(ctx, doc, 0);
+			pdf_dict_put_drop(ctx, page->obj, PDF_NAME(Annots), annot_arr);
+		}
+
+		pdf_dict_put(ctx, annot_obj, PDF_NAME(Type), PDF_NAME(Annot));
+		pdf_dict_put(ctx, annot_obj, PDF_NAME(Subtype), PDF_NAME(Link));
+		pdf_dict_put_rect(ctx, annot_obj, PDF_NAME(Rect), bbox);
+		bs = pdf_new_dict(ctx, doc, 4);
+		pdf_dict_put(ctx, bs, PDF_NAME(S), PDF_NAME(S));
+		pdf_dict_put(ctx, bs, PDF_NAME(Type), PDF_NAME(Border));
+		pdf_dict_put_int(ctx, bs, PDF_NAME(W), 0);
+		pdf_dict_put(ctx, annot_obj, PDF_NAME(BS), bs);
+		if (uri)
+		{
+			a = pdf_new_dict(ctx, doc, 2);
+			pdf_dict_put(ctx, a, PDF_NAME(S), PDF_NAME(URI));
+			pdf_dict_put_text_string(ctx, a, PDF_NAME(URI), uri);
+			pdf_dict_put(ctx, annot_obj, PDF_NAME(A), a);
+		}
+
+		/*
+			Both annotation object and annotation structure are now created.
+			Insert the object in the hierarchy and the structure in the
+			page's array.
+		*/
+		ind_obj_num = pdf_create_object(ctx, doc);
+		pdf_update_object(ctx, doc, ind_obj_num, annot_obj);
+		ind_obj = pdf_new_indirect(ctx, doc, ind_obj_num, 0);
+		pdf_array_push(ctx, annot_arr, ind_obj);
+
+		link = fz_new_link(ctx, bbox, uri);
+
+		linkp = &page->links;
+
+		while (*linkp != NULL)
+			linkp = &(*linkp)->next;
+
+		*linkp = link;
+
+		doc->dirty = 1;
+	}
+	fz_always(ctx)
+	{
+		pdf_drop_obj(ctx, a);
+		pdf_drop_obj(ctx, bs);
+		pdf_drop_obj(ctx, annot_obj);
+		pdf_drop_obj(ctx, ind_obj);
+	}
+	fz_catch(ctx)
+	{
+		fz_rethrow(ctx);
+	}
+
+	return link;
+}
+
 static pdf_obj *
 pdf_add_popup_annot(fz_context *ctx, pdf_annot *annot)
 {
@@ -479,6 +565,46 @@ pdf_create_annot(fz_context *ctx, pdf_page *page, enum pdf_annot_type type)
 	return annot;
 }
 
+static int
+remove_from_tree(fz_context *ctx, pdf_obj *arr, pdf_obj *item)
+{
+	int i, n, res = 0;
+
+	if (arr == NULL || pdf_mark_obj(ctx, arr))
+		return 0;
+
+	fz_try(ctx)
+	{
+		n = pdf_array_len(ctx, arr);
+		for (i = 0; i < n; ++i)
+		{
+			pdf_obj *obj = pdf_array_get(ctx, arr, i);
+			if (obj == item)
+			{
+				pdf_array_delete(ctx, arr, i);
+				res = 1;
+				break;
+			}
+
+			if (remove_from_tree(ctx, pdf_dict_get(ctx, obj, PDF_NAME(Kids)), item))
+			{
+				res = 1;
+				break;
+			}
+		}
+	}
+	fz_always(ctx)
+	{
+		pdf_unmark_obj(ctx, arr);
+	}
+	fz_catch(ctx)
+	{
+		fz_rethrow(ctx);
+	}
+
+	return res;
+}
+
 void
 pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 {
@@ -486,26 +612,45 @@ pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 	pdf_annot **annotptr;
 	pdf_obj *annot_arr, *popup;
 	int i;
+	int is_widget = 0;
 
 	if (annot == NULL)
 		return;
 
-	/* Remove annot from page's list */
+	/* Look for the annot in the page's list */
 	for (annotptr = &page->annots; *annotptr; annotptr = &(*annotptr)->next)
 	{
 		if (*annotptr == annot)
 			break;
 	}
 
+	if (*annotptr == NULL)
+	{
+		is_widget = 1;
+
+		/* Look also in the widget list*/
+		for (annotptr = &page->widgets; *annotptr; annotptr = &(*annotptr)->next)
+		{
+			if (*annotptr == annot)
+				break;
+		}
+	}
+
 	/* Check the passed annotation was of this page */
 	if (*annotptr == NULL)
 		return;
 
+	/* Remove annot from page's list */
 	*annotptr = annot->next;
 
 	/* If the removed annotation was the last in the list adjust the end pointer */
 	if (*annotptr == NULL)
-		page->annot_tailp = annotptr;
+	{
+		if (is_widget)
+			page->widget_tailp = annotptr;
+		else
+			page->annot_tailp = annotptr;
+	}
 
 	/* Remove the annot from the "Annots" array. */
 	annot_arr = pdf_dict_get(ctx, page->obj, PDF_NAME(Annots));
@@ -520,6 +665,15 @@ pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 		i = pdf_array_find(ctx, annot_arr, popup);
 		if (i >= 0)
 			pdf_array_delete(ctx, annot_arr, i);
+	}
+
+	/* For a widget, remove also from the AcroForm tree */
+	if (is_widget)
+	{
+		pdf_obj *root = pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root));
+		pdf_obj *acroform = pdf_dict_get(ctx, root, PDF_NAME(AcroForm));
+		pdf_obj *fields = pdf_dict_get(ctx, acroform, PDF_NAME(Fields));
+		(void)remove_from_tree(ctx, fields, annot->obj);
 	}
 
 	/* The garbage collection pass when saving will remove the annot object,

@@ -310,17 +310,17 @@ static inline jobject to_PDFAnnotation_safe(fz_context *ctx, JNIEnv *env, pdf_an
 	return jannot;
 }
 
-static inline jobject to_PDFObject_safe(fz_context *ctx, JNIEnv *env, jobject pdf, pdf_obj *obj)
+static inline jobject to_PDFObject_safe(fz_context *ctx, JNIEnv *env, pdf_obj *obj)
 {
 	jobject jobj;
 
-	if (!ctx || !pdf) return NULL;
+	if (!ctx) return NULL;
 
 	if (obj == NULL)
 		return (*env)->GetStaticObjectField(env, cls_PDFObject, fid_PDFObject_Null);
 
 	pdf_keep_obj(ctx, obj);
-	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj), pdf);
+	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj));
 	if (!jobj)
 		pdf_drop_obj(ctx, obj);
 
@@ -521,6 +521,35 @@ static inline jobject to_Page_safe_own(fz_context *ctx, JNIEnv *env, fz_page *pa
 	return jobj;
 }
 
+static inline jobject to_Link_safe_own(fz_context *ctx, JNIEnv *env, fz_link *link)
+{
+	jobject jobj;
+	jobject jbounds = NULL;
+	jobject juri = NULL;
+
+	if (!ctx || !link) return NULL;
+
+	jbounds = to_Rect_safe(ctx, env, link->rect);
+	if (!jbounds || (*env)->ExceptionCheck(env))
+	{
+		fz_drop_link(ctx, link);
+		return NULL;
+	}
+
+	juri = (*env)->NewStringUTF(env, link->uri);
+	if (!juri || (*env)->ExceptionCheck(env))
+	{
+		fz_drop_link(ctx, link);
+		return NULL;
+	}
+
+	jobj = (*env)->NewObject(env, cls_Link, mid_Link_init, jlong_cast(link), jbounds, juri);
+	if (!jobj)
+		fz_drop_link(ctx, link);
+
+	return jobj;
+}
+
 static inline jobject to_PDFAnnotation_safe_own(fz_context *ctx, JNIEnv *env, pdf_annot *annot)
 {
 	jobject jannot;
@@ -532,6 +561,19 @@ static inline jobject to_PDFAnnotation_safe_own(fz_context *ctx, JNIEnv *env, pd
 		pdf_drop_annot(ctx, annot);
 
 	return jannot;
+}
+
+static inline jobject to_PDFWidget_safe_own(fz_context *ctx, JNIEnv *env, pdf_widget *widget)
+{
+	jobject jwidget;
+
+	if (!ctx || !widget) return NULL;
+
+	jwidget = (*env)->NewObject(env, cls_PDFWidget, mid_PDFWidget_init, jlong_cast(widget));
+	if (!jwidget)
+		pdf_drop_annot(ctx, widget);
+
+	return jwidget;
 }
 
 static inline jobject to_PDFGraftMap_safe_own(fz_context *ctx, JNIEnv *env, jobject pdf, pdf_graft_map *map)
@@ -547,13 +589,13 @@ static inline jobject to_PDFGraftMap_safe_own(fz_context *ctx, JNIEnv *env, jobj
 	return jmap;
 }
 
-static inline jobject to_PDFObject_safe_own(fz_context *ctx, JNIEnv *env, jobject pdf, pdf_obj *obj)
+static inline jobject to_PDFObject_safe_own(fz_context *ctx, JNIEnv *env, pdf_obj *obj)
 {
 	jobject jobj;
 
-	if (!ctx || !obj || !pdf) return NULL;
+	if (!ctx || !obj) return NULL;
 
-	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj), pdf);
+	jobj = (*env)->NewObject(env, cls_PDFObject, mid_PDFObject_init, jlong_cast(obj));
 	if (!jobj)
 		pdf_drop_obj(ctx, obj);
 
