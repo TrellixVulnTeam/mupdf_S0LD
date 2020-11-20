@@ -125,9 +125,23 @@ static void file_truncate(fz_context *ctx, void *opaque)
 	fflush(file);
 
 #ifdef _MSC_VER
-	_chsize_s(fileno(file), ftell(file));
+	{
+		__int64 pos = _ftelli64(file);
+		if (pos >= 0)
+			_chsize_s(fileno(file), pos);
+	}
+#elif defined(__MINGW32__)
+	{
+		__int64 pos = _ftelli64(file);
+		if (pos >= 0)
+			(void)ftruncate(fileno(file), pos);
+	}
 #else
-	ftruncate(fileno(file), ftell(file));
+	{
+		off_t pos = ftello(file);
+		if (pos >= 0)
+			(void)ftruncate(fileno(file), pos);
+	}
 #endif
 }
 
