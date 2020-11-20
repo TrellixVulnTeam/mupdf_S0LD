@@ -71,6 +71,14 @@ ifneq ($(HAVE_WIN32),yes)
 endif
 OBJCOPY_CMD = $(QUIET_OBJCOPY) $(MKTGTDIR) ; $(LD) -r -b binary $(Z_NOEXECSTACK) -o $@ $<
 
+ifeq ($(shared),yes)
+LINK_CMD = $(QUIET_LINK) $(MKTGTDIR) ; $(CC) $(LDFLAGS) -o $@ \
+	$(filter-out %.$(SO),$^) \
+	$(sort $(patsubst %,-L%,$(dir $(filter %.$(SO),$^)))) \
+	$(patsubst lib%.$(SO),-l%,$(notdir $(filter %.$(SO),$^))) \
+	$(LIBS)
+endif
+
 # --- Rules ---
 
 $(OUT)/%.a :
