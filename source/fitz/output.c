@@ -130,6 +130,12 @@ static void file_truncate(fz_context *ctx, void *opaque)
 		if (pos >= 0)
 			_chsize_s(fileno(file), pos);
 	}
+#elif defined(__MINGW32__)
+	{
+		__int64 pos = _ftelli64(file);
+		if (pos >= 0)
+			(void)ftruncate(fileno(file), pos);
+	}
 #else
 	{
 		off_t pos = ftello(file);
