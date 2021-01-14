@@ -9,9 +9,11 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #ifdef _MSC_VER
 #include <io.h>
-#include <windows.h>
 #else
 #include <unistd.h>
 #endif
