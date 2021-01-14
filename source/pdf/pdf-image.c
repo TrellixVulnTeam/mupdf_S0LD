@@ -306,6 +306,7 @@ struct jbig2_segment_header {
 	int length;
 };
 
+/* coverity[-tainted_data_return] */
 static uint32_t getu32(const unsigned char *data)
 {
 	return ((uint32_t)data[0]<<24) | ((uint32_t)data[1]<<16) | ((uint32_t)data[2]<<8) | (uint32_t)data[3];
@@ -324,7 +325,7 @@ pdf_parse_jbig2_segment_header(fz_context *ctx,
 	info->number = getu32(data);
 	info->flags = data[4];
 
-	rts = data[5] >> 5;
+	rts = (data[5] >> 5) & 0x7;
 	if (rts == 7)
 	{
 		rts = getu32(data+5) & 0x1FFFFFFF;
@@ -397,7 +398,8 @@ static void
 pdf_copy_jbig2_random_segments(fz_context *ctx, fz_buffer *output, const unsigned char *data, size_t size, int page)
 {
 	struct jbig2_segment_header info;
-	const unsigned char *start = data;
+	const unsigned char *header = data;
+	const unsigned char *header_end;
 	const unsigned char *end = data + size;
 	size_t n;
 	int type;
@@ -416,21 +418,24 @@ pdf_copy_jbig2_random_segments(fz_context *ctx, fz_buffer *output, const unsigne
 		fz_throw(ctx, FZ_ERROR_GENERIC, "truncated jbig2 segment header");
 
 	/* Copy segment headers and segment data */
-	while (data < end)
+	header_end = data;
+	while (data < end && header < header_end)
 	{
-		n = pdf_parse_jbig2_segment_header(ctx, start, end, &info);
+		n = pdf_parse_jbig2_segment_header(ctx, header, header_end, &info);
+		if (n == 0)
+			fz_throw(ctx, FZ_ERROR_GENERIC, "truncated jbig2 segment header");
 
 		/* omit end of page, end of file, and segments for other pages */
 		type = (info.flags & 63);
 		if (type == 49 || type == 51 || (info.page > 0 && info.page != page))
 		{
-			start += n;
+			header += n;
 			data += info.length;
 		}
 		else
 		{
-			fz_append_data(ctx, output, start, n);
-			start += n;
+			fz_append_data(ctx, output, header, n);
+			header += n;
 			if (data + info.length > end)
 				fz_throw(ctx, FZ_ERROR_GENERIC, "truncated jbig2 segment data");
 			fz_append_data(ctx, output, data, info.length);
@@ -664,7 +669,7 @@ unknown_compression:
 					/* TODO: extract alpha plane to a soft mask. */
 					/* TODO: convert spots to colors. */
 
-					int line_skip = pixmap->stride - pixmap->w * pixmap->n;
+					size_t line_skip = pixmap->stride - pixmap->w * (size_t)pixmap->n;
 					int skip = pixmap->n - n;
 					while (h--)
 					{
