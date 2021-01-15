@@ -2043,6 +2043,14 @@ static void fmt_array(fz_context *ctx, struct fmt *fmt, pdf_obj *obj)
 	}
 }
 
+static int is_signature(fz_context *ctx, pdf_obj *obj)
+{
+	if (pdf_dict_get(ctx, obj, PDF_NAME(Type)) ==  PDF_NAME(Sig))
+		if (pdf_dict_get(ctx, obj, PDF_NAME(Contents)) && pdf_dict_get(ctx, obj, PDF_NAME(ByteRange)) && pdf_dict_get(ctx, obj, PDF_NAME(Filter)))
+			return 1;
+	return 0;
+}
+
 static void fmt_dict(fz_context *ctx, struct fmt *fmt, pdf_obj *obj)
 {
 	int i, n;
@@ -2052,9 +2060,25 @@ static void fmt_dict(fz_context *ctx, struct fmt *fmt, pdf_obj *obj)
 	if (fmt->tight) {
 		fmt_puts(ctx, fmt, "<<");
 		for (i = 0; i < n; i++) {
-			fmt_obj(ctx, fmt, pdf_dict_get_key(ctx, obj, i));
+			key = pdf_dict_get_key(ctx, obj, i);
+			val = pdf_dict_get_val(ctx, obj, i);
+			fmt_obj(ctx, fmt, key);
 			fmt_sep(ctx, fmt);
-			fmt_obj(ctx, fmt, pdf_dict_get_val(ctx, obj, i));
+			if (key == PDF_NAME(Contents) && is_signature(ctx, obj))
+			{
+				pdf_crypt *crypt = fmt->crypt;
+				fz_try(ctx)
+				{
+					fmt->crypt = NULL;
+					fmt_obj(ctx, fmt, val);
+				}
+				fz_always(ctx)
+					fmt->crypt = crypt;
+				fz_catch(ctx)
+					fz_rethrow(ctx);
+			}
+			else
+				fmt_obj(ctx, fmt, val);
 			fmt_sep(ctx, fmt);
 		}
 		fmt_puts(ctx, fmt, ">>");
@@ -2070,7 +2094,21 @@ static void fmt_dict(fz_context *ctx, struct fmt *fmt, pdf_obj *obj)
 			fmt_putc(ctx, fmt, ' ');
 			if (!pdf_is_indirect(ctx, val) && pdf_is_array(ctx, val))
 				fmt->indent ++;
-			fmt_obj(ctx, fmt, val);
+			if (key == PDF_NAME(Contents) && is_signature(ctx, obj))
+			{
+				pdf_crypt *crypt = fmt->crypt;
+				fz_try(ctx)
+				{
+					fmt->crypt = NULL;
+					fmt_obj(ctx, fmt, val);
+				}
+				fz_always(ctx)
+					fmt->crypt = crypt;
+				fz_catch(ctx)
+					fz_rethrow(ctx);
+			}
+			else
+				fmt_obj(ctx, fmt, val);
 			fmt_putc(ctx, fmt, '\n');
 			if (!pdf_is_indirect(ctx, val) && pdf_is_array(ctx, val))
 				fmt->indent --;
@@ -2177,7 +2215,7 @@ void pdf_print_encrypted_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int 
 	char *ptr;
 	size_t n;
 
-	ptr = pdf_sprint_encrypted_obj(ctx, buf, sizeof buf, &n, obj, tight, ascii,crypt, num, gen);
+	ptr = pdf_sprint_encrypted_obj(ctx, buf, sizeof buf, &n, obj, tight, ascii, crypt, num, gen);
 	fz_try(ctx)
 		fz_write_data(ctx, out, ptr, n);
 	fz_always(ctx)
@@ -2192,29 +2230,16 @@ void pdf_print_obj(fz_context *ctx, fz_output *out, pdf_obj *obj, int tight, int
 	pdf_print_encrypted_obj(ctx, out, obj, tight, ascii, NULL, 0, 0);
 }
 
-static void pdf_debug_encrypted_obj(fz_context *ctx, pdf_obj *obj, int tight, pdf_crypt *crypt, int num, int gen)
-{
-	char buf[1024];
-	char *ptr;
-	size_t n;
-	int ascii = 1;
-
-	ptr = pdf_sprint_encrypted_obj(ctx, buf, sizeof buf, &n, obj, tight, ascii, crypt, num, gen);
-	fwrite(ptr, 1, n, stdout);
-	if (ptr != buf)
-		fz_free(ctx, ptr);
-}
-
 void pdf_debug_obj(fz_context *ctx, pdf_obj *obj)
 {
-	pdf_debug_encrypted_obj(ctx, pdf_resolve_indirect(ctx, obj), 0, NULL, 0, 0);
-	putchar('\n');
+	pdf_print_obj(ctx, fz_stddbg(ctx), pdf_resolve_indirect(ctx, obj), 0, 0);
 }
 
 void pdf_debug_ref(fz_context *ctx, pdf_obj *obj)
 {
-	pdf_debug_encrypted_obj(ctx, obj, 0, NULL, 0, 0);
-	putchar('\n');
+	fz_output *out = fz_stddbg(ctx);
+	pdf_print_obj(ctx, out, obj, 0, 0);
+	fz_write_byte(ctx, out, '\n');
 }
 
 int pdf_obj_refs(fz_context *ctx, pdf_obj *obj)
@@ -2240,6 +2265,54 @@ pdf_dict_get_inheritable(fz_context *ctx, pdf_obj *node, pdf_obj *key)
 		do
 		{
 			val = pdf_dict_get(ctx, node, key);
+			if (val)
+				break;
+			if (pdf_mark_obj(ctx, node))
+				fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in tree (parents)");
+			marked = node;
+			node = pdf_dict_get(ctx, node, PDF_NAME(Parent));
+		}
+		while (node);
+	}
+	fz_always(ctx)
+	{
+		/* We assume that if we have marked an object, without an exception
+		 * being thrown, that we can always unmark the same object again
+		 * without an exception being thrown. */
+		if (marked)
+		{
+			do
+			{
+				pdf_unmark_obj(ctx, node2);
+				if (node2 == marked)
+					break;
+				node2 = pdf_dict_get(ctx, node2, PDF_NAME(Parent));
+			}
+			while (node2);
+		}
+	}
+	fz_catch(ctx)
+	{
+		fz_rethrow(ctx);
+	}
+
+	return val;
+}
+
+pdf_obj *
+pdf_dict_getp_inheritable(fz_context *ctx, pdf_obj *node, const char *path)
+{
+	pdf_obj *node2 = node;
+	pdf_obj *val = NULL;
+	pdf_obj *marked = NULL;
+
+	fz_var(node);
+	fz_var(marked);
+	fz_try(ctx)
+	{
+		do
+		{
+			val = pdf_dict_getp(ctx, node, path);
 			if (val)
 				break;
 			if (pdf_mark_obj(ctx, node))

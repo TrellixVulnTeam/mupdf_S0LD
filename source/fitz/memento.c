@@ -62,6 +62,19 @@ int atexit(void (*)(void));
 #include <stdio.h>
 #endif
 
+/* Workaround VS2012 (and earlier) missing va_copy. */
+#ifdef _MSC_VER
+# if _MSC_VER < 1800 /* Prior to 2013 */
+#  ifndef va_copy
+#   ifdef __va_copy
+#    define va_copy(dst,src) __va_copy(dst,src)
+#   else
+#    define va_copy(dst,src) memcpy(&dst, &src, sizeof(va_list))
+#   endif /* __va_copy */
+#  endif /* va_copy */
+# endif
+#endif
+
 /* Hacks to portably print large sizes */
 #ifdef _MSC_VER
 #define FMTZ "%llu"
@@ -1607,6 +1620,25 @@ void Memento_listBlockInfo(void)
     MEMENTO_LOCK();
     fprintf(stderr, "Details of allocated blocks:\n");
     Memento_appBlocks(&memento.used, showInfo, NULL);
+    MEMENTO_UNLOCK();
+#endif
+}
+
+#ifdef MEMENTO_DETAILS
+static int
+showBlockInfo(Memento_BlkHeader *b, void *arg)
+{
+    if (arg < MEMBLK_TOBLK(b) || (void *)MEMBLK_POSTPTR(b) <= arg)
+        return 0;
+    return showInfo(b, NULL);
+}
+#endif
+
+void Memento_blockInfo(void *p)
+{
+#ifdef MEMENTO_DETAILS
+    MEMENTO_LOCK();
+    Memento_appBlocks(&memento.used, showBlockInfo, p);
     MEMENTO_UNLOCK();
 #endif
 }
@@ -3555,6 +3587,10 @@ void (Memento_info)(void *addr)
 }
 
 void (Memento_listBlockInfo)(void)
+{
+}
+
+void (Memento_blockInfo)(void *ptr)
 {
 }
 
