@@ -74,7 +74,7 @@ for:
             pacman
             pacman-mirrors
             msys2-runtime" &&
-        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
+        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S 
             make
             mingw-w64-cross-toolchain
             p7zip"
@@ -94,7 +94,7 @@ for:
             pacman
             pacman-mirrors
             msys2-runtime" &&
-        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm -S 
+        C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S 
             make
             mingw-w64-i686-toolchain
             p7zip"
