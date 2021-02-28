@@ -301,6 +301,11 @@ struct pdf_document
 	int num_incremental_sections;
 	int xref_base;
 	int disallow_new_increments;
+
+	/* The local_xref is only active, if local_xref_nesting >= 0 */
+	pdf_xref *local_xref;
+	int local_xref_nesting;
+
 	pdf_xref *xref_sections;
 	pdf_xref *saved_xref_sections;
 	int *xref_index;
@@ -377,6 +382,8 @@ struct pdf_document
 	pdf_obj **orphans;
 
 	fz_xml_doc *xfa;
+
+	pdf_journal *journal;
 };
 
 pdf_document *pdf_create_document(fz_context *ctx);
@@ -552,6 +559,7 @@ typedef struct
 	int do_sanitize; /* Sanitize content streams. */
 	int do_appearance; /* (Re)create appearance streams. */
 	int do_encrypt; /* Encryption method to use: keep, none, rc4-40, etc. */
+	int dont_regenerate_id; /* Don't regenerate ID if set (used for clean) */
 	int permissions; /* Document encryption permissions. */
 	char opwd_utf8[128]; /* Owner password. */
 	char upwd_utf8[128]; /* User password. */

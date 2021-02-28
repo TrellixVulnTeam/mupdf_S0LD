@@ -19,7 +19,7 @@ static int clear = 0;
 static int sign = 0;
 static int list = 1;
 
-static void usage(void)
+static int usage(void)
 {
 	fprintf(stderr,
 		"usage: mutool sign [options] input.pdf [signature object numbers]\n"
@@ -30,7 +30,7 @@ static void usage(void)
 		"\t-P -\tcertificate password\n"
 		"\t-o -\toutput file name\n"
 		   );
-	exit(1);
+	return 1;
 }
 
 static void verify_signature(fz_context *ctx, pdf_document *doc, pdf_obj *signature)
@@ -137,7 +137,7 @@ static void sign_signature(fz_context *ctx, pdf_document *doc, pdf_obj *signatur
 		page = pdf_load_page(ctx, doc, pageno);
 		for (widget = pdf_first_widget(ctx, page); widget; widget = pdf_next_widget(ctx, widget))
 			if (pdf_widget_type(ctx, widget) == PDF_WIDGET_TYPE_SIGNATURE && !pdf_objcmp_resolve(ctx, widget->obj, signature))
-				pdf_sign_signature(ctx, widget, signer);
+				pdf_sign_signature(ctx, widget, signer, NULL);
 	}
 	fz_always(ctx)
 	{
@@ -242,12 +242,12 @@ int pdfsign_main(int argc, char **argv)
 		case 'P': certificatepassword = fz_optarg; break;
 		case 's': list = 0; sign = 1; certificatefile = fz_optarg; break;
 		case 'v': list = 0; verify = 1; break;
-		default: usage(); break;
+		default: return usage();
 		}
 	}
 
 	if (argc - fz_optind < 1)
-		usage();
+		return usage();
 
 	infile = argv[fz_optind++];
 

@@ -383,7 +383,7 @@ static struct {
 	char *maxlayoutfilename;
 } timing;
 
-static void usage(void)
+static int usage(void)
 {
 	fprintf(stderr,
 		"mudraw version " FZ_VERSION "\n"
@@ -394,11 +394,11 @@ static void usage(void)
 		"\t-F -\toutput format (default inferred from output file name)\n"
 		"\t\traster: png, pnm, pam, pbm, pkm, pwg, pcl, ps\n"
 		"\t\tvector: svg, pdf, trace, ocr.trace\n"
-		"\t\ttext: txt, html, xhtml, stext\n"
+		"\t\ttext: txt, html, xhtml, stext, stext.json\n"
 #ifndef OCR_DISABLED
-		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext\n"
+		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext, ocr.stext.json\n"
 #else
-		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext (disabled)\n"
+		"\t\tocr'd text: ocr.txt, ocr.html, ocr.xhtml, ocr.stext, ocr.stext.json (disabled)\n"
 #endif
 		"\t\tbitmap-wrapped-as-pdf: pclm, ocr.pdf\n"
 		"\n"
@@ -467,7 +467,7 @@ static void usage(void)
 		"\n"
 		"\tpages\tcomma separated list of page numbers and ranges\n"
 		);
-	exit(1);
+	return 1;
 }
 
 static int gettime(void)
@@ -1820,7 +1820,7 @@ int mudraw_main(int argc, char **argv)
 	{
 		switch (c)
 		{
-		default: usage(); break;
+		default: return usage();
 
 		case 'q': quiet = 1; break;
 
@@ -1912,7 +1912,7 @@ int mudraw_main(int argc, char **argv)
 	}
 
 	if (fz_optind == argc)
-		usage();
+		return usage();
 
 	if (num_workers > 0)
 	{

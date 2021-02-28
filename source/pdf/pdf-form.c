@@ -103,6 +103,7 @@ static void pdf_field_mark_dirty(fz_context *ctx, pdf_obj *field)
 
 static void update_field_value(fz_context *ctx, pdf_document *doc, pdf_obj *obj, const char *text)
 {
+	const char *old_text;
 	pdf_obj *grp;
 
 	if (!text)
@@ -113,6 +114,11 @@ static void update_field_value(fz_context *ctx, pdf_document *doc, pdf_obj *obj,
 	grp = find_head_of_field_group(ctx, obj);
 	if (grp)
 		obj = grp;
+
+	/* Only update if we change the actual value. */
+	old_text = pdf_dict_get_text_string(ctx, obj, PDF_NAME(V));
+	if (old_text && !strcmp(old_text, text))
+		return;
 
 	pdf_dict_put_text_string(ctx, obj, PDF_NAME(V), text);
 
@@ -446,33 +452,61 @@ pdf_obj *pdf_button_field_on_state(fz_context *ctx, pdf_obj *field)
 	return on;
 }
 
-static void toggle_check_box(fz_context *ctx, pdf_document *doc, pdf_obj *field)
+static void
+begin_annot_op(fz_context *ctx, pdf_annot *annot, const char *op)
 {
-	int ff = pdf_field_flags(ctx, field);
-	int is_radio = (ff & PDF_BTN_FIELD_IS_RADIO);
-	int is_no_toggle_to_off = (ff & PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF);
-	pdf_obj *grp, *as, *val;
+	pdf_begin_operation(ctx, annot->page->doc, op);
+}
 
-	grp = find_head_of_field_group(ctx, field);
-	if (!grp)
-		grp = field;
+static void
+end_annot_op(fz_context *ctx, pdf_annot *annot)
+{
+	pdf_end_operation(ctx, annot->page->doc);
+}
 
-	/* TODO: check V value as well as or instead of AS? */
-	as = pdf_dict_get(ctx, field, PDF_NAME(AS));
-	if (as && as != PDF_NAME(Off))
+static void toggle_check_box(fz_context *ctx, pdf_annot *annot)
+{
+	pdf_document *doc = annot->page->doc;
+
+	begin_annot_op(ctx, annot, "Toggle checkbox");
+
+	fz_try(ctx)
 	{
-		if (is_radio && is_no_toggle_to_off)
-			return;
-		val = PDF_NAME(Off);
-	}
-	else
-	{
-		val = pdf_button_field_on_state(ctx, field);
-	}
+		pdf_obj *field = annot->obj;
+		int ff = pdf_field_flags(ctx, field);
+		int is_radio = (ff & PDF_BTN_FIELD_IS_RADIO);
+		int is_no_toggle_to_off = (ff & PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF);
+		pdf_obj *grp, *as, *val;
 
-	pdf_dict_put(ctx, grp, PDF_NAME(V), val);
-	set_check_grp(ctx, doc, grp, val);
-	doc->recalculate = 1;
+		grp = find_head_of_field_group(ctx, field);
+		if (!grp)
+			grp = field;
+
+		/* TODO: check V value as well as or instead of AS? */
+		as = pdf_dict_get(ctx, field, PDF_NAME(AS));
+		if (as && as != PDF_NAME(Off))
+		{
+			if (is_radio && is_no_toggle_to_off)
+				break;
+			val = PDF_NAME(Off);
+		}
+		else
+		{
+			val = pdf_button_field_on_state(ctx, field);
+		}
+
+		pdf_dict_put(ctx, grp, PDF_NAME(V), val);
+		set_check_grp(ctx, doc, grp, val);
+		if (pdf_field_dirties_document(ctx, doc, field))
+			doc->dirty = 1;
+		doc->recalculate = 1;
+	}
+	fz_always(ctx)
+		end_annot_op(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	annot->has_new_ap = 1;
 }
 
 int pdf_has_unsaved_changes(fz_context *ctx, pdf_document *doc)
@@ -493,8 +527,7 @@ int pdf_toggle_widget(fz_context *ctx, pdf_widget *widget)
 		return 0;
 	case PDF_WIDGET_TYPE_CHECKBOX:
 	case PDF_WIDGET_TYPE_RADIOBUTTON:
-		toggle_check_box(ctx, widget->page->doc, widget->obj);
-		widget->has_new_ap = 1;
+		toggle_check_box(ctx, widget);
 		return 1;
 	}
 	return 0;
@@ -507,15 +540,25 @@ pdf_update_page(fz_context *ctx, pdf_page *page)
 	pdf_widget *widget;
 	int changed = 0;
 
-	if (page->doc->recalculate)
-		pdf_calculate_form(ctx, page->doc);
+	fz_try(ctx)
+	{
+		pdf_begin_implicit_operation(ctx, page->doc);
+		if (page->doc->recalculate)
+			pdf_calculate_form(ctx, page->doc);
 
-	for (annot = page->annots; annot; annot = annot->next)
-		if (pdf_update_annot(ctx, annot))
-			changed = 1;
-	for (widget = page->widgets; widget; widget = widget->next)
-		if (pdf_update_annot(ctx, widget))
-			changed = 1;
+		for (annot = page->annots; annot; annot = annot->next)
+			if (pdf_update_annot(ctx, annot))
+				changed = 1;
+		for (widget = page->widgets; widget; widget = widget->next)
+			if (pdf_update_annot(ctx, widget))
+				changed = 1;
+	}
+	fz_always(ctx)
+	{
+		pdf_end_operation(ctx, page->doc);
+	}
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 
 	return changed;
 }
@@ -532,10 +575,22 @@ pdf_widget *pdf_next_widget(fz_context *ctx, pdf_widget *widget)
 
 enum pdf_widget_type pdf_widget_type(fz_context *ctx, pdf_widget *widget)
 {
-	pdf_obj *subtype = pdf_dict_get(ctx, widget->obj, PDF_NAME(Subtype));
-	if (pdf_name_eq(ctx, subtype, PDF_NAME(Widget)))
-		return pdf_field_type(ctx, widget->obj);
-	return PDF_WIDGET_TYPE_BUTTON;
+	enum pdf_widget_type ret = PDF_WIDGET_TYPE_BUTTON;
+
+	pdf_annot_push_local_xref(ctx, widget);
+
+	fz_try(ctx)
+	{
+		pdf_obj *subtype = pdf_dict_get(ctx, widget->obj, PDF_NAME(Subtype));
+		if (pdf_name_eq(ctx, subtype, PDF_NAME(Widget)))
+			ret = pdf_field_type(ctx, widget->obj);
+	}
+	fz_always(ctx)
+		pdf_annot_pop_local_xref(ctx, widget);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return ret;
 }
 
 static int set_validated_field_value(fz_context *ctx, pdf_document *doc, pdf_obj *field, const char *text, int ignore_trigger_events)
@@ -581,6 +636,8 @@ static int set_checkbox_value(fz_context *ctx, pdf_document *doc, pdf_obj *field
 {
 	update_checkbox_selector(ctx, doc, field, val);
 	update_field_value(ctx, doc, field, val);
+	if (pdf_field_dirties_document(ctx, doc, field))
+		doc->dirty = 1;
 	return 1;
 }
 
@@ -963,18 +1020,20 @@ int pdf_set_text_field_value(fz_context *ctx, pdf_widget *widget, const char *ne
 
 	event.newChange = NULL;
 
+	pdf_begin_operation(ctx, doc, "Edit text field");
+
 	fz_var(newChange);
 	fz_var(event.newChange);
 	fz_try(ctx)
 	{
 		if (!widget->ignore_trigger_events)
 		{
-			event.value = pdf_field_value(ctx, widget->obj);
+			event.value = pdf_annot_field_value(ctx, widget);
 			event.change = new_value;
 			event.selStart = 0;
 			event.selEnd = (int)strlen(event.value);
 			event.willCommit = 0;
-			rc = pdf_field_event_keystroke(ctx, doc, widget->obj, &event);
+			rc = pdf_annot_field_event_keystroke(ctx, doc, widget, &event);
 			if (rc)
 			{
 				if (event.newChange)
@@ -986,18 +1045,19 @@ int pdf_set_text_field_value(fz_context *ctx, pdf_widget *widget, const char *ne
 				event.selEnd = -1;
 				event.willCommit = 1;
 				event.newChange = NULL;
-				rc = pdf_field_event_keystroke(ctx, doc, widget->obj, &event);
+				rc = pdf_annot_field_event_keystroke(ctx, doc, widget, &event);
 				if (rc)
-					rc = pdf_set_field_value(ctx, doc, widget->obj, event.value, 0);
+					rc = pdf_set_annot_field_value(ctx, doc, widget, event.value, 0);
 			}
 		}
 		else
 		{
-			rc = pdf_set_field_value(ctx, doc, widget->obj, new_value, 1);
+			rc = pdf_set_annot_field_value(ctx, doc, widget, new_value, 1);
 		}
 	}
 	fz_always(ctx)
 	{
+		pdf_end_operation(ctx, doc);
 		fz_free(ctx, newChange);
 		fz_free(ctx, event.newChange);
 	}
@@ -1772,14 +1832,23 @@ static void pdf_execute_js_action(fz_context *ctx, pdf_document *doc, pdf_obj *t
 	if (js)
 	{
 		char *code = pdf_load_stream_or_string_as_utf8(ctx, js);
+		int in_op = 0;
+
+		fz_var(in_op);
 		fz_try(ctx)
 		{
 			char buf[100];
 			fz_snprintf(buf, sizeof buf, "%d/%s", pdf_to_num(ctx, target), path);
+			pdf_begin_operation(ctx, doc, "Javascript Event");
+			in_op = 1;
 			pdf_js_execute(doc->js, buf, code);
 		}
 		fz_always(ctx)
+		{
+			if (in_op)
+				pdf_end_operation(ctx, doc);
 			fz_free(ctx, code);
+		}
 		fz_catch(ctx)
 			fz_rethrow(ctx);
 	}
@@ -1871,58 +1940,82 @@ void pdf_page_event_close(fz_context *ctx, pdf_page *page)
 	pdf_execute_action(ctx, page->doc, page->obj, "AA/C");
 }
 
+static void
+annot_execute_action(fz_context *ctx, pdf_annot *annot, const char *act)
+{
+	begin_annot_op(ctx, annot, "JavaScript action");
+
+	fz_try(ctx)
+		pdf_execute_action(ctx, annot->page->doc, annot->obj, act);
+	fz_always(ctx)
+		end_annot_op(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+}
+
 void pdf_annot_event_enter(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/E");
+	annot_execute_action(ctx, annot, "AA/E");
 }
 
 void pdf_annot_event_exit(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/X");
+	annot_execute_action(ctx, annot, "AA/X");
 }
 
 void pdf_annot_event_down(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/D");
+	annot_execute_action(ctx, annot, "AA/D");
 }
 
 void pdf_annot_event_up(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_obj *action = pdf_dict_get(ctx, annot->obj, PDF_NAME(A));
-	if (action)
-		pdf_execute_action_chain(ctx, annot->page->doc, annot->obj, "A", action);
-	else
-		pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/U");
+	pdf_obj *action;
+
+	begin_annot_op(ctx, annot, "JavaScript action");
+
+	fz_try(ctx)
+	{
+		action = pdf_dict_get(ctx, annot->obj, PDF_NAME(A));
+		if (action)
+			pdf_execute_action_chain(ctx, annot->page->doc, annot->obj, "A", action);
+		else
+			pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/U");
+	}
+	fz_always(ctx)
+		end_annot_op(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 }
 
 void pdf_annot_event_focus(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/Fo");
+	annot_execute_action(ctx, annot, "AA/Fo");
 }
 
 void pdf_annot_event_blur(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/Bl");
+	annot_execute_action(ctx, annot, "AA/Bl");
 }
 
 void pdf_annot_event_page_open(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/PO");
+	annot_execute_action(ctx, annot, "AA/PO");
 }
 
 void pdf_annot_event_page_close(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/PC");
+	annot_execute_action(ctx, annot, "AA/PC");
 }
 
 void pdf_annot_event_page_visible(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/PV");
+	annot_execute_action(ctx, annot, "AA/PV");
 }
 
 void pdf_annot_event_page_invisible(fz_context *ctx, pdf_annot *annot)
 {
-	pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/PI");
+	annot_execute_action(ctx, annot, "AA/PI");
 }
 
 int pdf_field_event_keystroke(fz_context *ctx, pdf_document *doc, pdf_obj *field, pdf_keystroke_event *evt)
@@ -1939,6 +2032,22 @@ int pdf_field_event_keystroke(fz_context *ctx, pdf_document *doc, pdf_obj *field
 		}
 	}
 	return 1;
+}
+
+int pdf_annot_field_event_keystroke(fz_context *ctx, pdf_document *doc, pdf_annot *annot, pdf_keystroke_event *evt)
+{
+	int ret;
+
+	pdf_annot_push_local_xref(ctx, annot);
+
+	fz_try(ctx)
+		ret = pdf_field_event_keystroke(ctx, doc, annot->obj, evt);
+	fz_always(ctx)
+		pdf_annot_pop_local_xref(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return ret;
 }
 
 char *pdf_field_event_format(fz_context *ctx, pdf_document *doc, pdf_obj *field)
