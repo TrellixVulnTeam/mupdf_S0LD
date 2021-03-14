@@ -262,14 +262,14 @@ pdf_xref_entry *pdf_get_populating_xref_entry(fz_context *ctx, pdf_document *doc
 	pdf_xref *xref;
 	pdf_xref_subsec *sub;
 
-	if (doc->local_xref && doc->local_xref_nesting > 0)
-		return pdf_get_local_xref_entry(ctx, doc, num);
-
 	if (doc->num_xref_sections == 0)
 	{
 		doc->xref_sections = fz_malloc_struct(ctx, pdf_xref);
 		doc->num_xref_sections = 1;
 	}
+
+	if (doc->local_xref && doc->local_xref_nesting > 0)
+		return pdf_get_local_xref_entry(ctx, doc, num);
 
 	/* Prevent accidental heap underflow */
 	if (num < 0 || num > PDF_MAX_OBJECT_NUMBER)
@@ -736,6 +736,7 @@ void pdf_forget_xref(fz_context *ctx, pdf_document *doc)
 	doc->saved_xref_sections = doc->xref_sections;
 	doc->saved_num_xref_sections = doc->num_xref_sections;
 
+	doc->xref_sections = NULL;
 	doc->startxref = 0;
 	doc->num_xref_sections = 0;
 	doc->num_incremental_sections = 0;
