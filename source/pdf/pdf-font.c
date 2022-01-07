@@ -1,3 +1,25 @@
+// Copyright (C) 2004-2021 Artifex Software, Inc.
+//
+// This file is part of MuPDF.
+//
+// MuPDF is free software: you can redistribute it and/or modify it under the
+// terms of the GNU Affero General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// MuPDF is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+// details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with MuPDF. If not, see <https://www.gnu.org/licenses/agpl-3.0.en.html>
+//
+// Alternative licensing terms are available from the licensor.
+// For commercial licensing, see <https://www.artifex.com/> or contact
+// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
+// CA 94945, U.S.A., +1(415)492-9861, for further information.
+
 #include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
 
@@ -402,6 +424,8 @@ pdf_load_substitute_cjk_font(fz_context *ctx, pdf_font_desc *fontdesc, const cha
 
 	fontdesc->font->flags.ft_substitute = 1;
 	fontdesc->font->flags.ft_stretch = 0;
+	fontdesc->font->flags.cjk = 1;
+	fontdesc->font->flags.cjk_lang = ros;
 }
 
 static void
@@ -612,8 +636,6 @@ static int use_s22pdf_workaround(fz_context *ctx, pdf_obj *dict, pdf_obj *descri
 	if (descriptor)
 	{
 		if (pdf_dict_get(ctx, dict, PDF_NAME(Encoding)) != PDF_NAME(WinAnsiEncoding))
-			return 0;
-		if (pdf_dict_get(ctx, dict, PDF_NAME(ToUnicode)) != NULL)
 			return 0;
 		if (pdf_dict_get_int(ctx, descriptor, PDF_NAME(Flags)) != 4)
 			return 0;

@@ -1,3 +1,25 @@
+// Copyright (C) 2004-2021 Artifex Software, Inc.
+//
+// This file is part of MuPDF.
+//
+// MuPDF is free software: you can redistribute it and/or modify it under the
+// terms of the GNU Affero General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// MuPDF is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+// details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with MuPDF. If not, see <https://www.gnu.org/licenses/agpl-3.0.en.html>
+//
+// Alternative licensing terms are available from the licensor.
+// For commercial licensing, see <https://www.artifex.com/> or contact
+// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
+// CA 94945, U.S.A., +1(415)492-9861, for further information.
+
 #include "mupdf/fitz.h"
 
 #include "color-imp.h"
@@ -318,6 +340,11 @@ fz_new_colorspace(fz_context *ctx, enum fz_colorspace_type type, int flags, int 
 {
 	fz_colorspace *cs = fz_malloc_struct(ctx, fz_colorspace);
 	FZ_INIT_KEY_STORABLE(cs, 1, fz_drop_colorspace_imp);
+
+	if (n > FZ_MAX_COLORS)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too many color components (%d > %d)", n, FZ_MAX_COLORS);
+	if (n < 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "too few color components (%d < 1)", n);
 
 	fz_try(ctx)
 	{
@@ -789,7 +816,8 @@ fz_find_icc_link(fz_context *ctx,
 	fz_colorspace *prf,
 	fz_color_params rend,
 	int format,
-	int copy_spots)
+	int copy_spots,
+	int premult)
 {
 	fz_icc_link *link, *old_link;
 	fz_link_key key, *new_key;
@@ -804,7 +832,7 @@ fz_find_icc_link(fz_context *ctx,
 	key.src_extras = src_extras;
 	key.dst_extras = dst_extras;
 	key.copy_spots = copy_spots;
-	key.format = format;
+	key.format = (format & 1) | (premult*2);
 	key.proof = (prf != NULL);
 	key.bgr = (dst->type == FZ_COLORSPACE_BGR);
 
@@ -815,7 +843,7 @@ fz_find_icc_link(fz_context *ctx,
 		memcpy(new_key, &key, sizeof (fz_link_key));
 		fz_try(ctx)
 		{
-			link = fz_new_icc_link(ctx, src, src_extras, dst, dst_extras, prf, rend, format, copy_spots);
+			link = fz_new_icc_link(ctx, src, src_extras, dst, dst_extras, prf, rend, format, copy_spots, premult);
 			old_link = fz_store_item(ctx, new_key, link, 1000, &fz_link_store_type);
 			if (old_link)
 			{
@@ -928,7 +956,7 @@ fz_init_process_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colo
 
 		fz_try(ctx)
 		{
-			cc->link = fz_find_icc_link(ctx, ss, 0, ds, 0, is, params, 1, 0);
+			cc->link = fz_find_icc_link(ctx, ss, 0, ds, 0, is, params, 1, 0, 0);
 			cc->convert = fz_icc_transform_color;
 		}
 		fz_catch(ctx)
@@ -1025,23 +1053,30 @@ typedef struct fz_cached_color_converter
 static void fz_cached_color_convert(fz_context *ctx, fz_color_converter *cc_, const float *ss, float *ds)
 {
 	fz_cached_color_converter *cc = cc_->opaque;
-	float *val = fz_hash_find(ctx, cc->hash, ss);
-	int n = cc->base.ds->n * sizeof(float);
-
-	if (val)
+	if (cc->hash)
 	{
-		memcpy(ds, val, n);
-		return;
+		float *val = fz_hash_find(ctx, cc->hash, ss);
+		int n = cc->base.ds->n * sizeof(float);
+
+		if (val)
+		{
+			memcpy(ds, val, n);
+			return;
+		}
+
+		cc->base.convert(ctx, &cc->base, ss, ds);
+
+		val = Memento_label(fz_malloc_array(ctx, cc->base.ds->n, float), "cached_color_convert");
+		memcpy(val, ds, n);
+		fz_try(ctx)
+			fz_hash_insert(ctx, cc->hash, ss, val);
+		fz_catch(ctx)
+			fz_free(ctx, val);
 	}
-
-	cc->base.convert(ctx, &cc->base, ss, ds);
-
-	val = Memento_label(fz_malloc_array(ctx, cc->base.ds->n, float), "cached_color_convert");
-	memcpy(val, ds, n);
-	fz_try(ctx)
-		fz_hash_insert(ctx, cc->hash, ss, val);
-	fz_catch(ctx)
-		fz_free(ctx, val);
+	else
+	{
+		cc->base.convert(ctx, &cc->base, ss, ds);
+	}
 }
 
 void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_colorspace *is, fz_color_params params)
@@ -1060,7 +1095,10 @@ void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_
 	fz_try(ctx)
 	{
 		fz_find_color_converter(ctx, &cached->base, ss, ds, is, params);
-		cached->hash = fz_new_hash_table(ctx, 256, n * sizeof(float), -1, fz_free);
+		if (n * sizeof(float) <= FZ_HASH_TABLE_KEY_LENGTH)
+			cached->hash = fz_new_hash_table(ctx, 256, n * sizeof(float), -1, fz_free);
+		else
+			fz_warn(ctx, "colorspace has too many components to be cached");
 	}
 	fz_catch(ctx)
 	{
@@ -1442,7 +1480,12 @@ fz_convert_pixmap_samples(fz_context *ctx, const fz_pixmap *src, fz_pixmap *dst,
 			{
 				int sx = src->s + src->alpha;
 				int dx = dst->s + dst->alpha;
-				link = fz_find_icc_link(ctx, ss, sx, ds, dx, prf, params, 0, copy_spots);
+				/* If we have alpha, we're preserving spots and we have the same number
+				 * of 'extra' (non process, spots+alpha) channels (i.e. sx == dx), then
+				 * we get lcms2 to do the premultiplication handling for us. If not,
+				 * fz_icc_transform_pixmap will have to do it by steam. */
+				int premult = src->alpha && (sx == dx) && copy_spots;
+				link = fz_find_icc_link(ctx, ss, sx, ds, dx, prf, params, 0, copy_spots, premult);
 				fz_icc_transform_pixmap(ctx, link, src, dst, copy_spots);
 			}
 			fz_catch(ctx)
