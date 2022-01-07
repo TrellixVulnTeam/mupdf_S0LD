@@ -232,7 +232,9 @@ static char *get_history_filename(void)
 	static int once = 0;
 	if (!once)
 	{
-		char *home;
+		char *home = getenv("MUPDF_HISTORY");
+		if (home)
+			return home;
 		home = getenv("XDG_CACHE_HOME");
 		if (!home)
 			home = getenv("HOME");
@@ -247,18 +249,23 @@ static char *get_history_filename(void)
 	return history_path;
 }
 
-static void read_history_file_as_json(js_State *J)
+static int read_history_file_as_json(js_State *J)
 {
 	fz_buffer *buf = NULL;
 	const char *json = "{}";
+	const char *history_file;
 
 	fz_var(buf);
 
-	if (fz_file_exists(ctx, get_history_filename()))
+	history_file = get_history_filename();
+	if (strlen(history_file) == 0)
+		return 0;
+
+	if (fz_file_exists(ctx, history_file))
 	{
 		fz_try(ctx)
 		{
-			buf = fz_read_file(ctx, get_history_filename());
+			buf = fz_read_file(ctx, history_file);
 			json = fz_string_from_buffer(ctx, buf);
 		}
 		fz_catch(ctx)
@@ -281,6 +288,7 @@ static void read_history_file_as_json(js_State *J)
 	}
 
 	fz_drop_buffer(ctx, buf);
+	return 1;
 }
 
 static fz_location try_location(js_State *J)
@@ -325,7 +333,8 @@ static void load_history(void)
 
 	J = js_newstate(NULL, NULL, 0);
 
-	read_history_file_as_json(J);
+	if (!read_history_file_as_json(J))
+		return;
 
 	if (js_hasproperty(J, -1, absname))
 	{
@@ -402,7 +411,8 @@ static void save_history(void)
 
 	J = js_newstate(NULL, NULL, 0);
 
-	read_history_file_as_json(J);
+	if (!read_history_file_as_json(J))
+		return;
 
 	js_newobject(J);
 	{
@@ -447,10 +457,13 @@ static void save_history(void)
 
 	fz_try(ctx)
 	{
-		out = fz_new_output_with_path(ctx, get_history_filename(), 0);
-		fz_write_string(ctx, out, json);
-		fz_write_byte(ctx, out, '\n');
-		fz_close_output(ctx, out);
+		const char *history_file = get_history_filename();
+		if (strlen(history_file) > 0) {
+			out = fz_new_output_with_path(ctx, history_file, 0);
+			fz_write_string(ctx, out, json);
+			fz_write_byte(ctx, out, '\n');
+			fz_close_output(ctx, out);
+		}
 	}
 	fz_always(ctx)
 		fz_drop_output(ctx, out);
@@ -583,15 +596,15 @@ static char *help_dialog_text =
 static void help_dialog(void)
 {
 	static int scroll;
-	ui_dialog_begin(500, 1000);
-	ui_layout(T, X, W, 2, 2);
+	ui_dialog_begin(ui.gridsize*20, ui.gridsize*40);
+	ui_layout(T, X, W, ui.padsize, ui.padsize);
 	ui_label("MuPDF %s", FZ_VERSION);
 	ui_spacer();
-	ui_layout(B, NONE, S, 2, 2);
+	ui_layout(B, NONE, S, ui.padsize, ui.padsize);
 	if (ui_button("Okay") || ui.key == KEY_ENTER || ui.key == KEY_ESCAPE)
 		ui.dialog = NULL;
 	ui_spacer();
-	ui_layout(ALL, BOTH, CENTER, 2, 2);
+	ui_layout(ALL, BOTH, CENTER, ui.padsize, ui.padsize);
 	ui_label_with_scrollbar(help_dialog_text, 0, 0, &scroll);
 	ui_dialog_end();
 }
@@ -599,10 +612,10 @@ static void help_dialog(void)
 static char error_message[256];
 static void error_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*4);
-	ui_layout(T, NONE, NW, 2, 2);
+	ui_dialog_begin(ui.gridsize*20, (ui.gridsize+ui.padsize*2)*4);
+	ui_layout(T, NONE, NW, ui.padsize, ui.padsize);
 	ui_label("%C %s", 0x1f4a3, error_message); /* BOMB */
-	ui_layout(B, NONE, S, 2, 2);
+	ui_layout(B, NONE, S, ui.padsize, ui.padsize);
 	if (ui_button("Quit") || ui.key == KEY_ENTER || ui.key == KEY_ESCAPE || ui.key == 'q')
 		glutLeaveMainLoop();
 	ui_dialog_end();
@@ -619,10 +632,10 @@ void ui_show_error_dialog(const char *fmt, ...)
 static char warning_message[256];
 static void warning_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*4);
-	ui_layout(T, NONE, NW, 2, 2);
+	ui_dialog_begin(ui.gridsize*20, (ui.gridsize+ui.padsize*2)*4);
+	ui_layout(T, NONE, NW, ui.padsize, ui.padsize);
 	ui_label("%C %s", 0x26a0, warning_message); /* WARNING SIGN */
-	ui_layout(B, NONE, S, 2, 2);
+	ui_layout(B, NONE, S, ui.padsize, ui.padsize);
 	if (ui_button("Okay") || ui.key == KEY_ENTER || ui.key == KEY_ESCAPE)
 		ui.dialog = NULL;
 	ui_dialog_end();
@@ -638,10 +651,10 @@ void ui_show_warning_dialog(const char *fmt, ...)
 
 static void quit_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*3);
-	ui_layout(T, NONE, NW, 2, 2);
+	ui_dialog_begin(ui.gridsize*20, (ui.gridsize+ui.padsize*2)*3);
+	ui_layout(T, NONE, NW, ui.padsize, ui.padsize);
 	ui_label("%C The document has unsaved changes. Are you sure you want to quit?", 0x26a0); /* WARNING SIGN */
-	ui_layout(B, X, S, 2, 2);
+	ui_layout(B, X, S, ui.padsize, ui.padsize);
 	ui_panel_begin(0, ui.gridsize, 0, 0, 0);
 	{
 		ui_layout(R, NONE, S, 0, 0);
@@ -668,10 +681,10 @@ static void quit(void)
 
 static void reload_dialog(void)
 {
-	ui_dialog_begin(500, (ui.gridsize+4)*3);
-	ui_layout(T, NONE, NW, 2, 2);
+	ui_dialog_begin(ui.gridsize*20, (ui.gridsize+ui.padsize*2)*3);
+	ui_layout(T, NONE, NW, ui.padsize, ui.padsize);
 	ui_label("%C The document has unsaved changes. Are you sure you want to reload?", 0x26a0); /* WARNING SIGN */
-	ui_layout(B, X, S, 2, 2);
+	ui_layout(B, X, S, ui.padsize, ui.padsize);
 	ui_panel_begin(0, ui.gridsize, 0, 0, 0);
 	{
 		ui_layout(R, NONE, S, 0, 0);
@@ -1171,7 +1184,7 @@ static void do_outline(fz_outline *node)
 	ui_tree_begin(&list, count_outline(node, 65535), outline_w, 0, 1);
 	do_outline_imp(&list, 65535, node, 0);
 	ui_tree_end(&list);
-	ui_splitter(&outline_w, 150, 500, R);
+	ui_splitter(&outline_w, 6*ui.gridsize, 20*ui.gridsize, R);
 }
 
 static void do_undo(void)
@@ -1187,8 +1200,8 @@ static void do_undo(void)
 	else
 		pos = 0;
 	ui_layout(L, BOTH, NW, 0, 0);
-	ui_panel_begin(outline_w, 0, 4, 4, 1);
-	ui_layout(T, X, NW, 2, 2);
+	ui_panel_begin(outline_w, 0, ui.padsize*2, ui.padsize*2, 1);
+	ui_layout(T, X, NW, ui.padsize, ui.padsize);
 	ui_label("Undo history");
 	i = count < 30 ? 30 : count;
 	ui_list_begin(&list, i, 0, ui.lineheight * i + 4);
@@ -1432,13 +1445,13 @@ static struct input input_password;
 static void password_dialog(void)
 {
 	int is;
-	ui_dialog_begin(400, (ui.gridsize+4)*3);
+	ui_dialog_begin(ui.gridsize*16, (ui.gridsize+ui.padsize*2)*3);
 	{
-		ui_layout(T, X, NW, 2, 2);
+		ui_layout(T, X, NW, ui.padsize, ui.padsize);
 		ui_label("Password:");
 		is = ui_input(&input_password, 200, 1);
 
-		ui_layout(B, X, NW, 2, 2);
+		ui_layout(B, X, NW, ui.padsize, ui.padsize);
 		ui_panel_begin(0, ui.gridsize, 0, 0, 0);
 		{
 			ui_layout(R, NONE, S, 0, 0);
@@ -1960,7 +1973,7 @@ static void do_info(void)
 		pdf_walk_tree(ctx, form_fields, PDF_NAME(Kids), process_sigs, NULL, &list, &ft_list[0], &ft);
 	}
 
-	ui_dialog_begin(500, (14+list.len) * ui.lineheight);
+	ui_dialog_begin(ui.gridsize*20, (14+list.len) * ui.lineheight);
 	ui_layout(T, X, W, 0, 0);
 
 	if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_TITLE, buf, sizeof buf) > 0)
@@ -2156,8 +2169,8 @@ static void do_canvas(void)
 	if (search_active)
 	{
 		ui_layout(T, X, NW, 0, 0);
-		ui_panel_begin(0, ui.gridsize+8, 4, 4, 1);
-		ui_layout(L, NONE, W, 2, 0);
+		ui_panel_begin(0, ui.gridsize + ui.padsize*4, ui.padsize*2, ui.padsize*2, 1);
+		ui_layout(L, NONE, W, ui.padsize, 0);
 		ui_label("Searching chapter %d page %d...", search_page.chapter, search_page.page);
 		ui_panel_end();
 	}
@@ -2178,10 +2191,10 @@ static void do_canvas(void)
 	if (showsearch)
 	{
 		ui_layout(T, X, NW, 0, 0);
-		ui_panel_begin(0, ui.gridsize+8, 4, 4, 1);
-		ui_layout(L, NONE, W, 2, 0);
+		ui_panel_begin(0, ui.gridsize + ui.padsize*4, ui.padsize*2, ui.padsize*2, 1);
+		ui_layout(L, NONE, W, ui.padsize, 0);
 		ui_label("Search:");
-		ui_layout(ALL, X, E, 2, 0);
+		ui_layout(ALL, X, E, ui.padsize, 0);
 		if (ui_input(&search_input, 0, 1) == UI_INPUT_ACCEPT)
 		{
 			showsearch = 0;
@@ -2206,8 +2219,8 @@ static void do_canvas(void)
 	if (tooltip)
 	{
 		ui_layout(B, X, N, 0, 0);
-		ui_panel_begin(0, ui.gridsize, 4, 4, 1);
-		ui_layout(L, NONE, W, 2, 0);
+		ui_panel_begin(0, ui.gridsize, ui.padsize*2, ui.padsize*2, 1);
+		ui_layout(L, NONE, W, ui.padsize, 0);
 		ui_label("%s", tooltip);
 		ui_panel_end();
 	}
@@ -2285,7 +2298,7 @@ void do_main(void)
 	if (showannotate)
 	{
 		ui_layout(R, BOTH, NW, 0, 0);
-		ui_panel_begin(annotate_w, 0, 4, 4, 1);
+		ui_panel_begin(annotate_w, 0, ui.padsize*2, ui.padsize*2, 1);
 		if (showannotate == ANNOTATE_MODE_NORMAL)
 			do_annotate_panel();
 		else
@@ -2334,6 +2347,7 @@ static void usage(const char *argv0)
 	fprintf(stderr, "\t-A -\tset anti-aliasing level (0-8,9,10)\n");
 	fprintf(stderr, "\t-B -\tset black tint color (default: 303030)\n");
 	fprintf(stderr, "\t-C -\tset white tint color (default: FFFFF0)\n");
+	fprintf(stderr, "\t-Y -\tset the UI scaling factor\n");
 	exit(1);
 }
 
@@ -2403,6 +2417,7 @@ int main(int argc, char **argv)
 #endif
 {
 	const char *trace_file_name = NULL;
+	float scale = 0;
 	int c;
 
 #ifndef _WIN32
@@ -2411,10 +2426,7 @@ int main(int argc, char **argv)
 
 	glutInit(&argc, argv);
 
-	screen_w = glutGet(GLUT_SCREEN_WIDTH) - SCREEN_FURNITURE_W;
-	screen_h = glutGet(GLUT_SCREEN_HEIGHT) - SCREEN_FURNITURE_H;
-
-	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJA:B:C:T:")) != -1)
+	while ((c = fz_getopt(argc, argv, "p:r:IW:H:S:U:XJA:B:C:T:Y:")) != -1)
 	{
 		switch (c)
 		{
@@ -2432,8 +2444,16 @@ int main(int argc, char **argv)
 		case 'C': currenttint = 1; tint_white = strtol(fz_optarg, NULL, 16); break;
 		case 'B': currenttint = 1; tint_black = strtol(fz_optarg, NULL, 16); break;
 		case 'T': trace_file_name = fz_optarg; break;
+		case 'Y': scale = fz_atof(fz_optarg); break;
 		}
 	}
+
+	screen_w = glutGet(GLUT_SCREEN_WIDTH) - SCREEN_FURNITURE_W;
+	screen_h = glutGet(GLUT_SCREEN_HEIGHT) - SCREEN_FURNITURE_H;
+
+	ui_init_dpi(scale);
+
+	oldzoom = currentzoom = DEFRES * ui.scale;
 
 	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
 
@@ -2527,7 +2547,7 @@ int main(int argc, char **argv)
 #ifdef _WIN32
 		win_install();
 #endif
-		ui_init(640, 700, "MuPDF: Open document");
+		ui_init(ui.gridsize * 26, ui.gridsize * 26, "MuPDF: Open document");
 		ui_input_init(&search_input, "");
 		ui_init_open_file(".", document_filter);
 		ui.dialog = do_open_document_dialog;
