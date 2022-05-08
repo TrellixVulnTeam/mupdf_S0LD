@@ -414,6 +414,12 @@ static void do_save_pdf_dialog(int for_signing)
 				{
 					pdf_save_document(ctx, pdf, save_filename, &save_opts);
 					fz_strlcpy(filename, save_filename, PATH_MAX);
+					fz_strlcat(save_filename, ".journal", PATH_MAX);
+#ifdef _WIN32
+					fz_remove_utf8(save_filename);
+#else
+					remove(save_filename);
+#endif
 					reload_document();
 				}
 			}
@@ -695,21 +701,9 @@ static void do_annotate_author(void)
 
 static void do_annotate_date(void)
 {
-	time_t secs = pdf_annot_modification_date(ctx, ui.selected_annot);
-	if (secs >= 0)
-	{
-#ifdef _POSIX_SOURCE
-		struct tm tmbuf, *tm = gmtime_r(&secs, &tmbuf);
-#else
-		struct tm *tm = gmtime(&secs);
-#endif
-		char buf[100];
-		if (tm)
-		{
-			strftime(buf, sizeof buf, "%Y-%m-%d %H:%M UTC", tm);
-			ui_label("Date: %s", buf);
-		}
-	}
+	const char *s = format_date(pdf_annot_modification_date(ctx, ui.selected_annot));
+	if (s)
+		ui_label("Date: %s", s);
 }
 
 static void do_annotate_contents(void)

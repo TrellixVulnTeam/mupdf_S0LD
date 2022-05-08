@@ -26,10 +26,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/stat.h>
-#ifdef _MSC_VER
-#define stat _stat
-#endif
+#include <time.h>
 #ifndef _WIN32
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -45,7 +42,11 @@
 #endif
 
 #ifndef _MSC_VER
-#include <unistd.h> /* for fork, exec, and getcwd */
+#include <unistd.h> /* for getcwd */
+#ifndef _WIN32
+#include <spawn.h> /* for posix_spawn */
+extern char **environ; /* see environ (7) */
+#endif // !_WIN32
 #else
 #include <direct.h> /* for getcwd */
 #endif
@@ -58,17 +59,6 @@ void glutLeaveMainLoop(void)
 	exit(0);
 }
 #endif
-
-time_t
-stat_mtime(const char *path)
-{
-	struct stat info;
-
-	if (stat(path, &info) < 0)
-		return 0;
-
-	return info.st_mtime;
-}
 
 fz_context *ctx = NULL;
 pdf_document *pdf = NULL;
@@ -88,9 +78,12 @@ enum
 
 static void open_browser(const char *uri)
 {
+	char *argv[3];
 	char buf[PATH_MAX];
+
 #ifndef _WIN32
 	pid_t pid;
+	int err;
 #endif
 
 	/* Relative file:// URI, make it absolute! */
@@ -119,22 +112,14 @@ static void open_browser(const char *uri)
 		browser = "xdg-open";
 #endif
 	}
-	/* Fork once to start a child process that we wait on. This
-	 * child process forks again and immediately exits. The
-	 * grandchild process continues in the background. The purpose
-	 * of this strange two-step is to avoid zombie processes. See
-	 * bug 695701 for an explanation. */
-	pid = fork();
-	if (pid == 0)
-	{
-		if (fork() == 0)
-		{
-			execlp(browser, browser, uri, (char*)0);
-			fprintf(stderr, "cannot exec '%s'\n", browser);
-		}
-		_exit(0);
-	}
-	waitpid(pid, NULL, 0);
+
+	argv[0] = (char*) browser;
+	argv[1] = (char*) uri;
+	argv[2] = NULL;
+	err = posix_spawn(&pid, browser, NULL, NULL, argv, environ);
+	if (err)
+		fz_warn(ctx, "cannot spawn browser '%s': %s", browser, strerror(err));
+
 #endif
 }
 
@@ -1186,15 +1171,20 @@ static void relayout(void)
 
 static int count_outline(fz_outline *node, int end)
 {
-	int is_selected, n, p;
+	int is_selected, n, p, np;
 	int count = 0;
-	while (node)
+
+	if (!node)
+		return 0;
+	np = fz_page_number_from_location(ctx, doc, node->page);
+
+	do
 	{
-		p = node->page;
+		p = np;
 		count += 1;
 		n = end;
-		if (node->next && node->next->page >= 0)
-			n = node->next->page;
+		if (node->next && (np = fz_page_number_from_location(ctx, doc, node->next->page)) >= 0)
+			n = fz_page_number_from_location(ctx, doc, node->next->page);
 		is_selected = 0;
 		if (fz_count_chapters(ctx, doc) == 1)
 			is_selected = (p>=0) && (currentpage.page == p || (currentpage.page > p && currentpage.page < n));
@@ -1202,19 +1192,26 @@ static int count_outline(fz_outline *node, int end)
 			count += count_outline(node->down, end);
 		node = node->next;
 	}
+	while (node);
+
 	return count;
 }
 
 static void do_outline_imp(struct list *list, int end, fz_outline *node, int depth)
 {
-	int is_selected, was_open, n;
+	int is_selected, was_open, n, np;
 
-	while (node)
+	if (!node)
+		return;
+
+	np = fz_page_number_from_location(ctx, doc, node->page);
+
+	do
 	{
-		int p = node->page;
+		int p = np;
 		n = end;
-		if (node->next && node->next->page >= 0)
-			n = node->next->page;
+		if (node->next && (np = fz_page_number_from_location(ctx, doc, node->next->page)) >= 0)
+			n = np;
 
 		was_open = node->is_open;
 		is_selected = 0;
@@ -1237,6 +1234,7 @@ static void do_outline_imp(struct list *list, int end, fz_outline *node, int dep
 			do_outline_imp(list, n, node->down, depth + 1);
 		node = node->next;
 	}
+	while (node);
 }
 
 static void do_outline(fz_outline *node)
@@ -1543,17 +1541,17 @@ static void password_dialog(void)
  * meaning first page. Return 1 if parsing succeeded, 0 if failed.
  */
 static int
-parse_location(const char *anchor, fz_location *loc)
+parse_location(const char *anc, fz_location *loc)
 {
 	const char *s, *p;
 
-	if (anchor == NULL)
+	if (anc == NULL)
 		return 0;
 
-	s = anchor;
+	s = anc;
 	while (*s >= '0' && *s <= '9')
 		s++;
-	loc->chapter = fz_atoi(anchor)-1;
+	loc->chapter = fz_atoi(anc)-1;
 	if (*s == 0)
 	{
 		*loc = fz_location_from_page_number(ctx, doc, loc->chapter);
@@ -1573,7 +1571,7 @@ parse_location(const char *anchor, fz_location *loc)
 }
 
 static void
-reload_or_start_journalling(fz_context *ctx, pdf_document *pdf)
+reload_or_start_journalling(void)
 {
 	char journal[PATH_MAX];
 
@@ -1604,19 +1602,19 @@ static void alert_box(const char *fmt, const char *str)
 }
 
 
-static void event_cb(fz_context *ctx, pdf_document *doc, pdf_doc_event *evt, void *data)
+static void event_cb(fz_context *callback_ctx, pdf_document *callback_doc, pdf_doc_event *evt, void *data)
 {
 	switch (evt->type)
 	{
 	case PDF_DOCUMENT_EVENT_ALERT:
 		{
-			pdf_alert_event *alert = pdf_access_alert_event(ctx, evt);
+			pdf_alert_event *alert = pdf_access_alert_event(callback_ctx, evt);
 			alert_box("%s", alert->message);
 		}
 		break;
 
 	default:
-		fz_throw(ctx, FZ_ERROR_GENERIC, "event not yet implemented");
+		fz_throw(callback_ctx, FZ_ERROR_GENERIC, "event not yet implemented");
 		break;
 	}
 }
@@ -1637,8 +1635,8 @@ static void load_document(void)
 	{
 		/* Check whether that file exists, and isn't older than
 		 * the document. */
-		atime = stat_mtime(accelpath);
-		dtime = stat_mtime(filename);
+		atime = fz_stat_mtime(accelpath);
+		dtime = fz_stat_mtime(filename);
 		if (atime == 0)
 		{
 			/* No accelerator */
@@ -1648,7 +1646,11 @@ static void load_document(void)
 		else
 		{
 			/* Accelerator data is out of date */
-			unlink(accelpath);
+#ifdef _WIN32
+			fz_remove_utf8(accelpath);
+#else
+			remove(accelpath);
+#endif
 			accel = NULL; /* In case we have jumped up from below */
 		}
 	}
@@ -1714,7 +1716,7 @@ static void load_document(void)
 			pdf_enable_js(ctx, pdf);
 		}
 
-		reload_or_start_journalling(ctx, pdf);
+		reload_or_start_journalling();
 
 		if (trace_file)
 		{
@@ -2066,9 +2068,10 @@ static void do_app(void)
 			search_active = !!search_needle;
 			if (eqloc(search_hit_page, currentpage))
 			{
-				search_page = fz_previous_page(ctx, doc, currentpage);
 				if (is_first_page(search_page))
 					search_active = 0;
+				else
+					search_page = fz_previous_page(ctx, doc, currentpage);
 			}
 			else
 			{
@@ -2081,9 +2084,10 @@ static void do_app(void)
 			search_active = !!search_needle;
 			if (eqloc(search_hit_page, currentpage))
 			{
-				search_page = fz_next_page(ctx, doc, currentpage);
 				if (is_last_page(search_page))
 					search_active = 0;
+				else
+					search_page = fz_next_page(ctx, doc, currentpage);
 			}
 			else
 			{
@@ -2168,6 +2172,30 @@ static char *short_signature_error_desc(pdf_signature_error err)
 	}
 }
 
+const char *format_date(int64_t secs)
+{
+	static char buf[100];
+#ifdef _POSIX_SOURCE
+	struct tm tmbuf, *tm;
+#else
+	struct tm *tm;
+#endif
+
+	if (secs <= 0)
+		return NULL;
+
+#ifdef _POSIX_SOURCE
+	tm = gmtime_r(&secs, &tmbuf);
+#else
+	tm = gmtime(&secs);
+#endif
+	if (!tm)
+		return NULL;
+
+	strftime(buf, sizeof buf, "%Y-%m-%d %H:%M UTC", tm);
+	return buf;
+}
+
 static void do_info(void)
 {
 	char buf[100];
@@ -2182,7 +2210,7 @@ static void do_info(void)
 		pdf_walk_tree(ctx, form_fields, PDF_NAME(Kids), process_sigs, NULL, &list, &ft_list[0], &ft);
 	}
 
-	ui_dialog_begin(ui.gridsize*20, (14+list.len) * ui.lineheight);
+	ui_dialog_begin(ui.gridsize*20, (15+list.len) * ui.lineheight);
 	ui_layout(T, X, W, 0, 0);
 
 	if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_TITLE, buf, sizeof buf) > 0)
@@ -2201,6 +2229,22 @@ static void do_info(void)
 			ui_label("PDF Creator: %s", buf);
 		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_PRODUCER, buf, sizeof buf) > 0)
 			ui_label("PDF Producer: %s", buf);
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_SUBJECT, buf, sizeof buf) > 0)
+			ui_label("Subject: %s", buf);
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_KEYWORDS, buf, sizeof buf) > 0)
+			ui_label("Keywords: %s", buf);
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_CREATIONDATE, buf, sizeof buf) > 0)
+		{
+			const char *s = format_date(pdf_parse_date(ctx, buf));
+			if (s)
+				ui_label("Creation date: %s", s);
+		}
+		if (fz_lookup_metadata(ctx, doc, FZ_META_INFO_MODIFICATIONDATE, buf, sizeof buf) > 0)
+		{
+			const char *s = format_date(pdf_parse_date(ctx, buf));
+			if (s)
+				ui_label("Modification date: %s", s);
+		}
 		buf[0] = 0;
 		if (fz_has_permission(ctx, doc, FZ_PERMISSION_PRINT))
 			fz_strlcat(buf, "print, ", sizeof buf);
@@ -2643,6 +2687,14 @@ int main(int argc, char **argv)
 	int c;
 
 #ifndef _WIN32
+
+	/* Never wait for termination of child processes. */
+	struct sigaction arg = {
+		.sa_handler=SIG_IGN,
+		.sa_flags=SA_NOCLDWAIT
+	};
+	sigaction(SIGCHLD, &arg, NULL);
+
 	signal(SIGHUP, signal_handler);
 #endif
 
