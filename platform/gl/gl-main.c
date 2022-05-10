@@ -78,7 +78,9 @@ enum
 
 static void open_browser(const char *uri)
 {
+#ifndef _WIN32
 	char *argv[3];
+#endif
 	char buf[PATH_MAX];
 
 #ifndef _WIN32
@@ -98,6 +100,12 @@ static void open_browser(const char *uri)
 			fz_cleanname(buf+7);
 			uri = buf;
 		}
+	}
+
+	if (strncmp(uri, "file://", 7) && strncmp(uri, "http://", 7) && strncmp(uri, "https://", 8) && strncmp(uri, "mailto:", 7))
+	{
+		fz_warn(ctx, "refusing to open unknown link (%s)", uri);
+		return;
 	}
 
 #ifdef _WIN32
@@ -1319,6 +1327,8 @@ static void do_links(fz_link *link)
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 
+	tooltip = NULL;
+
 	while (link)
 	{
 		bounds = link->rect;
@@ -1327,7 +1337,8 @@ static void do_links(fz_link *link)
 
 		if (ui_mouse_inside(area))
 		{
-			tooltip = link->uri;
+			if (!tooltip)
+				tooltip = link->uri;
 			ui.hot = link;
 			if (!ui.active && ui.down)
 				ui.active = link;

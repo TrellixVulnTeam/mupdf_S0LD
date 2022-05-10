@@ -178,7 +178,7 @@ PKCS7_OBJ := $(PKCS7_SRC:%.c=$(OUT)/%.o)
 
 # --- Generated embedded font files ---
 
-HEXDUMP_EXE := $(OUT)/scripts/hexdump.exe
+HEXDUMP_SH := scripts/hexdump.sh
 
 FONT_BIN := $(sort $(wildcard resources/fonts/urw/*.cff))
 FONT_BIN += $(sort $(wildcard resources/fonts/han/*.ttc))
@@ -189,10 +189,10 @@ FONT_BIN += $(sort $(wildcard resources/fonts/sil/*.cff))
 
 FONT_GEN := $(FONT_BIN:%=$(GENERATED)/%.c)
 
-$(GENERATED)/%.cff.c : %.cff $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-$(GENERATED)/%.otf.c : %.otf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-$(GENERATED)/%.ttf.c : %.ttf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-$(GENERATED)/%.ttc.c : %.ttc $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+$(GENERATED)/%.cff.c : %.cff $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+$(GENERATED)/%.otf.c : %.otf $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+$(GENERATED)/%.ttf.c : %.ttf $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+$(GENERATED)/%.ttc.c : %.ttc $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
 
 ifeq ($(HAVE_OBJCOPY),yes)
   MUPDF_OBJ += $(FONT_BIN:%=$(OUT)/%.o)
