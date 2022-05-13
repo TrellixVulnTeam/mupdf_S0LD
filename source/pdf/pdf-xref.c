@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -411,6 +411,24 @@ pdf_xref_entry *pdf_get_xref_entry(fz_context *ctx, pdf_document *doc, int i)
 		}
 	}
 
+	/* Some really hairy code here. When we are reading the file in
+	 * initially, we read from 'newest' to 'oldest' (i.e. from 0 to
+	 * doc->num_xref_sections-1). Each section is created initially
+	 * with num_objects == 0 in it, and remains like that while we
+	 * are parsing the stream from the file. This is the only time
+	 * we'll ever have xref_sections with 0 objects in them. */
+	if (doc->xref_sections[doc->num_xref_sections-1].num_objects == 0)
+	{
+		/* The oldest xref section has 0 objects in it. So we are
+		 * parsing an xref stream while loading. We don't want to
+		 * solidify the xref we are currently parsing for (as it'll
+		 * get very confused, and end up a different 'shape' in
+		 * memory to that which is in the file, and would hence
+		 * render 'fingerprinting' for snapshotting invalid) so
+		 * just give up at this point. */
+		return NULL;
+	}
+
 	/* At this point, we solidify the xref. This ensures that we
 	 * can return a pointer. This is the only case where this function
 	 * might throw an exception, and it will never happen when we are
@@ -593,7 +611,7 @@ void pdf_ensure_solid_xref(fz_context *ctx, pdf_document *doc, int num)
 	if (doc->num_xref_sections == 0)
 		pdf_populate_next_xref_level(ctx, doc);
 
-	ensure_solid_xref(ctx, doc, num, doc->num_xref_sections-1);
+	ensure_solid_xref(ctx, doc, num, 0);
 }
 
 int pdf_xref_ensure_incremental_object(fz_context *ctx, pdf_document *doc, int num)
@@ -894,6 +912,7 @@ pdf_xref_size_from_old_trailer(fz_context *ctx, pdf_document *doc)
 	pdf_obj *trailer = NULL;
 	size_t n;
 	pdf_lexbuf *buf = &doc->lexbuf.base;
+	pdf_obj *obj = NULL;
 
 	fz_var(trailer);
 
@@ -958,6 +977,10 @@ pdf_xref_size_from_old_trailer(fz_context *ctx, pdf_document *doc)
 			fz_throw(ctx, FZ_ERROR_GENERIC, "expected trailer dictionary");
 
 		trailer = pdf_parse_dict(ctx, doc, doc->file, buf);
+
+		obj = pdf_dict_get(ctx, trailer, PDF_NAME(Size));
+		if (pdf_is_indirect(ctx, obj))
+			fz_throw(ctx, FZ_ERROR_GENERIC, "trailer Size entry is indirect");
 
 		size = pdf_dict_get_int(ctx, trailer, PDF_NAME(Size));
 		if (size < 0 || size > PDF_MAX_OBJECT_NUMBER + 1)
@@ -1035,6 +1058,17 @@ pdf_xref_find_subsection(fz_context *ctx, pdf_document *doc, int start, int len)
 	return &sub->table[start-sub->start];
 }
 
+static inline void
+validate_object_number_range(fz_context *ctx, int first, int len, const char *what)
+{
+	if (first < 0 || first > PDF_MAX_OBJECT_NUMBER)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "first object number in %s out of range", what);
+	if (len < 0 || len > PDF_MAX_OBJECT_NUMBER)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "number of objects in %s out of range", what);
+	if (len > 0 && len - 1 > PDF_MAX_OBJECT_NUMBER - first)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "last object number in %s out of range", what);
+}
+
 static pdf_obj *
 pdf_read_old_xref(fz_context *ctx, pdf_document *doc)
 {
@@ -1071,12 +1105,8 @@ pdf_read_old_xref(fz_context *ctx, pdf_document *doc)
 			fz_seek(ctx, file, -(2 + (int)strlen(s)), SEEK_CUR);
 		}
 
-		if (start < 0 || start > PDF_MAX_OBJECT_NUMBER
-				|| len < 0 || len > PDF_MAX_OBJECT_NUMBER
-				|| start + len - 1 > PDF_MAX_OBJECT_NUMBER)
-		{
-			fz_throw(ctx, FZ_ERROR_GENERIC, "xref subsection object numbers are out of range");
-		}
+		validate_object_number_range(ctx, start, len, "xref subsection");
+
 		/* broken pdfs where size in trailer undershoots entries in xref sections */
 		if (start + len > xref_len)
 		{
@@ -1155,8 +1185,7 @@ pdf_read_new_xref_section(fz_context *ctx, pdf_document *doc, fz_stream *stm, in
 	pdf_xref_entry *table;
 	int i, n;
 
-	if (i0 < 0 || i0 > PDF_MAX_OBJECT_NUMBER || i1 < 0 || i1 > PDF_MAX_OBJECT_NUMBER || i0 + i1 - 1 > PDF_MAX_OBJECT_NUMBER)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "xref subsection object numbers are out of range");
+	validate_object_number_range(ctx, i0, i1, "xref subsection");
 
 	table = pdf_xref_find_subsection(ctx, doc, i0, i1);
 	for (i = i0; i < i0 + i1; i++)
@@ -1878,12 +1907,7 @@ pdf_load_obj_stm(fz_context *ctx, pdf_document *doc, int num, pdf_lexbuf *buf, i
 		count = pdf_dict_get_int(ctx, objstm, PDF_NAME(N));
 		first = pdf_dict_get_int(ctx, objstm, PDF_NAME(First));
 
-		if (count < 0 || count > PDF_MAX_OBJECT_NUMBER)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "number of objects in object stream out of range");
-		if (first < 0 || first > PDF_MAX_OBJECT_NUMBER
-				|| count < 0 || count > PDF_MAX_OBJECT_NUMBER
-				|| first + count - 1 > PDF_MAX_OBJECT_NUMBER)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "object stream object numbers are out of range");
+		validate_object_number_range(ctx, first, count, "object stream");
 
 		numbuf = fz_calloc(ctx, count, sizeof(*numbuf));
 		ofsbuf = fz_calloc(ctx, count, sizeof(*ofsbuf));
@@ -2764,11 +2788,17 @@ pdf_set_metadata(fz_context *ctx, pdf_document *doc, const char *key, const char
 		fz_rethrow(ctx);
 }
 
-static fz_location
-pdf_resolve_link_imp(fz_context *ctx, fz_document *doc_, const char *uri, float *xp, float *yp)
+static fz_link_dest
+pdf_resolve_link_imp(fz_context *ctx, fz_document *doc_, const char *uri)
 {
 	pdf_document *doc = (pdf_document*)doc_;
-	return fz_make_location(0, pdf_resolve_link(ctx, doc, uri, xp, yp));
+	return pdf_resolve_link_dest(ctx, doc, uri);
+}
+
+char *
+pdf_format_link_uri_imp(fz_context *ctx, fz_document *doc, fz_link_dest dest)
+{
+	return pdf_format_link_uri(ctx, dest);
 }
 
 /*
@@ -2792,7 +2822,8 @@ pdf_new_document(fz_context *ctx, fz_stream *file)
 	doc->super.authenticate_password = (fz_document_authenticate_password_fn*)pdf_authenticate_password;
 	doc->super.has_permission = (fz_document_has_permission_fn*)pdf_has_permission;
 	doc->super.outline_iterator = (fz_document_outline_iterator_fn*)pdf_new_outline_iterator;
-	doc->super.resolve_link = pdf_resolve_link_imp;
+	doc->super.resolve_link_dest = pdf_resolve_link_imp;
+	doc->super.format_link_uri = pdf_format_link_uri_imp;
 	doc->super.count_pages = pdf_count_pages_imp;
 	doc->super.load_page = pdf_load_page_imp;
 	doc->super.lookup_metadata = (fz_document_lookup_metadata_fn*)pdf_lookup_metadata;
@@ -4800,4 +4831,17 @@ pdf_metadata(fz_context *ctx, pdf_document *doc)
 		fz_rethrow(ctx);
 
 	return obj;
+}
+
+int pdf_obj_is_incremental(fz_context *ctx, pdf_obj *obj)
+{
+	pdf_document *doc = pdf_get_bound_document(ctx, obj);
+	int v;
+
+	if (doc == NULL || doc->num_incremental_sections == 0)
+		return 0;
+
+	v = pdf_find_incremental_update_num_for_obj(ctx, doc, obj);
+
+	return (v == 0);
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -28,9 +28,17 @@ importScripts("libmupdf.js");
 let mupdf = {};
 let ready = false;
 
+let wasm_onFetchData = null;
+let wasm_openDocumentFromBuffer = null;
+
 Module.onRuntimeInitialized = function () {
 	Module.ccall('initContext');
-	mupdf.openDocumentFromBuffer = Module.cwrap('openDocumentFromBuffer', 'number', ['string', 'number', 'number']);
+
+	wasm_onFetchData = Module.cwrap('onFetchData', 'null', ['number', 'number', 'number', 'number']);
+	wasm_openDocumentFromBuffer = Module.cwrap('openDocumentFromBuffer', 'number', ['number', 'number', 'string']);
+
+	mupdf.openURL = Module.cwrap('openURL', 'number', ['string', 'number', 'number', 'number']);
+	mupdf.openDocumentFromStream = Module.cwrap('openDocumentFromStream', 'number', ['number', 'string']);
 	mupdf.freeDocument = Module.cwrap('freeDocument', 'null', ['number']);
 	mupdf.documentTitle = Module.cwrap('documentTitle', 'string', ['number']);
 	mupdf.countPages = Module.cwrap('countPages', 'number', ['number']);
@@ -52,12 +60,20 @@ Module.onRuntimeInitialized = function () {
 	ready = true;
 };
 
-mupdf.openDocument = function (data, magic) {
+mupdf.openDocumentFromBuffer = function (data, magic) {
 	let n = data.byteLength;
 	let ptr = Module._malloc(n);
 	let src = new Uint8Array(data);
 	Module.HEAPU8.set(src, ptr);
-	return mupdf.openDocumentFromBuffer(magic, ptr, n);
+	return wasm_openDocumentFromBuffer(ptr, n, magic);
+}
+
+function onFetchData(id, block, data) {
+	let n = data.byteLength;
+	let p = Module._malloc(n);
+	Module.HEAPU8.set(new Uint8Array(data), p);
+	wasm_onFetchData(id, block, p, n);
+	Module._free(p);
 }
 
 mupdf.drawPageAsPNG = function (doc, page, dpi) {
@@ -119,6 +135,16 @@ mupdf.search = function (doc, page, dpi, needle) {
 	return JSON.parse(mupdf.searchJSON(doc, page, dpi, needle));
 }
 
+let trylaterTimer = 0;
+let trylaterQueue = [];
+
+function trylaterProgress() {
+	trylaterTimer = 0;
+	let currentQueue = trylaterQueue;
+	trylaterQueue = [];
+	currentQueue.forEach(onmessage);
+}
+
 onmessage = function (event) {
 	let [ func, args, id ] = event.data;
 	if (!ready) {
@@ -132,6 +158,93 @@ onmessage = function (event) {
 		else
 			postMessage(["RESULT", id, result]);
 	} catch (error) {
-		postMessage(["ERROR", id, {name: error.name, message: error.message}]);
+		if (error === "trylater") {
+			trylaterQueue.push(event);
+		} else {
+			postMessage(["ERROR", id, {name: error.name, message: error.message}]);
+		}
 	}
+}
+
+// BACKGROUND PROGRESSIVE FETCH
+
+let fetchStates = {};
+
+function fetchOpen(id, url, contentLength, blockShift, prefetch) {
+	console.log("OPEN", url, "PROGRESSIVELY");
+	fetchStates[id] = {
+		url: url,
+		blockShift: blockShift,
+		blockSize: 1 << blockShift,
+		prefetch: prefetch,
+		contentLength: contentLength,
+		map: new Array((contentLength >>> blockShift) + 1).fill(0),
+		closed: false,
+	};
+}
+
+async function fetchRead(id, block) {
+	let state = fetchStates[id];
+
+	if (state.map[block] > 0)
+		return;
+
+	state.map[block] = 1;
+	let contentLength = state.contentLength;
+	let url = state.url;
+	let start = block << state.blockShift;
+	let end = start + state.blockSize;
+	if (end > contentLength)
+		end = contentLength;
+
+	try {
+		let response = await fetch(url, { headers: { Range: `bytes=${start}-${end-1}` } });
+		if (state.closed)
+			return;
+
+		let buffer = await response.arrayBuffer();
+		if (state.closed)
+			return;
+
+		console.log("READ", url, block+1, "/", state.map.length);
+		state.map[block] = 2;
+
+		onFetchData(id, block, buffer);
+		if (!trylaterTimer)
+			trylaterTimer = setTimeout(trylaterProgress, 0);
+
+		if (state.prefetch)
+			fetchReadNext(id, block + 1);
+	} catch(error) {
+		state.map[block] = 0;
+		console.log("FETCH ERROR", url, block, error.toString);
+	}
+}
+
+function fetchReadNext(id, next) {
+	let state = fetchStates[id];
+	if (!state)
+		return;
+
+	// Don't prefetch if we're already waiting for any blocks.
+	for (let block = 0; block < state.map.length; ++block)
+		if (state.map[block] === 1)
+			return;
+
+	// Find next block to prefetch (starting with the last fetched block)
+	for (let block = next; block < state.map.length; ++block)
+		if (state.map[block] === 0)
+			return fetchRead(id, block);
+
+	// Find next block to prefetch (starting from the beginning)
+	for (let block = 0; block < state.map.length; ++block)
+		if (state.map[block] === 0)
+			return fetchRead(id, block);
+
+	console.log("ALL BLOCKS READ");
+}
+
+function fetchClose(id) {
+	fetchStates[id].closed = true;
+	delete fetchStates[id];
 }

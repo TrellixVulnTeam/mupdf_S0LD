@@ -72,6 +72,7 @@ typedef struct fz_draw_device
 	fz_colorspace *proof_cs;
 	int flags;
 	int resolve_spots;
+	int overprint_possible;
 	int top;
 	fz_scale_cache *cache_x;
 	fz_scale_cache *cache_y;
@@ -505,7 +506,8 @@ resolve_color(fz_context *ctx,
 	float alpha,
 	fz_color_params color_params,
 	unsigned char *colorbv,
-	fz_pixmap *dest)
+	fz_pixmap *dest,
+	int overprint_possible)
 {
 	float colorfv[FZ_MAX_COLORS];
 	int i;
@@ -522,7 +524,7 @@ resolve_color(fz_context *ctx,
 	devgray = fz_colorspace_is_device_gray(ctx, colorspace);
 
 	/* We can only overprint when enabled, and when we are in a subtractive colorspace */
-	if (color_params.op == 0 || !fz_colorspace_is_subtractive(ctx, dest->colorspace))
+	if (color_params.op == 0 || !fz_colorspace_is_subtractive(ctx, dest->colorspace) || !overprint_possible)
 		op = NULL;
 
 	else if (devgray)
@@ -653,7 +655,7 @@ fz_draw_fill_path(fz_context *ctx, fz_device *devp, const fz_path *path, int eve
 	if (state->blendmode & FZ_BLEND_KNOCKOUT)
 		state = fz_knockout_begin(ctx, dev);
 
-	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest);
+	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 
 	fz_convert_rasterizer(ctx, rast, even_odd, state->dest, colorbv, eop);
 	if (state->shape)
@@ -716,7 +718,7 @@ fz_draw_stroke_path(fz_context *ctx, fz_device *devp, const fz_path *path, const
 	if (state->blendmode & FZ_BLEND_KNOCKOUT)
 		state = fz_knockout_begin(ctx, dev);
 
-	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest);
+	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 
 #ifdef DUMP_GROUP_BLENDS
 	dump_spaces(dev->top, "");
@@ -958,7 +960,6 @@ draw_glyph(unsigned char *colorbv, fz_pixmap *dst, fz_glyph *glyph,
 			fz_span_color_painter_t *fn;
 
 			fn = fz_get_span_color_painter(dst->n, da, colorbv, eop);
-			assert(fn);
 			if (fn == NULL)
 				return;
 			while (h--)
@@ -973,7 +974,6 @@ draw_glyph(unsigned char *colorbv, fz_pixmap *dst, fz_glyph *glyph,
 			fz_span_painter_t *fn;
 
 			fn = fz_get_span_painter(da, 1, 0, 255, eop);
-			assert(fn);
 			if (fn == NULL)
 				return;
 			while (h--)
@@ -1015,7 +1015,7 @@ fz_draw_fill_text(fz_context *ctx, fz_device *devp, const fz_text *text, fz_matr
 	if (state->blendmode & FZ_BLEND_KNOCKOUT)
 		state = fz_knockout_begin(ctx, dev);
 
-	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest);
+	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 	shapebv = 255;
 	shapebva = 255 * alpha;
 
@@ -1107,7 +1107,7 @@ fz_draw_stroke_text(fz_context *ctx, fz_device *devp, const fz_text *text, const
 	if (state->blendmode & FZ_BLEND_KNOCKOUT)
 		state = fz_knockout_begin(ctx, dev);
 
-	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest);
+	eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 
 	for (span = text->head; span; span = span->next)
 	{
@@ -1492,7 +1492,7 @@ fz_draw_fill_shade(fz_context *ctx, fz_device *devp, fz_shade *shade, fz_matrix 
 			/* Disable OPM */
 			color_params.opm = 0;
 
-			eop = resolve_color(ctx, &op, shade->background, colorspace, alpha, color_params, colorbv, state->dest);
+			eop = resolve_color(ctx, &op, shade->background, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 
 			n = dest->n;
 			if (fz_overprint_required(eop))
@@ -1928,7 +1928,7 @@ fz_draw_fill_image_mask(fz_context *ctx, fz_device *devp, fz_image *image, fz_ma
 			}
 		}
 
-		eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest);
+		eop = resolve_color(ctx, &op, color, colorspace, alpha, color_params, colorbv, state->dest, dev->overprint_possible);
 
 		fz_paint_image_with_color(ctx, state->dest, &state->scissor, state->shape, state->group_alpha, pixmap, local_ctm, colorbv, !(devp->hints & FZ_DONT_INTERPOLATE_IMAGES), eop);
 
@@ -2461,7 +2461,7 @@ fz_draw_end_group(fz_context *ctx, fz_device *devp)
 typedef struct
 {
 	int refs;
-	float ctm[6];
+	float ctm[4];
 	int id;
 	char has_shape;
 	char has_group_alpha;
@@ -2488,8 +2488,6 @@ fz_make_hash_tile_key(fz_context *ctx, fz_store_hash *hash, void *key_)
 	hash->u.im.m[1] = key->ctm[1];
 	hash->u.im.m[2] = key->ctm[2];
 	hash->u.im.m[3] = key->ctm[3];
-	hash->u.im.m[4] = key->ctm[4];
-	hash->u.im.m[5] = key->ctm[5];
 	hash->u.im.ptr = key->cs;
 	return 1;
 }
@@ -2524,8 +2522,6 @@ fz_cmp_tile_key(fz_context *ctx, void *k0_, void *k1_)
 		k0->ctm[1] == k1->ctm[1] &&
 		k0->ctm[2] == k1->ctm[2] &&
 		k0->ctm[3] == k1->ctm[3] &&
-		k0->ctm[4] == k1->ctm[4] &&
-		k0->ctm[5] == k1->ctm[5] &&
 		k0->cs == k1->cs;
 }
 
@@ -2533,8 +2529,8 @@ static void
 fz_format_tile_key(fz_context *ctx, char *s, size_t n, void *key_)
 {
 	tile_key *key = (tile_key *)key_;
-	fz_snprintf(s, n, "(tile id=%x, ctm=%g %g %g %g %g %g, cs=%x, shape=%d, ga=%d)",
-			key->id, key->ctm[0], key->ctm[1], key->ctm[2], key->ctm[3], key->ctm[4], key->ctm[5], key->cs,
+	fz_snprintf(s, n, "(tile id=%x, ctm=%g %g %g %g, cs=%x, shape=%d, ga=%d)",
+			key->id, key->ctm[0], key->ctm[1], key->ctm[2], key->ctm[3], key->cs,
 			key->has_shape, key->has_group_alpha);
 }
 
@@ -2584,43 +2580,6 @@ fz_tile_size(fz_context *ctx, tile_record *tile)
 	return sizeof(*tile) + fz_pixmap_size(ctx, tile->dest) + fz_pixmap_size(ctx, tile->shape) + fz_pixmap_size(ctx, tile->group_alpha);
 }
 
-static float
-tile_mod(float a, float m)
-{
-	int i;
-
-	if (m < 0)
-		m = -m;
-	a = fmod(a, m);
-	if (a < 0)
-		a += m;
-
-	i = (int)(256.0f*a + 0.5f);
-
-	return i/256.0f;
-}
-
-static void
-get_tile_ctm(float *out, const fz_matrix ctm, float xstep, float ystep)
-{
-	out[0] = ctm.a;
-	out[1] = ctm.b;
-	out[2] = ctm.c;
-	out[3] = ctm.d;
-	if ((ctm.b == 0 && ctm.c == 0) || (ctm.a == 0 && ctm.d == 0))
-	{
-		fz_point p = fz_transform_point_xy(xstep, ystep, ctm);
-
-		out[4] = p.x == 0 ? ctm.e : tile_mod(ctm.e, p.x);
-		out[5] = p.y == 0 ? ctm.f : tile_mod(ctm.f, p.y);
-	}
-	else
-	{
-		out[4] = ctm.e;
-		out[5] = ctm.f;
-	}
-}
-
 static int
 fz_draw_begin_tile(fz_context *ctx, fz_device *devp, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix in_ctm, int id)
 {
@@ -2664,10 +2623,10 @@ fz_draw_begin_tile(fz_context *ctx, fz_device *devp, fz_rect area, fz_rect view,
 	{
 		tile_key tk;
 		tile_record *tile;
-		fz_matrix ctm2 = ctm;
-		ctm2.e = bbox.x0;
-		ctm2.f = bbox.y0;
-		get_tile_ctm(tk.ctm, ctm2, xstep, ystep);
+		tk.ctm[0] = ctm.a;
+		tk.ctm[1] = ctm.b;
+		tk.ctm[2] = ctm.c;
+		tk.ctm[3] = ctm.d;
 		tk.id = id;
 		tk.cs = state[1].dest->colorspace;
 		tk.has_shape = (state[1].shape != NULL);
@@ -2872,11 +2831,13 @@ fz_draw_end_tile(fz_context *ctx, fz_device *devp)
 				key = fz_malloc_struct(ctx, tile_key);
 				key->refs = 1;
 				key->id = state[1].id;
-				get_tile_ctm(key->ctm, ctm, xstep, ystep);
+				key->ctm[0] = ctm.a;
+				key->ctm[1] = ctm.b;
+				key->ctm[2] = ctm.c;
+				key->ctm[3] = ctm.d;
 				key->cs = fz_keep_colorspace_store_key(ctx, state[1].dest->colorspace);
 				key->has_shape = (state[1].shape != NULL);
 				key->has_group_alpha = (state[1].group_alpha != NULL);
-
 				existing_tile = fz_store_item(ctx, key, tile, fz_tile_size(ctx, tile), &fz_tile_store_type);
 				if (existing_tile)
 				{
@@ -3095,6 +3056,8 @@ new_draw_device(fz_context *ctx, fz_matrix transform, fz_pixmap *dest, const fz_
 #else
 		fz_throw(ctx, FZ_ERROR_GENERIC, "Spot rendering (and overprint/overprint simulation) not available in this build");
 #endif
+
+	dev->overprint_possible = (dest->seps != NULL);
 
 	fz_try(ctx)
 	{

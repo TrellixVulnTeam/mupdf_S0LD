@@ -101,9 +101,39 @@ pdf_count_layer_configs(fz_context *ctx, pdf_document *doc)
 	return desc ? desc->num_configs : 0;
 }
 
-static int
-count_entries(fz_context *ctx, pdf_obj *obj)
+int
+pdf_count_layers(fz_context *ctx, pdf_document *doc)
 {
+	pdf_ocg_descriptor *desc = pdf_read_ocg(ctx, doc);
+	return desc ? desc->len : 0;
+}
+
+const char *
+pdf_layer_name(fz_context *ctx, pdf_document *doc, int layer)
+{
+	pdf_ocg_descriptor *desc = pdf_read_ocg(ctx, doc);
+	return desc ? pdf_dict_get_text_string(ctx, desc->ocgs[layer].obj, PDF_NAME(Name)) : NULL;
+}
+
+int
+pdf_layer_is_enabled(fz_context *ctx, pdf_document *doc, int layer)
+{
+	pdf_ocg_descriptor *desc = pdf_read_ocg(ctx, doc);
+	return desc ? desc->ocgs[layer].state : 0;
+}
+
+void
+pdf_enable_layer(fz_context *ctx, pdf_document *doc, int layer, int enabled)
+{
+	pdf_ocg_descriptor *desc = pdf_read_ocg(ctx, doc);
+	if (desc)
+		desc->ocgs[layer].state = enabled;
+}
+
+static int
+count_entries(fz_context *ctx, pdf_obj *obj, pdf_cycle_list *cycle_up)
+{
+	pdf_cycle_list cycle;
 	int len = pdf_array_len(ctx, obj);
 	int i;
 	int count = 0;
@@ -111,14 +141,9 @@ count_entries(fz_context *ctx, pdf_obj *obj)
 	for (i = 0; i < len; i++)
 	{
 		pdf_obj *o = pdf_array_get(ctx, obj, i);
-		if (pdf_mark_obj(ctx, o))
+		if (pdf_cycle(ctx, &cycle, cycle_up, o))
 			continue;
-		fz_try(ctx)
-			count += (pdf_is_array(ctx, o) ? count_entries(ctx, o) : 1);
-		fz_always(ctx)
-			pdf_unmark_obj(ctx, o);
-		fz_catch(ctx)
-			fz_rethrow(ctx);
+		count += (pdf_is_array(ctx, o) ? count_entries(ctx, o, &cycle) : 1);
 	}
 	return count;
 }
@@ -140,8 +165,10 @@ get_ocg_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill)
 }
 
 static int
-populate_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill, pdf_obj *order, int depth, pdf_obj *rbgroups, pdf_obj *locked)
+populate_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill, pdf_obj *order, int depth, pdf_obj *rbgroups, pdf_obj *locked,
+	pdf_cycle_list *cycle_up)
 {
+	pdf_cycle_list cycle;
 	int len = pdf_array_len(ctx, order);
 	int i, j;
 	pdf_ocg_ui *ui;
@@ -151,16 +178,10 @@ populate_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill, pdf_obj *order,
 		pdf_obj *o = pdf_array_get(ctx, order, i);
 		if (pdf_is_array(ctx, o))
 		{
-			if (pdf_mark_obj(ctx, o))
+			if (pdf_cycle(ctx, &cycle, cycle_up, o))
 				continue;
 
-			fz_try(ctx)
-				fill = populate_ui(ctx, desc, fill, o, depth+1, rbgroups, locked);
-			fz_always(ctx)
-				pdf_unmark_obj(ctx, o);
-			fz_catch(ctx)
-				fz_rethrow(ctx);
-
+			fill = populate_ui(ctx, desc, fill, o, depth+1, rbgroups, locked, &cycle);
 			continue;
 		}
 		if (pdf_is_string(ctx, o))
@@ -168,7 +189,7 @@ populate_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill, pdf_obj *order,
 			ui = get_ocg_ui(ctx, desc, fill++);
 			ui->depth = depth;
 			ui->ocg = -1;
-			ui->name = pdf_to_str_buf(ctx, o);
+			ui->name = pdf_to_text_string(ctx, o);
 			ui->button_flags = PDF_LAYER_UI_LABEL;
 			ui->locked = 1;
 			continue;
@@ -184,7 +205,7 @@ populate_ui(fz_context *ctx, pdf_ocg_descriptor *desc, int fill, pdf_obj *order,
 		ui = get_ocg_ui(ctx, desc, fill++);
 		ui->depth = depth;
 		ui->ocg = j;
-		ui->name = pdf_dict_get_string(ctx, o, PDF_NAME(Name), NULL);
+		ui->name = pdf_dict_get_text_string(ctx, o, PDF_NAME(Name));
 		ui->button_flags = pdf_array_contains(ctx, o, rbgroups) ? PDF_LAYER_UI_RADIOBOX : PDF_LAYER_UI_CHECKBOX;
 		ui->locked = pdf_array_contains(ctx, o, locked);
 	}
@@ -213,7 +234,7 @@ load_ui(fz_context *ctx, pdf_ocg_descriptor *desc, pdf_obj *ocprops, pdf_obj *oc
 	order = pdf_dict_get(ctx, occg, PDF_NAME(Order));
 	if (!order)
 		order = pdf_dict_getp(ctx, ocprops, "D/Order");
-	count = count_entries(ctx, order);
+	count = count_entries(ctx, order, NULL);
 	rbgroups = pdf_dict_get(ctx, occg, PDF_NAME(RBGroups));
 	if (!rbgroups)
 		rbgroups = pdf_dict_getp(ctx, ocprops, "D/RBGroups");
@@ -226,7 +247,7 @@ load_ui(fz_context *ctx, pdf_ocg_descriptor *desc, pdf_obj *ocprops, pdf_obj *oc
 	desc->ui = fz_malloc_struct_array(ctx, count, pdf_ocg_ui);
 	fz_try(ctx)
 	{
-		desc->num_ui_entries = populate_ui(ctx, desc, 0, order, 0, rbgroups, locked);
+		desc->num_ui_entries = populate_ui(ctx, desc, 0, order, 0, rbgroups, locked, NULL);
 	}
 	fz_catch(ctx)
 	{
@@ -539,16 +560,13 @@ ocg_intents_include(fz_context *ctx, pdf_ocg_descriptor *desc, const char *name)
 	return 0;
 }
 
-int
-pdf_is_ocg_hidden(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *usage, pdf_obj *ocg)
+static int
+pdf_is_ocg_hidden_imp(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *usage, pdf_obj *ocg, pdf_cycle_list *cycle_up)
 {
+	pdf_cycle_list cycle;
 	pdf_ocg_descriptor *desc = pdf_read_ocg(ctx, doc);
 	pdf_obj *obj, *obj2, *type;
 	char event_state[16];
-
-	/* Avoid infinite recursions */
-	if (pdf_obj_marked(ctx, ocg))
-		return 0;
 
 	/* If no usage, everything is visible */
 	if (!usage)
@@ -565,6 +583,10 @@ pdf_is_ocg_hidden(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *
 	}
 	/* If we haven't been given an ocg at all, then we're visible */
 	if (!ocg)
+		return 0;
+
+	/* Avoid infinite recursions */
+	if (pdf_cycle(ctx, &cycle, cycle_up, ocg))
 		return 0;
 
 	fz_strlcpy(event_state, usage, sizeof event_state);
@@ -679,45 +701,39 @@ pdf_is_ocg_hidden(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *
 			combine = 0;
 		}
 
-		if (pdf_mark_obj(ctx, ocg))
-			return 0; /* Should never happen */
-		fz_try(ctx)
-		{
-			obj = pdf_dict_get(ctx, ocg, PDF_NAME(OCGs));
-			on = combine & 1;
-			if (pdf_is_array(ctx, obj)) {
-				int i, len;
-				len = pdf_array_len(ctx, obj);
-				for (i = 0; i < len; i++)
-				{
-					int hidden = pdf_is_ocg_hidden(ctx, doc, rdb, usage, pdf_array_get(ctx, obj, i));
-					if ((combine & 1) == 0)
-						hidden = !hidden;
-					if (combine & 2)
-						on &= hidden;
-					else
-						on |= hidden;
-				}
-			}
-			else
+		obj = pdf_dict_get(ctx, ocg, PDF_NAME(OCGs));
+		on = combine & 1;
+		if (pdf_is_array(ctx, obj)) {
+			int i, len;
+			len = pdf_array_len(ctx, obj);
+			for (i = 0; i < len; i++)
 			{
-				on = pdf_is_ocg_hidden(ctx, doc, rdb, usage, obj);
+				int hidden = pdf_is_ocg_hidden_imp(ctx, doc, rdb, usage, pdf_array_get(ctx, obj, i), &cycle);
 				if ((combine & 1) == 0)
-					on = !on;
+					hidden = !hidden;
+				if (combine & 2)
+					on &= hidden;
+				else
+					on |= hidden;
 			}
 		}
-		fz_always(ctx)
+		else
 		{
-			pdf_unmark_obj(ctx, ocg);
+			on = pdf_is_ocg_hidden_imp(ctx, doc, rdb, usage, obj, &cycle);
+			if ((combine & 1) == 0)
+				on = !on;
 		}
-		fz_catch(ctx)
-		{
-			fz_rethrow(ctx);
-		}
+
 		return !on;
 	}
 	/* No idea what sort of object this is - be visible */
 	return 0;
+}
+
+int
+pdf_is_ocg_hidden(fz_context *ctx, pdf_document *doc, pdf_obj *rdb, const char *usage, pdf_obj *ocg)
+{
+	return pdf_is_ocg_hidden_imp(ctx, doc, rdb, usage, ocg, NULL);
 }
 
 pdf_ocg_descriptor *

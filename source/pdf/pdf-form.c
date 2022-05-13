@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -158,7 +158,10 @@ static void update_field_value(fz_context *ctx, pdf_document *doc, pdf_obj *obj,
 }
 
 static pdf_obj *
-lookup_field_sub(fz_context *ctx, pdf_obj *dict, const char *str)
+pdf_lookup_field_imp(fz_context *ctx, pdf_obj *arr, const char *str, pdf_cycle_list *cycle_up);
+
+static pdf_obj *
+lookup_field_sub(fz_context *ctx, pdf_obj *dict, const char *str, pdf_cycle_list *cycle_up)
 {
 	pdf_obj *kids;
 	pdf_obj *name;
@@ -183,15 +186,40 @@ lookup_field_sub(fz_context *ctx, pdf_obj *dict, const char *str)
 			str++;
 	}
 
-	/* If there is a kids array, walk those looking for the appropriate one. */
-	kids = pdf_dict_get(ctx, dict, PDF_NAME(Kids));
-	if (kids)
-		return pdf_lookup_field(ctx, kids, str);
+	/* If there is a kids array, but the search string is not empty, we have
+	encountered an internal field which represents a set of terminal fields. */
 
-	/* No Kids, so we're a terminal node. We accept it as the match if we've
-	 * exhausted the match string. */
+	/* If there is a kids array and the search string is not empty,
+	walk those looking for the appropriate one. */
+	kids = pdf_dict_get(ctx, dict, PDF_NAME(Kids));
+	if (kids && *str != 0)
+		return pdf_lookup_field_imp(ctx, kids, str, cycle_up);
+
+	/* The field may be a terminal or an internal field at this point.
+	Accept it as the match if the match string is exhausted. */
 	if (*str == 0)
 		return dict;
+
+	return NULL;
+}
+
+static pdf_obj *
+pdf_lookup_field_imp(fz_context *ctx, pdf_obj *arr, const char *str, pdf_cycle_list *cycle_up)
+{
+	pdf_cycle_list cycle;
+	int len = pdf_array_len(ctx, arr);
+	int i;
+
+	for (i = 0; i < len; i++)
+	{
+		pdf_obj *k = pdf_array_get(ctx, arr, i);
+		pdf_obj *found;
+		if (pdf_cycle(ctx, &cycle, cycle_up, k))
+			fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in fields");
+		found = lookup_field_sub(ctx, k, str, &cycle);
+		if (found)
+			return found;
+	}
 
 	return NULL;
 }
@@ -199,35 +227,7 @@ lookup_field_sub(fz_context *ctx, pdf_obj *dict, const char *str)
 pdf_obj *
 pdf_lookup_field(fz_context *ctx, pdf_obj *arr, const char *str)
 {
-	int len = pdf_array_len(ctx, arr);
-	int i;
-	pdf_obj *found = NULL;
-	pdf_obj *k = NULL;
-
-	fz_var(k);
-
-	fz_try(ctx)
-	{
-		for (i = 0; found == NULL && i < len; i++)
-		{
-			k = pdf_array_get(ctx, arr, i);
-
-			if (!pdf_mark_obj(ctx, k))
-			{
-				found = lookup_field_sub(ctx, k, str);
-				pdf_unmark_obj(ctx, k);
-				k = NULL;
-			}
-		}
-	}
-	fz_always(ctx)
-	{
-		pdf_unmark_obj(ctx, k);
-	}
-	fz_catch(ctx)
-		fz_rethrow(ctx);
-
-	return found;
+	return pdf_lookup_field_imp(ctx, arr, str, NULL);
 }
 
 static void reset_form_field(fz_context *ctx, pdf_document *doc, pdf_obj *field)
@@ -259,6 +259,14 @@ static void reset_form_field(fz_context *ctx, pdf_document *doc, pdf_obj *field)
 		case PDF_WIDGET_TYPE_RADIOBUTTON:
 			{
 				pdf_obj *leafv = pdf_dict_get_inheritable(ctx, field, PDF_NAME(V));
+				pdf_obj *ap = pdf_dict_get(ctx, field, PDF_NAME(AP));
+				pdf_obj *n = pdf_dict_get(ctx, ap, PDF_NAME(N));
+
+				/* Value does not refer to any appearance state in the
+				normal appearance stream dictionary, default to Off instead. */
+				if (pdf_is_dict(ctx, n) && !pdf_dict_get(ctx, n, leafv))
+					leafv = NULL;
+
 				if (!leafv)
 					leafv = PDF_NAME(Off);
 				pdf_dict_put(ctx, field, PDF_NAME(AS), leafv);
@@ -293,12 +301,18 @@ void pdf_field_reset(fz_context *ctx, pdf_document *doc, pdf_obj *field)
 	}
 }
 
-static void add_field_hierarchy_to_array(fz_context *ctx, pdf_obj *array, pdf_obj *field)
+static void add_field_hierarchy_to_array(fz_context *ctx, pdf_obj *array, pdf_obj *field, pdf_obj *fields, int exclude)
 {
 	pdf_obj *kids = pdf_dict_get(ctx, field, PDF_NAME(Kids));
-	pdf_obj *exclude = pdf_dict_get(ctx, field, PDF_NAME(Exclude));
+	const char *needle = pdf_field_name(ctx, field);
+	int i, n;
 
-	if (exclude)
+	n = pdf_array_len(ctx, fields);
+	for (i = 0; i < n; i++)
+		if (!strcmp(needle, pdf_field_name(ctx, pdf_array_get(ctx, fields, i))))
+			break;
+
+	if ((exclude && i < n) || (!exclude && i == n))
 		return;
 
 	pdf_array_push(ctx, array, field);
@@ -308,7 +322,7 @@ static void add_field_hierarchy_to_array(fz_context *ctx, pdf_obj *array, pdf_ob
 		int i, n = pdf_array_len(ctx, kids);
 
 		for (i = 0; i < n; i++)
-			add_field_hierarchy_to_array(ctx, array, pdf_array_get(ctx, kids, i));
+			add_field_hierarchy_to_array(ctx, array, pdf_array_get(ctx, kids, i), fields, exclude);
 	}
 }
 
@@ -327,57 +341,17 @@ static pdf_obj *specified_fields(fz_context *ctx, pdf_document *doc, pdf_obj *fi
 
 	fz_try(ctx)
 	{
-		/* The 'fields' array not being present signals that all fields
-		* should be acted upon, so handle it using the exclude case - excluding none */
-		if (exclude || !fields)
+		n = pdf_array_len(ctx, fields);
+
+		for (i = 0; i < n; i++)
 		{
-			/* mark the fields we don't want to act upon */
-			n = pdf_array_len(ctx, fields);
-			for (i = 0; i < n; i++)
-			{
-				pdf_obj *field = pdf_array_get(ctx, fields, i);
+			pdf_obj *field = pdf_array_get(ctx, fields, i);
 
-				if (pdf_is_string(ctx, field))
-					field = pdf_lookup_field(ctx, form, pdf_to_str_buf(ctx, field));
+			if (pdf_is_string(ctx, field))
+				field = pdf_lookup_field(ctx, form, pdf_to_str_buf(ctx, field));
 
-				if (field)
-					pdf_dict_put(ctx, field, PDF_NAME(Exclude), PDF_NULL);
-			}
-
-			/* Act upon all unmarked fields */
-			n = pdf_array_len(ctx, form);
-
-			for (i = 0; i < n; i++)
-				add_field_hierarchy_to_array(ctx, result, pdf_array_get(ctx, form, i));
-
-			/* Unmark the marked fields */
-			n = pdf_array_len(ctx, fields);
-
-			for (i = 0; i < n; i++)
-			{
-				pdf_obj *field = pdf_array_get(ctx, fields, i);
-
-				if (pdf_is_string(ctx, field))
-					field = pdf_lookup_field(ctx, form, pdf_to_str_buf(ctx, field));
-
-				if (field)
-					pdf_dict_del(ctx, field, PDF_NAME(Exclude));
-			}
-		}
-		else
-		{
-			n = pdf_array_len(ctx, fields);
-
-			for (i = 0; i < n; i++)
-			{
-				pdf_obj *field = pdf_array_get(ctx, fields, i);
-
-				if (pdf_is_string(ctx, field))
-					field = pdf_lookup_field(ctx, form, pdf_to_str_buf(ctx, field));
-
-				if (field)
-					add_field_hierarchy_to_array(ctx, result, field);
-			}
+			if (field)
+				add_field_hierarchy_to_array(ctx, result, field, fields, exclude);
 		}
 	}
 	fz_catch(ctx)
@@ -825,62 +799,56 @@ int pdf_field_display(fz_context *ctx, pdf_obj *field)
  * get the field name in a char buffer that has spare room to
  * add more characters at the end.
  */
-static char *get_field_name(fz_context *ctx, pdf_obj *field, int spare)
+static char *get_field_name(fz_context *ctx, pdf_obj *field, int spare, pdf_cycle_list *cycle_up)
 {
+	pdf_cycle_list cycle;
 	char *res = NULL;
 	pdf_obj *parent;
 	const char *lname;
 	int llen;
 
-	fz_try(ctx)
+	if (pdf_cycle(ctx, &cycle, cycle_up, field))
+		fz_throw(ctx, FZ_ERROR_GENERIC, "Cycle in field parents");
+
+	parent = pdf_dict_get(ctx, field, PDF_NAME(Parent));
+	lname = pdf_dict_get_text_string(ctx, field, PDF_NAME(T));
+	llen = (int)strlen(lname);
+
+	// Limit fields to 16K
+	if (llen > (16 << 10) || llen + spare > (16 << 10))
+		fz_throw(ctx, FZ_ERROR_GENERIC, "Field name too long");
+
+	/*
+	 * If we found a name at this point in the field hierarchy
+	 * then we'll need extra space for it and a dot
+	 */
+	if (llen)
+		spare += llen+1;
+
+	if (parent)
 	{
-		if (pdf_mark_obj(ctx, field))
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Cycle in field parents");
-
-		parent = pdf_dict_get(ctx, field, PDF_NAME(Parent));
-		lname = pdf_dict_get_text_string(ctx, field, PDF_NAME(T));
-		llen = (int)strlen(lname);
-
-		// Limit fields to 16K
-		if (llen > (16 << 10) || llen + spare > (16 << 10))
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Field name too long");
-
-		/*
-		 * If we found a name at this point in the field hierarchy
-		 * then we'll need extra space for it and a dot
-		 */
-		if (llen)
-			spare += llen+1;
-
-		if (parent)
-		{
-			res = get_field_name(ctx, parent, spare);
-		}
-		else
-		{
-			res = Memento_label(fz_malloc(ctx, spare+1), "form_field_name");
-			res[0] = 0;
-		}
-
-		if (llen)
-		{
-			if (res[0])
-				strcat(res, ".");
-
-			strcat(res, lname);
-		}
+		res = get_field_name(ctx, parent, spare, &cycle);
 	}
-	fz_always(ctx)
-		pdf_unmark_obj(ctx, field);
-	fz_catch(ctx)
-		fz_rethrow(ctx);
+	else
+	{
+		res = Memento_label(fz_malloc(ctx, spare+1), "form_field_name");
+		res[0] = 0;
+	}
+
+	if (llen)
+	{
+		if (res[0])
+			strcat(res, ".");
+
+		strcat(res, lname);
+	}
 
 	return res;
 }
 
 char *pdf_field_name(fz_context *ctx, pdf_obj *field)
 {
-	return get_field_name(ctx, field, 0);
+	return get_field_name(ctx, field, 0, NULL);
 }
 
 void pdf_create_field_name(fz_context *ctx, pdf_document *doc, const char *prefix, char *buf, size_t len)
@@ -1098,7 +1066,7 @@ merge_changes(fz_context *ctx, const char *value, int start, int end, const char
 {
 	int changelen = change ? (int)strlen(change) : 0;
 	int valuelen = value ? (int)strlen(value) : 0;
-	int prelen = (start >= 0 ? start : 0);
+	int prelen = (start >= 0 ? (start < valuelen ? start : valuelen) : 0);
 	int postlen = (end >= 0 && end <= valuelen ? valuelen - end : 0);
 	int newlen =  prelen + changelen + postlen + 1;
 	char *merged = fz_malloc(ctx, newlen);
@@ -2007,7 +1975,7 @@ static void pdf_execute_js_action(fz_context *ctx, pdf_document *doc, pdf_obj *t
 			fz_snprintf(buf, sizeof buf, "%d/%s", pdf_to_num(ctx, target), path);
 			pdf_begin_operation(ctx, doc, "Javascript Event");
 			in_op = 1;
-			pdf_js_execute(doc->js, buf, code);
+			pdf_js_execute(doc->js, buf, code, NULL);
 		}
 		fz_always(ctx)
 		{
@@ -2036,39 +2004,34 @@ static void pdf_execute_action_imp(fz_context *ctx, pdf_document *doc, pdf_obj *
 	}
 }
 
-static void pdf_execute_action_chain(fz_context *ctx, pdf_document *doc, pdf_obj *target, const char *path, pdf_obj *action)
+static void pdf_execute_action_chain(fz_context *ctx, pdf_document *doc, pdf_obj *target, const char *path, pdf_obj *action, pdf_cycle_list *cycle_up)
 {
+	pdf_cycle_list cycle;
 	pdf_obj *next;
 
-	if (pdf_mark_obj(ctx, action))
+	if (pdf_cycle(ctx, &cycle, cycle_up, action))
 		fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in action chain");
-	fz_try(ctx)
+
+	if (pdf_is_array(ctx, action))
 	{
-		if (pdf_is_array(ctx, action))
-		{
-			int i, n = pdf_array_len(ctx, action);
-			for (i = 0; i < n; ++i)
-				pdf_execute_action_chain(ctx, doc, target, path, pdf_array_get(ctx, action, i));
-		}
-		else
-		{
-			pdf_execute_action_imp(ctx, doc, target, path, action);
-			next = pdf_dict_get(ctx, action, PDF_NAME(Next));
-			if (next)
-				pdf_execute_action_chain(ctx, doc, target, path, next);
-		}
+		int i, n = pdf_array_len(ctx, action);
+		for (i = 0; i < n; ++i)
+			pdf_execute_action_chain(ctx, doc, target, path, pdf_array_get(ctx, action, i), &cycle);
 	}
-	fz_always(ctx)
-		pdf_unmark_obj(ctx, action);
-	fz_catch(ctx)
-		fz_rethrow(ctx);
+	else
+	{
+		pdf_execute_action_imp(ctx, doc, target, path, action);
+		next = pdf_dict_get(ctx, action, PDF_NAME(Next));
+		if (next)
+			pdf_execute_action_chain(ctx, doc, target, path, next, &cycle);
+	}
 }
 
 static void pdf_execute_action(fz_context *ctx, pdf_document *doc, pdf_obj *target, const char *path)
 {
 	pdf_obj *action = pdf_dict_getp_inheritable(ctx, target, path);
 	if (action)
-		pdf_execute_action_chain(ctx, doc, target, path, action);
+		pdf_execute_action_chain(ctx, doc, target, path, action, NULL);
 }
 
 void pdf_document_event_will_close(fz_context *ctx, pdf_document *doc)
@@ -2144,7 +2107,7 @@ void pdf_annot_event_up(fz_context *ctx, pdf_annot *annot)
 	{
 		action = pdf_dict_get(ctx, annot->obj, PDF_NAME(A));
 		if (action)
-			pdf_execute_action_chain(ctx, annot->page->doc, annot->obj, "A", action);
+			pdf_execute_action_chain(ctx, annot->page->doc, annot->obj, "A", action, NULL);
 		else
 			pdf_execute_action(ctx, annot->page->doc, annot->obj, "AA/U");
 	}

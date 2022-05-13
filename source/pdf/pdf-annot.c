@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -760,40 +760,30 @@ pdf_create_annot(fz_context *ctx, pdf_page *page, enum pdf_annot_type type)
 }
 
 static int
-remove_from_tree(fz_context *ctx, pdf_obj *arr, pdf_obj *item)
+remove_from_tree(fz_context *ctx, pdf_obj *arr, pdf_obj *item, pdf_cycle_list *cycle_up)
 {
+	pdf_cycle_list cycle;
 	int i, n, res = 0;
 
-	if (arr == NULL || pdf_mark_obj(ctx, arr))
+	if (arr == NULL || pdf_cycle(ctx, &cycle, cycle_up, arr))
 		return 0;
 
-	fz_try(ctx)
+	n = pdf_array_len(ctx, arr);
+	for (i = 0; i < n; ++i)
 	{
-		n = pdf_array_len(ctx, arr);
-		for (i = 0; i < n; ++i)
+		pdf_obj *obj = pdf_array_get(ctx, arr, i);
+		if (obj == item)
 		{
-			pdf_obj *obj = pdf_array_get(ctx, arr, i);
-			if (obj == item)
-			{
-				pdf_array_delete(ctx, arr, i);
-				res = 1;
-				break;
-			}
-
-			if (remove_from_tree(ctx, pdf_dict_get(ctx, obj, PDF_NAME(Kids)), item))
-			{
-				res = 1;
-				break;
-			}
+			pdf_array_delete(ctx, arr, i);
+			res = 1;
+			break;
 		}
-	}
-	fz_always(ctx)
-	{
-		pdf_unmark_obj(ctx, arr);
-	}
-	fz_catch(ctx)
-	{
-		fz_rethrow(ctx);
+
+		if (remove_from_tree(ctx, pdf_dict_get(ctx, obj, PDF_NAME(Kids)), item, &cycle))
+		{
+			res = 1;
+			break;
+		}
 	}
 
 	return res;
@@ -873,7 +863,7 @@ pdf_delete_annot(fz_context *ctx, pdf_page *page, pdf_annot *annot)
 			pdf_obj *root = pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root));
 			pdf_obj *acroform = pdf_dict_get(ctx, root, PDF_NAME(AcroForm));
 			pdf_obj *fields = pdf_dict_get(ctx, acroform, PDF_NAME(Fields));
-			(void)remove_from_tree(ctx, fields, annot->obj);
+			(void)remove_from_tree(ctx, fields, annot->obj, NULL);
 		}
 
 		/* The garbage collection pass when saving will remove the annot object,
@@ -2765,6 +2755,18 @@ pdf_set_annot_appearance(fz_context *ctx, pdf_annot *annot, const char *appearan
 				app = pdf_dict_put_dict(ctx, ap, app_name, 2);
 			form = pdf_keep_obj(ctx, pdf_dict_gets(ctx, ap, appearance));
 		}
+		/* Care required here. Some files have multiple annotations, which share
+		 * appearance streams. As such, we must NOT reuse such appearance streams.
+		 * On the other hand, we cannot afford to always recreate appearance
+		 * streams, as this can lead to leakage of partial edits into the document.
+		 * Any appearance we generate will be in the incremental section, and we
+		 * will never generate shared appearances. As such, we can reuse an
+		 * appearance object only if it is in the incremental section. */
+		if (!pdf_obj_is_incremental(ctx, form))
+		{
+			pdf_drop_obj(ctx, form);
+			form = NULL;
+		}
 		if (!form)
 			form = pdf_new_xobject(ctx, annot->page->doc, bbox, ctm, res, contents);
 		else
@@ -2824,4 +2826,56 @@ pdf_set_annot_appearance_from_display_list(fz_context *ctx, pdf_annot *annot, co
 	}
 	fz_catch(ctx)
 		fz_rethrow(ctx);
+}
+
+static pdf_obj *filespec_subtypes[] = {
+	PDF_NAME(FileAttachment),
+	NULL,
+};
+
+int
+pdf_annot_has_filespec(fz_context *ctx, pdf_annot *annot)
+{
+	return is_allowed_subtype_wrap(ctx, annot, PDF_NAME(FS), filespec_subtypes);
+}
+
+pdf_obj *
+pdf_annot_filespec(fz_context *ctx, pdf_annot *annot)
+{
+	pdf_obj *filespec;
+
+	pdf_annot_push_local_xref(ctx, annot);
+
+	fz_try(ctx)
+	{
+		check_allowed_subtypes(ctx, annot, PDF_NAME(FS), filespec_subtypes);
+		filespec = pdf_dict_get(ctx, annot->obj, PDF_NAME(FS));
+	}
+	fz_always(ctx)
+		pdf_annot_pop_local_xref(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return filespec;
+}
+
+void
+pdf_set_annot_filespec(fz_context *ctx, pdf_annot *annot, pdf_obj *fs)
+{
+	if (!pdf_is_embedded_file(ctx, fs))
+		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot set non-filespec as annotation filespec");
+
+	begin_annot_op(ctx, annot, "Set filespec");
+
+	fz_try(ctx)
+	{
+		check_allowed_subtypes(ctx, annot, PDF_NAME(M), markup_subtypes);
+		pdf_dict_put_drop(ctx, pdf_annot_obj(ctx, annot), PDF_NAME(FS), fs);
+	}
+	fz_always(ctx)
+		end_annot_op(ctx, annot);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	pdf_dirty_annot(ctx, annot);
 }
