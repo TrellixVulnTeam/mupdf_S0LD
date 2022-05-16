@@ -16,8 +16,18 @@ do
 done
 
 echo gzip $O.tar
-pigz -f -k $O.tar
+if command -v pigz &> /dev/null
+then
+	pigz -f -k $O.tar
+else
+	gzip -f -k $O.tar
+fi
 echo lzip $O.tar
-plzip -f -k $O.tar
+if command -v plzip &> /dev/null
+then
+	plzip -f -k $O.tar
+else
+	lzip -f -k $O.tar
+fi
 echo zstd $O.tar
 zstd -q -T0 -19 -f -k $O.tar
