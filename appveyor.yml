@@ -95,7 +95,8 @@ for:
         C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S 
             make
             mingw-w64-i686-toolchain
-            p7zip"
+            lzip
+            zstd"
     build_script:
     - cmd: C:\msys64\usr\bin\bash -e -l -c "export PATH=/mingw32/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin &&
             cd /c/projects/mupdf &&
@@ -122,5 +123,6 @@ for:
             scripts/archive.sh &&
             appveyor PushArtifact mupdf-$(git describe --tags).zip &&
             appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.gz &&
-            appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.xz &&
+            appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.lz &&
+            appveyor PushArtifact mupdf-$(git describe --tags)-source.tar.zst &&
             appveyor PushArtifact mupdf-$(git describe --tags)-build.log"
