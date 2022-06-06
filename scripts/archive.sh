@@ -20,14 +20,19 @@ if command -v pigz &> /dev/null
 then
 	pigz -f -k -11 $O.tar
 else
-	gzip -f -k $O.tar
+	if command -v zopfli &> /dev/null
+	then
+		zopfli $O.tar
+	else
+		gzip -9 -f -k $O.tar
+	fi
 fi
 echo lzip $O.tar
 if command -v plzip &> /dev/null
 then
 	plzip -9 -f -k $O.tar
 else
-	lzip -f -k $O.tar
+	lzip -9 -f -k $O.tar
 fi
 echo zstd $O.tar
 zstd -q -T0 -19 -f -k $O.tar
