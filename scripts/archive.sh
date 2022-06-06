@@ -18,14 +18,14 @@ done
 echo gzip $O.tar
 if command -v pigz &> /dev/null
 then
-	pigz -f -k $O.tar
+	pigz -f -k -11 $O.tar
 else
 	gzip -f -k $O.tar
 fi
 echo lzip $O.tar
 if command -v plzip &> /dev/null
 then
-	plzip -f -k $O.tar
+	plzip -9 -f -k $O.tar
 else
 	lzip -f -k $O.tar
 fi
