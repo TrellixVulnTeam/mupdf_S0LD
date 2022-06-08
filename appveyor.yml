@@ -95,6 +95,7 @@ for:
         C:\msys64\usr\bin\bash -e -l -c "pacman --noconfirm --needed -S 
             make
             mingw-w64-i686-toolchain
+            mingw-w64-i686-zopfli
             lzip
             zstd"
     build_script:
@@ -105,7 +106,8 @@ for:
             XCFLAGS+=-DHAVE_MKGMTIME
             2>&1 | tee -a mupdf-$(git describe --tags)-build.log"
     after_build:
-    - cmd: C:\msys64\usr\bin\bash -e -l -c "mkdir /c/projects/mupdf/mupdf-mingw &&
+    - cmd: C:\msys64\usr\bin\bash -e -l -c "export PATH=/mingw32/bin:$PATH &&
+            mkdir /c/projects/mupdf/mupdf-mingw &&
             cp /home/appveyor/mupdf/release/mupdf-w32.exe
                 /home/appveyor/mupdf/release/mupdf-gl.exe
                 /home/appveyor/mupdf/release/mutool.exe
